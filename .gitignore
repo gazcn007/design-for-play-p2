@@ -1,0 +1,13 @@
+# deps + build output
+node_modules/
+dist/
+
+# editor / OS noise
+.DS_Store
+*.log
+.vscode/
+.idea/
+
+# local env
+.env
+.env.local

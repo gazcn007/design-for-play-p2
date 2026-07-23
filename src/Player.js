@@ -1,0 +1,272 @@
+import Phaser from 'phaser';
+import { LANES, GRAVITY, MOVE } from './constants.js';
+import { sfx } from './sfx.js';
+
+export default class Player extends Phaser.Physics.Arcade.Sprite {
+  constructor(scene, x, y, lane) {
+    super(scene, x, y, 'player');
+
+    scene.add.existing(this);
+    scene.physics.add.existing(this);
+
+    this.lane = lane;
+    this.laneScale = LANES[lane].scale;
+    this.juiceX = 1;
+    this.juiceY = 1;
+    this.facing = 1;
+
+    this.coyote = 0;
+    this.jumpBuffer = 0;
+    this.isJumping = false;
+    this.transiting = false;
+    this.frozen = false;
+    this.invulnUntil = 0;
+    this.wasOnGround = true;
+    this.lastFallSpeed = 0;
+
+    this.setCollideWorldBounds(true);
+    this.setDepth(LANES[lane].depth + 2);
+    this.setTint(LANES[lane].figureTint);
+
+    this.body.setMaxVelocity(MOVE.speedWalk, 1500);
+    this.applyScale();
+  }
+
+  applyScale() {
+    this.setScale(this.laneScale * this.juiceX, this.laneScale * this.juiceY);
+    this.setFlipX(this.facing < 0);
+  }
+
+  /**
+   * Squash-and-stretch pulse. Multiplies onto the current lane scale.
+   * Only the previous juice tween is removed — killing every tween on the
+   * player would also take out an in-flight lane transition, whose
+   * onComplete is the only thing that clears `transiting`.
+   */
+  pulse(sx, sy, duration = 150) {
+    if (this.juiceTween) this.juiceTween.remove();
+    this.juiceX = sx;
+    this.juiceY = sy;
+    this.juiceTween = this.scene.tweens.add({
+      targets: this,
+      juiceX: 1,
+      juiceY: 1,
+      duration,
+      ease: 'Back.easeOut',
+      onComplete: () => {
+        this.juiceTween = null;
+      },
+    });
+  }
+
+  update(dt, input) {
+    if (this.frozen) {
+      this.setAccelerationX(0);
+      this.setVelocityX(0);
+      this.applyScale();
+      return;
+    }
+
+    if (this.transiting) {
+      // Safety net: a lane shift that loses its tween would otherwise strand
+      // the player mid-transition with gravity off and input ignored.
+      if (this.scene.time.now - this.transitStartedAt > MOVE.laneSwitchMs * 4) {
+        this.finishLaneSwitch();
+      }
+      this.applyScale();
+      return;
+    }
+
+    const body = this.body;
+    const onGround = body.blocked.down || body.touching.down;
+
+    // ------------------------------------------------------------ lane shift
+    if (input.laneBack) this.switchLane(-1);
+    else if (input.laneFront) this.switchLane(1);
+    if (this.transiting) return;
+
+    // ----------------------------------------------------------- horizontal
+    const accel = onGround ? MOVE.accelGround : MOVE.accelAir;
+    const targetMax = input.run ? MOVE.speedRun : MOVE.speedWalk;
+    body.maxVelocity.x = Phaser.Math.Linear(body.maxVelocity.x, targetMax, 0.12);
+
+    if (input.left && !input.right) {
+      this.setAccelerationX(-accel);
+      this.facing = -1;
+    } else if (input.right && !input.left) {
+      this.setAccelerationX(accel);
+      this.facing = 1;
+    } else {
+      this.setAccelerationX(0);
+      this.setDragX(onGround ? MOVE.dragGround : MOVE.dragAir);
+    }
+
+    // --------------------------------------------------------------- jumping
+    if (onGround) this.coyote = MOVE.coyoteMs;
+    else this.coyote -= dt;
+
+    if (input.jumpPressed) this.jumpBuffer = MOVE.bufferMs;
+    else this.jumpBuffer -= dt;
+
+    if (this.jumpBuffer > 0 && this.coyote > 0) {
+      this.setVelocityY(MOVE.jumpVelocity);
+      this.jumpBuffer = 0;
+      this.coyote = 0;
+      this.isJumping = true;
+      this.pulse(0.8, 1.24, 170);
+      sfx.jump();
+    }
+
+    // Variable jump height: let go early and the arc gets cut short.
+    if (this.isJumping && !input.jumpHeld && body.velocity.y < 0) {
+      this.setVelocityY(body.velocity.y * MOVE.jumpCutMultiplier);
+      this.isJumping = false;
+    }
+    if (body.velocity.y >= 0) this.isJumping = false;
+
+    // Float slightly at the apex, fall faster than you rose. This asymmetry is
+    // most of what separates a "floaty" jump from one that feels good.
+    let mult = 1;
+    if (!onGround) {
+      if (Math.abs(body.velocity.y) < MOVE.apexThreshold) mult = MOVE.apexGravityMult;
+      else if (body.velocity.y > 0) mult = MOVE.fallGravityMult;
+    }
+    body.setGravityY(GRAVITY * (mult - 1));
+
+    // --------------------------------------------------------------- landing
+    if (onGround && !this.wasOnGround && this.lastFallSpeed > 300) {
+      this.pulse(1.26, 0.76, 160);
+      sfx.land();
+    }
+    this.wasOnGround = onGround;
+    this.lastFallSpeed = body.velocity.y;
+
+    // ------------------------------------------------------------- invuln fx
+    if (this.scene.time.now < this.invulnUntil) {
+      this.setAlpha(Math.floor(this.scene.time.now / 60) % 2 ? 0.35 : 1);
+    } else if (this.alpha !== 1) {
+      this.setAlpha(1);
+    }
+
+    this.applyScale();
+  }
+
+  /** Map a y in one lane to the equivalent height above the other lane's floor. */
+  laneTargetY(fromLane, toLane) {
+    const a = LANES[fromLane];
+    const b = LANES[toLane];
+    const above = a.baseY - this.y;
+    return b.baseY - above * (b.scale / a.scale);
+  }
+
+  /** dir: -1 = deeper into the scene, +1 = toward the camera. */
+  switchLane(dir) {
+    if (this.transiting) return;
+
+    const target = this.lane + dir;
+    if (target < 0 || target >= LANES.length) return;
+
+    const targetY = this.laneTargetY(this.lane, target);
+    if (!this.scene.canOccupyLane(this, target, this.x, targetY)) {
+      sfx.blocked();
+      this.scene.cameras.main.shake(90, 0.004);
+      return;
+    }
+
+    const lane = LANES[target];
+    this.transiting = true;
+    this.transitStartedAt = this.scene.time.now;
+    this.pendingLane = target;
+    this.pendingY = targetY;
+    this.body.allowGravity = false;
+    this.setVelocityY(0);
+    this.setAccelerationX(0);
+    this.setTint(lane.figureTint);
+    this.setDepth(lane.depth + 2);
+    sfx.lane();
+
+    this.laneTween = this.scene.tweens.add({
+      targets: this,
+      y: targetY,
+      laneScale: lane.scale,
+      duration: MOVE.laneSwitchMs,
+      ease: 'Sine.easeInOut',
+      onUpdate: () => this.applyScale(),
+      onComplete: () => this.finishLaneSwitch(),
+    });
+  }
+
+  /** Commit a lane shift. Idempotent, so the safety net can call it too. */
+  finishLaneSwitch() {
+    if (!this.transiting) return;
+
+    if (this.laneTween) {
+      this.laneTween.remove();
+      this.laneTween = null;
+    }
+
+    const target = this.pendingLane;
+    this.lane = target;
+    this.y = this.pendingY;
+    this.laneScale = LANES[target].scale;
+    this.transiting = false;
+    this.body.allowGravity = true;
+    this.coyote = 0;
+    this.applyScale();
+    this.scene.onLaneChanged(target);
+  }
+
+  /**
+   * Scripted upward launch — springs, stomp bounces. Deliberately clears
+   * `isJumping` so the variable-jump-height cut does not apply: the player
+   * isn't holding jump during a launch, so treating it as a normal jump would
+   * chop it to 42% the instant it starts.
+   */
+  launch(velocity) {
+    this.setVelocityY(velocity);
+    this.isJumping = false;
+    this.coyote = 0;
+  }
+
+  hurt(fromX) {
+    if (this.scene.time.now < this.invulnUntil || this.transiting) return false;
+    this.invulnUntil = this.scene.time.now + MOVE.hurtInvulnMs;
+
+    const away = this.x < fromX ? -1 : 1;
+    this.setVelocityX(MOVE.hurtKnockX * away);
+    this.setVelocityY(MOVE.hurtKnockY);
+    this.pulse(1.3, 0.7, 200);
+    sfx.hurt();
+    return true;
+  }
+
+  resetTo(x, y, lane) {
+    this.scene.tweens.killTweensOf(this);
+    this.laneTween = null;
+    this.juiceTween = null;
+
+    this.lane = lane;
+    this.laneScale = LANES[lane].scale;
+    this.juiceX = 1;
+    this.juiceY = 1;
+    this.transiting = false;
+    this.frozen = false;
+    this.isJumping = false;
+    this.coyote = 0;
+    this.jumpBuffer = 0;
+    this.invulnUntil = this.scene.time.now + 700;
+
+    this.body.allowGravity = true;
+    this.body.setGravityY(0);
+    // body.reset() — not setPosition() — because it also clears the body's
+    // previous position. Leaving `prev` stale makes the next physics step see
+    // a huge delta and separation shoves the player off the respawn point.
+    this.body.reset(x, y);
+    this.setAccelerationX(0);
+    this.setAlpha(1);
+    this.setTint(LANES[lane].figureTint);
+    this.setDepth(LANES[lane].depth + 2);
+    this.applyScale();
+    this.scene.onLaneChanged(lane);
+  }
+}
