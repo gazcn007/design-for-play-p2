@@ -1,8 +1,8 @@
 # Nightfall
 
-A 2.5D lane-shifting platformer built with Phaser 3 — Limbo silhouettes over a
-gaslit gothic skyline. Run, jump, stomp, and **shift between two depth lanes**
-to reach parts of the level the other lane can't touch.
+A 2D lane-shifting action platformer built with Phaser 3 — a gaslit gothic
+skyline, silhouette traversal, a quick cleaver strike, and two depth lanes to
+shift between.
 
 ```bash
 npm install
@@ -19,40 +19,14 @@ npm run build    # -> dist/
 | `Shift` | Run |
 | `W` | Shift into the background (far lane) |
 | `S` | Shift toward the camera (near lane) |
-| `E` | Interact — signs, levers |
+| `F` | Strike |
+| `E` | Interact — levers |
 | `R` | Restart |
 | `0` | Toggle Arcade physics debug |
 
-## How the 2.5D works
+## How the depth lanes work
 
-Literally: the background is 2D, the foreground is 3D.
-
-### The 3D layer
-
-The crates and the tumbling foreground boxes are **real geometry** — unit cubes
-built from 24 vertices and 12 triangles, pushed through Phaser's `Mesh`
-perspective matrix (`src/Box3D.js`). Not sprites faked with parallelograms.
-Each face carries its own flat vertex colour to fake directional lighting, and
-faces are depth-sorted per frame rather than backface-culled, which renders an
-opaque convex cube correctly without having to get triangle winding right.
-
-The crates are **collidable platforms**: an invisible tile sprite carries the
-Arcade static body and the cube is drawn over it. `size` is the cube's on-screen
-silhouette in pixels, so the cube you see is exactly the block you land on.
-
-That exactness needs a calibration step. Phaser's NDC-to-pixel mapping doesn't
-match the textbook pinhole relation (measured ~375 px per model unit against
-the formula's 181), and a rotated cube's silhouette runs wider than its edge
-anyway. Rather than bake in a magic number that breaks silently if you retune
-`FOV` or `PAN_Z`, `calibrate()` measures the actual projected vertex bounds on
-the first rendered frame and corrects `modelScale` exactly.
-
-`Mesh` is WebGL-only, so `createBox3D` falls back to a flat image under the
-Canvas renderer.
-
-### The 2D layer
-
-Everything else is flat. Both lanes live in the **same Arcade physics world**,
+The world stays flat and readable. Both lanes live in the **same Arcade physics world**,
 just at different vertical bands: the far lane's ground surface is at `y=290`,
 the near lane's at `y=460`. Depth is sold with four cues layered together:
 
@@ -73,8 +47,8 @@ this.physics.add.collider(
 );
 ```
 
-The player simply cannot touch geometry belonging to the other lane. Coins and
-enemies use the same trick on their overlap callbacks.
+The player simply cannot touch geometry belonging to the other lane. Enemies
+use the same lane check on their overlap callback.
 
 Shifting lanes maps the player's height above their current lane's floor onto
 the destination lane, scaled by the ratio of lane scales
@@ -86,10 +60,7 @@ and refuses the shift if it would put the player inside solid rock.
 | I want to... | Edit |
 | --- | --- |
 | Retune jump feel, speed, lane timing | `src/constants.js` → `MOVE` |
-| Move platforms, coins, enemies, pits | `src/level.js` |
-| Move/resize 3D crates | `src/level.js` → solids with `kind: 'crate'` |
-| Add spinning foreground cubes | `src/level.js` → `foregroundBoxes` |
-| Change cube perspective or face shading | `src/Box3D.js` → `FOV`, `PAN_Z`, `FACES` |
+| Move platforms, enemies, and pits | `src/level.js` |
 | Change lane depth/scale/tint | `src/constants.js` → `LANES` |
 | Redraw any sprite | `src/textures.js` |
 | Swap the backdrop painting | the import in `src/scenes/BootScene.js` |
@@ -97,10 +68,6 @@ and refuses the shift if it would put the player inside solid rock.
 | Retune the value ramp / fog | `src/palette.js` + `LANES` tints |
 | Move lamps, hearses, fences, graves | `src/level.js` → `decor` |
 | Add a new interactable | `src/level.js` + `GameScene.fireInteractable` |
-
-Note that `foregroundBoxes` scroll at 1.32, so their `x` is *virtual* — a box
-appears when the camera reaches roughly `x / 1.32`. The values in the level are
-pre-multiplied to spread them across the whole level.
 
 ### Jump feel
 
@@ -113,8 +80,8 @@ platformer feel forgiving:
 - **Asymmetric gravity** — 0.6× near the apex, 1.3× while falling, so you
   float at the top and come down snappy.
 
-Scripted launches (springs, stomp bounces) go through `Player.launch()`, which
-deliberately clears `isJumping` so the variable-height cut doesn't chop them.
+Scripted launches go through `Player.launch()`, which deliberately clears
+`isJumping` so the variable-height cut doesn't chop them.
 
 ## Art direction
 
@@ -125,9 +92,8 @@ Three layers, and the distinctions matter:
 - **Silhouettes** are drawn in grey and *tinted* per lane. Tint is
   multiplicative, so every texture is drawn at its lightest value and each lane
   multiplies it down. Against a painting, both lanes go nearly black.
-- **Lights** — lamp haloes, rune sigils, blood echoes — are separate additive
-  sprites that are never tinted. That separation is the only way a glowing
-  sigil stays readable on a block dark enough to be a silhouette.
+- **Lights** — lamp haloes and cleaver trails are separate additive sprites
+  that are never lane-tinted. That keeps the few bright accents deliberate.
 
 Everything hangs off one rule: **the scene is a monotonic value ramp that
 darkens toward the camera.** Measured luminance, sampled off the canvas:
@@ -159,9 +125,6 @@ both are handled by colours that bypass the lane tint entirely:
   surface you stand on with no visible edge. The rim is now its own strip.
 - **`LANES[].figureTint`** — the hunter, beasts, levers and flags. At the
   terrain tint they vanished into ground that is just as black.
-
-The 3D cubes participate too. `Mesh` has no `setTint`, so `Box3D` folds the
-lane's darkening into the per-face vertex colours (`mulHex`) instead.
 
 ### The backdrop
 
@@ -221,12 +184,11 @@ index.html
 src/
   main.js          Phaser config + game boot (exposes window.game)
   constants.js     tuning: lanes, gravity, movement feel
-  level.js         all level data (solids, coins, enemies, interactables)
+  level.js         all level data (solids, enemies, interactables)
   textures.js      procedural art
   sfx.js           WebAudio blips
   palette.js       the value ramp — every colour in the game
   assets/          the backdrop painting (the only asset)
-  Box3D.js         perspective cube meshes + self-calibrating scale
   Player.js        movement, jump, lane shifting
   scenes/
     BootScene.js   bakes textures, starts Game

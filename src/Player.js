@@ -11,6 +11,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
     this.lane = lane;
     this.laneScale = LANES[lane].scale;
+    this.figureScale = 1.18;
     this.juiceX = 1;
     this.juiceY = 1;
     this.facing = 1;
@@ -23,6 +24,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     this.invulnUntil = 0;
     this.wasOnGround = true;
     this.lastFallSpeed = 0;
+    this.nextStrikeAt = 0;
 
     this.setCollideWorldBounds(true);
     this.setDepth(LANES[lane].depth + 2);
@@ -33,7 +35,10 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   applyScale() {
-    this.setScale(this.laneScale * this.juiceX, this.laneScale * this.juiceY);
+    this.setScale(
+      this.laneScale * this.figureScale * this.juiceX,
+      this.laneScale * this.figureScale * this.juiceY,
+    );
     this.setFlipX(this.facing < 0);
   }
 
@@ -101,6 +106,10 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
       this.setDragX(onGround ? MOVE.dragGround : MOVE.dragAir);
     }
 
+    // The hunter carries a cleaver; make it the primary answer to a beast,
+    // rather than asking the player to land on its head like a mascot game.
+    if (input.attackPressed) this.strike();
+
     // --------------------------------------------------------------- jumping
     if (onGround) this.coyote = MOVE.coyoteMs;
     else this.coyote -= dt;
@@ -149,6 +158,16 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     this.applyScale();
+  }
+
+  strike() {
+    const now = this.scene.time.now;
+    if (now < this.nextStrikeAt || this.transiting) return;
+
+    this.nextStrikeAt = now + 290;
+    this.pulse(1.14, 0.86, 110);
+    this.scene.performStrike(this, this.facing);
+    sfx.slash();
   }
 
   /** Map a y in one lane to the equivalent height above the other lane's floor. */
@@ -255,6 +274,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     this.coyote = 0;
     this.jumpBuffer = 0;
     this.invulnUntil = this.scene.time.now + 700;
+    this.nextStrikeAt = 0;
 
     this.body.allowGravity = true;
     this.body.setGravityY(0);

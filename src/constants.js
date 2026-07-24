@@ -41,7 +41,7 @@ export const LANES = [
     baseY: 460,
     scale: 1.0,
     tint: 0x181a1f,
-    figureTint: 0x5a6472,
+    figureTint: 0x737e8c,
     rim: 0x333c48,
     depth: 30,
     killY: 720,

@@ -7,17 +7,14 @@ import {
   LANE_FAR,
   LANE_NEAR,
   SPRING_VELOCITY,
-  STOMP_BOUNCE,
   BACKDROP,
 } from '../constants.js';
 import { LEVEL } from '../level.js';
 import { PAL } from '../palette.js';
 import Player from '../Player.js';
-import { createBox3D, updateBox3D } from '../Box3D.js';
 import { sfx } from '../sfx.js';
 
-// Surfaces that get an explicit moonlit lip. Crates are 3D meshes and already
-// shade by face; blocks read fine as flat silhouettes.
+// Surfaces that get an explicit moonlit lip; the rest read as flat silhouettes.
 const RIMMED = new Set(['ground', 'platform', 'bridge']);
 
 export default class GameScene extends Phaser.Scene {
@@ -30,7 +27,6 @@ export default class GameScene extends Phaser.Scene {
     this.activeInteractable = null;
     this.bridgePlanks = [];
     this.interactables = [];
-    this.boxes3d = [];
     this.checkpointTaken = false;
 
     this.registry.set('score', 0);
@@ -54,7 +50,6 @@ export default class GameScene extends Phaser.Scene {
     this.buildEnemies();
     this.buildInteractables();
     this.buildMarkers();
-    this.buildForegroundBoxes();
     this.buildOverlays();
 
     this.solids.refresh();
@@ -230,10 +225,12 @@ export default class GameScene extends Phaser.Scene {
 
         if (d.light) {
           const lampY = spr.y - spr.displayHeight + 26 * lane.scale;
-          const halo = this.addLight(x + 3 * lane.scale, lampY, 58 * lane.scale, PAL.lamp, 0.38 * d.light, lane.depth + 3);
+          // Keep gaslights intimate. Oversized circular bloom made the scene
+          // look like it had random UI effects hovering over the playfield.
+          const halo = this.addLight(x + 3 * lane.scale, lampY, 30 * lane.scale, PAL.lamp, 0.28 * d.light, lane.depth + 3);
           this.tweens.add({
             targets: halo,
-            alpha: { from: 0.38 * d.light, to: 0.26 * d.light },
+            alpha: { from: 0.28 * d.light, to: 0.18 * d.light },
             duration: 1400 + ((i * 137) % 900),
             yoyo: true,
             repeat: -1,
@@ -248,26 +245,10 @@ export default class GameScene extends Phaser.Scene {
     const lane = LANES[def.lane];
     // Ground bands tile plain dirt and get a decorative grass cap laid on top,
     // otherwise a 140px band would repeat the grass line four times.
-    const tex = def.kind === 'ground' ? 'terrain-body' : def.tex || 'crate-face';
+    const tex = def.kind === 'ground' ? 'terrain-body' : def.tex || 'stone';
     const ts = this.add.tileSprite(def.x, def.y, def.w, def.h, tex).setOrigin(0, 0);
     ts.setDepth(lane.depth);
     ts.setTint(lane.tint);
-
-    // A crate's tile sprite exists only to carry the static body; the visible
-    // object is a 3D cube mesh drawn at the same footprint.
-    if (def.kind === 'crate') {
-      ts.setVisible(false);
-      this.boxes3d.push(
-        createBox3D(this, def.x + def.w / 2, def.y + def.h / 2, {
-          size: def.w,
-          depth: lane.depth + 1,
-          sway: { amp: 0.09, speed: 0.9 },
-          // A shade above the lane tint so the cube reads as an object sitting
-          // on the black ground rather than dissolving into it.
-          shade: def.lane === LANE_FAR ? 0x545962 : 0x32363c,
-        }),
-      );
-    }
 
     if (def.kind === 'ground') {
       const capH = Math.round(12 * lane.scale);
@@ -377,7 +358,7 @@ export default class GameScene extends Phaser.Scene {
       e.maxX = def.max;
       e.dir = -1;
       e.setDepth(lane.depth + 1);
-      e.setScale(lane.scale);
+      e.setScale(lane.scale * 1.2);
       e.setTint(lane.figureTint);
       e.body.setBounce(0, 0);
     });
@@ -450,24 +431,6 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
-  buildForegroundBoxes() {
-    LEVEL.foregroundBoxes.forEach((def) => {
-      this.boxes3d.push(
-        createBox3D(this, def.x, def.y, {
-          size: def.size,
-          spin: def.spin,
-          // In front of the foreground grass silhouette (depth 45) and
-          // scrolling faster than the world, so they sweep past the camera.
-          depth: 46,
-          scrollFactor: 1.32,
-          // Closest thing to the camera, so nearly a pure silhouette — just
-          // light enough to keep its edges against the black brambles.
-          shade: 0x222428,
-        }),
-      );
-    });
-  }
-
   buildOverlays() {
     // Reusable floating "+N" score popups.
     this.popups = this.add.group();
@@ -485,6 +448,7 @@ export default class GameScene extends Phaser.Scene {
       s: 'S',
       run: 'SHIFT',
       interact: 'E',
+      attack: 'F',
       restart: 'R',
       debug: 'ZERO',
     });
@@ -506,6 +470,7 @@ export default class GameScene extends Phaser.Scene {
       laneBack: JustDown(k.w),
       laneFront: JustDown(k.s),
       interact: JustDown(k.interact),
+      attackPressed: JustDown(k.attack),
     };
   }
 
@@ -521,8 +486,8 @@ export default class GameScene extends Phaser.Scene {
     // the player's feet exactly onto the destination surface, so a probe that
     // scales with the body clips it by a fraction of a pixel and refuses every
     // shift. The inset has to survive that while still catching real embedding.
-    const w = Math.max(4, player.width * scale - 8);
-    const h = Math.max(4, player.height * scale - 10);
+    const w = Math.max(4, player.width * scale * player.figureScale - 8);
+    const h = Math.max(4, player.height * scale * player.figureScale - 10);
     const probe = new Phaser.Geom.Rectangle(x - w / 2, y - h / 2, w, h);
 
     const children = this.solids.getChildren();
@@ -639,33 +604,59 @@ export default class GameScene extends Phaser.Scene {
   }
 
   onEnemy(player, enemy) {
-    const stomping =
-      player.body.velocity.y > 60 &&
-      player.body.bottom - enemy.body.top < enemy.body.height * 0.7;
-
-    if (stomping) {
-      this.defeatEnemy(enemy);
-      player.launch(STOMP_BOUNCE);
-      player.pulse(0.82, 1.2, 150);
-    } else if (player.hurt(enemy.x)) {
+    if (player.hurt(enemy.x)) {
       this.damage(false);
     }
   }
 
+  performStrike(player, facing) {
+    const lane = LANES[player.lane];
+    const slash = this.add
+      .image(player.x + facing * 30 * lane.scale, player.y - 7 * lane.scale, 'slash')
+      .setOrigin(0.5)
+      .setDepth(lane.depth + 4)
+      .setScale(lane.scale)
+      .setFlipX(facing < 0)
+      .setTint(0xd9e8f4)
+      .setAlpha(0.82)
+      .setBlendMode(Phaser.BlendModes.ADD);
+
+    this.tweens.add({
+      targets: slash,
+      alpha: 0,
+      scaleX: lane.scale * 1.3,
+      scaleY: lane.scale * 1.08,
+      duration: 130,
+      ease: 'Quad.easeOut',
+      onComplete: () => slash.destroy(),
+    });
+
+    this.enemies.getChildren().slice().forEach((enemy) => {
+      if (!enemy.active || enemy.laneId !== player.lane) return;
+      const forward = (enemy.x - player.x) * facing;
+      const vertical = Math.abs(enemy.y - player.y);
+      if (forward > -8 * lane.scale && forward < 64 * lane.scale && vertical < 42 * lane.scale) {
+        this.defeatEnemy(enemy);
+      }
+    });
+  }
+
   defeatEnemy(enemy) {
-    sfx.stomp();
+    sfx.kill();
     this.addScore(20, enemy.x, enemy.y - 20);
 
     enemy.body.enable = false;
     enemy.setVelocity(0, 0);
-    enemy.setTexture('enemy-squashed');
     enemy.active = false;
+    enemy.setTint(PAL.blood);
 
     this.tweens.add({
       targets: enemy,
       alpha: 0,
-      duration: 420,
-      delay: 220,
+      scaleX: enemy.scaleX * 1.22,
+      scaleY: enemy.scaleY * 0.68,
+      duration: 240,
+      ease: 'Quad.easeOut',
       onComplete: () => enemy.destroy(),
     });
   }
@@ -826,8 +817,6 @@ export default class GameScene extends Phaser.Scene {
     }
 
     this.updateParallax();
-    this.updateBoxes(delta, time);
-
     if (this.finished) return;
 
     const input = this.readInput();
@@ -850,10 +839,6 @@ export default class GameScene extends Phaser.Scene {
     this.foreground.tilePositionX = sx * 1.25;
   }
 
-  updateBoxes(delta, time) {
-    this.boxes3d.forEach((b) => updateBox3D(b, delta, time));
-  }
-
   updateEnemies() {
     const list = this.enemies.getChildren().slice();
     list.forEach((e) => {
@@ -861,8 +846,7 @@ export default class GameScene extends Phaser.Scene {
 
       if (e.x <= e.minX) e.dir = 1;
       else if (e.x >= e.maxX) e.dir = -1;
-      // Turn at walls too, otherwise a crate parked in the patrol range leaves
-      // the enemy shoving against it for the rest of the level.
+      // Turn at walls too, so enemies do not keep shoving at a ledge.
       else if (e.body.blocked.left) e.dir = 1;
       else if (e.body.blocked.right) e.dir = -1;
 
@@ -899,7 +883,7 @@ export default class GameScene extends Phaser.Scene {
    * Arcade ignores any separation larger than the frame's movement — an
    * anti-teleport guard — so a body that becomes deeply embedded is never
    * pushed back out and simply slides through. That's reachable by clipping a
-   * crate's corner on a short jump. Resting contact leaves near-zero
+   * a ledge's corner on a short jump. Resting contact leaves near-zero
    * penetration on one axis, so requiring depth on *both* axes catches only
    * genuine embedding.
    */

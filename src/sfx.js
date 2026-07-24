@@ -45,6 +45,8 @@ export const sfx = {
     tone({ freq: 1319, dur: 0.14, vol: 0.09, delay: 0.07 });
   },
   stomp: () => tone({ freq: 240, to: 70, dur: 0.16, vol: 0.13 }),
+  slash: () => tone({ freq: 180, to: 720, dur: 0.09, type: 'sawtooth', vol: 0.08 }),
+  kill: () => tone({ freq: 180, to: 58, dur: 0.12, type: 'triangle', vol: 0.1 }),
   bump: () => tone({ freq: 150, to: 95, dur: 0.09, vol: 0.11 }),
   hurt: () => tone({ freq: 400, to: 110, dur: 0.32, type: 'sawtooth', vol: 0.11 }),
   lane: () => tone({ freq: 520, to: 780, dur: 0.1, type: 'triangle', vol: 0.09 }),

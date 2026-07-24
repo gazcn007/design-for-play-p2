@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Nightfall — 2.5D Phaser Platformer</title>
+    <title>Nightfall — Gothic 2D Action Game</title>
     <style>
       :root { color-scheme: dark; }
       * { box-sizing: border-box; }
@@ -20,7 +20,7 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 14px;
+        gap: 0;
         padding: 18px;
       }
       #game canvas {
@@ -28,38 +28,11 @@
         border-radius: 10px;
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.85);
       }
-      .legend {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px 18px;
-        justify-content: center;
-        font-size: 13px;
-        letter-spacing: 0.01em;
-        opacity: 0.75;
-      }
-      .legend b {
-        color: #aab4c1;
-        background: #0d1117;
-        border: 1px solid #232a33;
-        border-radius: 5px;
-        padding: 1px 7px;
-        font-weight: 600;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      }
     </style>
   </head>
   <body>
     <div id="app">
       <div id="game"></div>
-      <div class="legend">
-        <span><b>&larr;</b> <b>&rarr;</b> move</span>
-        <span><b>Space</b> jump</span>
-        <span><b>Shift</b> run</span>
-        <span><b>W</b> / <b>S</b> shift depth lane</span>
-        <span><b>E</b> interact</span>
-        <span><b>R</b> restart</span>
-        <span><b>0</b> physics debug</span>
-      </div>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>

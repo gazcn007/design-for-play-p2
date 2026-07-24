@@ -261,6 +261,20 @@ export function buildTextures(scene) {
     c.fillEllipse(14, 5, 26, 8);
   });
 
+  // A fast, narrow silver trail for the hunter's cleaver. It is deliberately
+  // brief and cool-coloured, so an attack reads without turning into a bright
+  // arcade projectile.
+  bake('slash', 56, 36, (c) => {
+    c.lineStyle(4, 0xe6f0f7, 0.68);
+    c.beginPath();
+    c.arc(19, 22, 18, -1.25, 0.95, false);
+    c.strokePath();
+    c.lineStyle(1.5, 0xffffff, 0.85);
+    c.beginPath();
+    c.arc(19, 22, 13, -1.18, 0.86, false);
+    c.strokePath();
+  });
+
   // ---------------------------------------------------------------- props
 
   bake('lamp-post', 18, 104, (c) => {

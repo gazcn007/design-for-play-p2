@@ -27,8 +27,10 @@ export default class HudScene extends Phaser.Scene {
     this.barFill = this.add.graphics().setScrollFactor(0);
     this.drawBar(1);
 
-    this.scoreText = panel(18, 36, 'ECHOES 0');
-    this.coinText = panel(18, 54, 'VIALS 0');
+    // Keep the HUD as spare as the reference: health and spatial orientation
+    // belong on-screen, score counters do not.
+    this.scoreText = panel(18, 36, '');
+    this.coinText = panel(18, 54, '');
 
     this.laneText = this.add
       .text(GAME_W - 18, 16, 'NEAR', {
@@ -56,23 +58,20 @@ export default class HudScene extends Phaser.Scene {
     this.hint = this.add
       .text(
         GAME_W / 2,
-        128,
-        '← →  move      SPACE  jump      SHIFT  run\nW / S  shift depth lane      E  interact',
+        42,
+        'A / D  MOVE     SPACE  LEAP     F  STRIKE     W / S  SHIFT DEPTH',
         {
           fontFamily: MONO,
-          fontSize: '15px',
-          color: '#7f8b99',
+          fontSize: '12px',
+          color: '#66717f',
           align: 'center',
-          backgroundColor: '#04060acc',
-          padding: { x: 14, y: 10 },
-          lineSpacing: 6,
         },
       )
       .setOrigin(0.5)
       .setScrollFactor(0);
 
-    this.time.delayedCall(9000, () => {
-      if (this.hint) this.tweens.add({ targets: this.hint, alpha: 0, duration: 900 });
+    this.time.delayedCall(4200, () => {
+      if (this.hint) this.tweens.add({ targets: this.hint, alpha: 0, duration: 700 });
     });
 
     this.overlay = this.add
@@ -172,14 +171,8 @@ export default class HudScene extends Phaser.Scene {
     const lives = this.registry.get('lives') ?? 0;
     const lane = this.registry.get('lane') ?? 1;
 
-    if (score !== this.last.score) {
-      this.scoreText.setText(`ECHOES ${score}`);
-      this.last.score = score;
-    }
-    if (coins !== this.last.coins) {
-      this.coinText.setText(`VIALS ${coins}`);
-      this.last.coins = coins;
-    }
+    if (score !== this.last.score) this.last.score = score;
+    if (coins !== this.last.coins) this.last.coins = coins;
     if (lives !== this.last.lives) {
       this.drawBar(Math.max(0, lives) / 3);
       this.last.lives = lives;
