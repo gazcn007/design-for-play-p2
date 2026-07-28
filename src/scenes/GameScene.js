@@ -14,6 +14,12 @@ import { PAL } from '../palette.js';
 import Player from '../Player.js';
 import { sfx } from '../sfx.js';
 import { NPC_DIALOGUES, STORY_WORLDS } from '../story.js';
+import {
+  getWorldAsset,
+  isWorldAssetLoaded,
+  resolvePreviewWorldIndex,
+  WorldAssetLoader,
+} from '../worlds/worldAssets.js';
 
 // Surfaces that get an explicit moonlit lip; the rest read as flat silhouettes.
 const RIMMED = new Set(['ground', 'platform', 'bridge']);
@@ -32,6 +38,11 @@ export default class GameScene extends Phaser.Scene {
     this.npcs = [];
     this.dialogueState = null;
     this.activeWorldIndex = -1;
+    this.requestedWorldIndex = -1;
+    this.previewWorldIndex = resolvePreviewWorldIndex(STORY_WORLDS);
+    this.initialWorldIndex = this.previewWorldIndex ?? 0;
+    this.worldAssetLoader = new WorldAssetLoader(this);
+    this.backdropChunks = [];
     this.checkpointTaken = false;
     this.finalReminderShown = false;
 
@@ -110,7 +121,10 @@ export default class GameScene extends Phaser.Scene {
 
     if (!this.scene.isActive('Hud')) this.scene.launch('Hud');
     else this.game.events.emit('hud:reset');
-    this.time.delayedCall(80, () => this.game.events.emit('hud:world', STORY_WORLDS[0]));
+    this.time.delayedCall(80, () =>
+      this.game.events.emit('hud:world', STORY_WORLDS[this.initialWorldIndex]),
+    );
+    this.events.once('shutdown', () => this.worldAssetLoader.destroy());
   }
 
   // ------------------------------------------------------------- level build
@@ -172,64 +186,84 @@ export default class GameScene extends Phaser.Scene {
       .setDepth(70);
   }
 
-  /**
-   * The current simulation panorama. Each authored world uses the same
-   * framing so a hard change of explanation can still feel spatially natural.
-   *
-   * It is one Image, not a tileSprite. Tiling a painting this specific would
-   * repeat its moon several times across the level and put a visible seam at
-   * every wrap. Instead the scroll factor is derived so the panorama pans
-   * across exactly once end to end — no repeat, no seam, and the far side of
-   * the city is a reward for reaching the far side of the level.
-   */
+  /** Build the current panorama from GPU-safe horizontal texture chunks. */
   buildBackdrop() {
-    const firstWorld = STORY_WORLDS[0];
-    const src = this.textures.get(firstWorld.texture).getSourceImage();
-
-    const scale = BACKDROP.height / src.height;
-    const w = src.width * scale;
-    const h = src.height * scale;
-
-    // Pan the panorama's full width over the camera's full travel. Clamped
-    // because a painting narrower than the viewport cannot pan at all.
-    const travel = Math.max(1, WORLD_W - GAME_W);
-    const factor = Phaser.Math.Clamp((w - GAME_W) / travel, 0, 1);
-
-    // Anchor by the painting's horizon rather than by a guessed y offset, so
-    // this still lands correctly if the image is swapped or rescaled.
-    const y = BACKDROP.horizonY - BACKDROP.horizonFrac * h;
-
-    this.backdrop = this.add
-      .image(0, y, firstWorld.texture)
-      .setOrigin(0, 0)
-      .setScale(scale)
-      .setScrollFactor(factor, 0)
-      .setDepth(1)
-      .setTint(BACKDROP.tint);
-
-    this.activeWorldIndex = 0;
+    this.applyBackdropWorld(this.initialWorldIndex, false);
+    this.prefetchBackdropNeighbors(this.initialWorldIndex);
   }
 
   switchWorld(index, announce = true) {
     const world = STORY_WORLDS[index];
-    if (!world || index === this.activeWorldIndex && !announce) return;
+    if (!world || (index === this.activeWorldIndex && !announce)) return;
+    this.requestedWorldIndex = index;
 
-    const src = this.textures.get(world.texture).getSourceImage();
-    const scale = BACKDROP.height / src.height;
-    const w = src.width * scale;
+    if (isWorldAssetLoaded(this, world.texture)) {
+      this.applyBackdropWorld(index, announce);
+      return;
+    }
+
+    this.worldAssetLoader
+      .load(world.texture)
+      .then(() => {
+        if (this.requestedWorldIndex === index) this.applyBackdropWorld(index, announce);
+      })
+      .catch((error) => console.error(error));
+  }
+
+  applyBackdropWorld(index, announce) {
+    const world = STORY_WORLDS[index];
+    const asset = getWorldAsset(world.texture);
+    const scale = BACKDROP.height / asset.sourceHeight;
+    const w = asset.sourceWidth * scale;
+    const h = asset.sourceHeight * scale;
     const travel = Math.max(1, WORLD_W - GAME_W);
+    // Keep the existing framing behavior. The chunk pipeline changes texture
+    // safety and loading cost, not the authored parallax or gameplay.
     const factor = Phaser.Math.Clamp((w - GAME_W) / travel, 0, 1);
-    const y = BACKDROP.horizonY - BACKDROP.horizonFrac * src.height * scale;
+    const y = BACKDROP.horizonY - BACKDROP.horizonFrac * h;
 
-    this.backdrop.setTexture(world.texture).setPosition(0, y).setScale(scale).setScrollFactor(factor, 0);
+    this.backdropChunks.forEach((chunk) => chunk.destroy());
+    this.backdropChunks = asset.chunks.map((chunk) =>
+      this.add
+        .image(chunk.x * scale, y, chunk.textureKey)
+        .setOrigin(0, 0)
+        .setScale(scale)
+        .setScrollFactor(factor, 0)
+        .setDepth(1)
+        .setTint(BACKDROP.tint),
+    );
+    this.backdrop = this.backdropChunks[0];
     this.activeWorldIndex = index;
+    this.requestedWorldIndex = index;
 
     if (announce) {
       this.game.events.emit('hud:world', world);
       // The scenery changes like a page being replaced, never like an attack.
-      this.backdrop.setAlpha(0.42);
-      this.tweens.add({ targets: this.backdrop, alpha: 1, duration: 1800, ease: 'Sine.easeInOut' });
+      this.backdropChunks.forEach((chunk) => chunk.setAlpha(0.42));
+      this.tweens.add({
+        targets: this.backdropChunks,
+        alpha: 1,
+        duration: 1800,
+        ease: 'Sine.easeInOut',
+      });
     }
+
+    this.prefetchBackdropNeighbors(index);
+  }
+
+  prefetchBackdropNeighbors(index) {
+    const nearby = [index - 1, index, index + 1]
+      .filter((candidate) => candidate >= 0 && candidate < STORY_WORLDS.length)
+      .map((candidate) => STORY_WORLDS[candidate].texture);
+    // World zero remains resident so an ordinary GameScene restart never has
+    // to wait for an async background before create() can finish.
+    const keep = [STORY_WORLDS[0].texture, ...nearby];
+    this.worldAssetLoader.releaseExcept(keep);
+    nearby.forEach((texture) => {
+      if (!isWorldAssetLoaded(this, texture)) {
+        this.worldAssetLoader.load(texture).catch((error) => console.error(error));
+      }
+    });
   }
 
   /** Additive light. Never lane-tinted, so it survives a near-black lane. */
@@ -1051,6 +1085,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   updateWorld() {
+    if (this.previewWorldIndex !== null) return;
     const x = this.player.x;
     let index = 0;
     for (let i = 0; i < STORY_WORLDS.length; i += 1) {

@@ -5,7 +5,11 @@
   "type": "module",
   "description": "A 2.5D lane-shifting platformer built with Phaser 3",
   "scripts": {
+    "assets:prepare": "node scripts/prepare-world-assets.mjs",
+    "assets:check": "node scripts/prepare-world-assets.mjs --check",
+    "predev": "npm run assets:check",
     "dev": "vite",
+    "prebuild": "npm run assets:check",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -13,6 +17,7 @@
     "phaser": "3.90.0"
   },
   "devDependencies": {
+    "sharp": "^0.35.3",
     "vite": "6.4.3"
   }
 }

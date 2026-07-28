@@ -35,4 +35,32 @@ const game = new Phaser.Game(config);
 //   game.scene.getScene('Game').physics.world.drawDebug = true
 window.game = game;
 
+// Read-only diagnostics for automated smoke tests and content-pipeline QA.
+// This does not advance or mutate gameplay state.
+window.render_game_to_text = () => {
+  const scene = game.scene.getScene('Game');
+  const player = scene?.player;
+  return JSON.stringify({
+    coordinateSystem: 'origin top-left; +x right; +y down; world units are pixels',
+    scene: scene?.sys?.isActive() ? 'Game' : 'Boot',
+    world: scene
+      ? {
+          index: scene.activeWorldIndex,
+          previewIndex: scene.previewWorldIndex,
+          loadedAssets: scene.worldAssetLoader?.loadedAssetIds() ?? [],
+          backdropChunks: scene.backdropChunks?.length ?? 0,
+        }
+      : null,
+    player: player
+      ? {
+          x: Math.round(player.x),
+          y: Math.round(player.y),
+          velocityX: Math.round(player.body?.velocity.x ?? 0),
+          velocityY: Math.round(player.body?.velocity.y ?? 0),
+          lane: player.lane,
+        }
+      : null,
+  });
+};
+
 export default game;
