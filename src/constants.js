@@ -48,7 +48,7 @@ export const LANES = [
   },
 ];
 
-// Painted panorama backdrop (src/assets/yharnam.png).
+// Panorama framing for the simulation worlds in src/assets/.
 //
 // Everything is derived from the source image's real dimensions at runtime, so
 // dropping in a different painting only means changing the import in

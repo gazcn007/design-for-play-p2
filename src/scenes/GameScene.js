@@ -13,6 +13,7 @@ import { LEVEL } from '../level.js';
 import { PAL } from '../palette.js';
 import Player from '../Player.js';
 import { sfx } from '../sfx.js';
+import { NPC_DIALOGUES, STORY_WORLDS } from '../story.js';
 
 // Surfaces that get an explicit moonlit lip; the rest read as flat silhouettes.
 const RIMMED = new Set(['ground', 'platform', 'bridge']);
@@ -25,12 +26,20 @@ export default class GameScene extends Phaser.Scene {
   create() {
     this.finished = false;
     this.activeInteractable = null;
+    this.activeNPC = null;
     this.bridgePlanks = [];
     this.interactables = [];
+    this.npcs = [];
+    this.dialogueState = null;
+    this.activeWorldIndex = -1;
     this.checkpointTaken = false;
+    this.finalReminderShown = false;
 
     this.registry.set('score', 0);
     this.registry.set('coins', 0);
+    this.registry.set('memory', 0);
+    this.registry.set('witnesses', 0);
+    this.registry.set('finalChoice', null);
     this.registry.set('lives', 3);
     this.registry.set('lane', LANE_NEAR);
 
@@ -49,6 +58,7 @@ export default class GameScene extends Phaser.Scene {
     this.buildCoins();
     this.buildEnemies();
     this.buildInteractables();
+    this.buildNPCs();
     this.buildMarkers();
     this.buildOverlays();
 
@@ -100,6 +110,7 @@ export default class GameScene extends Phaser.Scene {
 
     if (!this.scene.isActive('Hud')) this.scene.launch('Hud');
     else this.game.events.emit('hud:reset');
+    this.time.delayedCall(80, () => this.game.events.emit('hud:world', STORY_WORLDS[0]));
   }
 
   // ------------------------------------------------------------- level build
@@ -162,7 +173,8 @@ export default class GameScene extends Phaser.Scene {
   }
 
   /**
-   * The painted panorama that replaced the procedural skyline.
+   * The current simulation panorama. Each authored world uses the same
+   * framing so a hard change of explanation can still feel spatially natural.
    *
    * It is one Image, not a tileSprite. Tiling a painting this specific would
    * repeat its moon several times across the level and put a visible seam at
@@ -171,7 +183,8 @@ export default class GameScene extends Phaser.Scene {
    * the city is a reward for reaching the far side of the level.
    */
   buildBackdrop() {
-    const src = this.textures.get('backdrop').getSourceImage();
+    const firstWorld = STORY_WORLDS[0];
+    const src = this.textures.get(firstWorld.texture).getSourceImage();
 
     const scale = BACKDROP.height / src.height;
     const w = src.width * scale;
@@ -187,12 +200,36 @@ export default class GameScene extends Phaser.Scene {
     const y = BACKDROP.horizonY - BACKDROP.horizonFrac * h;
 
     this.backdrop = this.add
-      .image(0, y, 'backdrop')
+      .image(0, y, firstWorld.texture)
       .setOrigin(0, 0)
       .setScale(scale)
       .setScrollFactor(factor, 0)
       .setDepth(1)
       .setTint(BACKDROP.tint);
+
+    this.activeWorldIndex = 0;
+  }
+
+  switchWorld(index, announce = true) {
+    const world = STORY_WORLDS[index];
+    if (!world || index === this.activeWorldIndex && !announce) return;
+
+    const src = this.textures.get(world.texture).getSourceImage();
+    const scale = BACKDROP.height / src.height;
+    const w = src.width * scale;
+    const travel = Math.max(1, WORLD_W - GAME_W);
+    const factor = Phaser.Math.Clamp((w - GAME_W) / travel, 0, 1);
+    const y = BACKDROP.horizonY - BACKDROP.horizonFrac * src.height * scale;
+
+    this.backdrop.setTexture(world.texture).setPosition(0, y).setScale(scale).setScrollFactor(factor, 0);
+    this.activeWorldIndex = index;
+
+    if (announce) {
+      this.game.events.emit('hud:world', world);
+      // The scenery changes like a page being replaced, never like an attack.
+      this.backdrop.setAlpha(0.42);
+      this.tweens.add({ targets: this.backdrop, alpha: 1, duration: 1800, ease: 'Sine.easeInOut' });
+    }
   }
 
   /** Additive light. Never lane-tinted, so it survives a near-black lane. */
@@ -364,6 +401,37 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
+  buildNPCs() {
+    LEVEL.npcs.forEach((def) => {
+      const story = NPC_DIALOGUES[def.id];
+      const lane = LANES[def.lane];
+      const sprite = this.add
+        .sprite(def.x, lane.baseY + 2, 'npc')
+        .setOrigin(0.5, 1)
+        .setDepth(lane.depth + 1)
+        .setScale(lane.scale * 0.92)
+        .setTint(story.tint);
+
+      // A label is only shown while the player is close. Keeping names out of
+      // the opening frame lets the silhouettes feel like part of the place
+      // before they become people.
+      const label = this.add
+        .text(def.x, lane.baseY - sprite.displayHeight - 12, story.name, {
+          fontFamily: 'ui-monospace, Menlo, monospace',
+          fontSize: '10px',
+          color: '#bcc8d2',
+          letterSpacing: 1,
+          backgroundColor: '#07090d',
+          padding: { x: 5, y: 3 },
+        })
+        .setOrigin(0.5, 1)
+        .setDepth(60)
+        .setAlpha(0);
+
+      this.npcs.push({ def, story, sprite, label, talked: 0 });
+    });
+  }
+
   buildInteractables() {
     LEVEL.interactables.forEach((def) => {
       const lane = LANES[def.lane];
@@ -451,6 +519,8 @@ export default class GameScene extends Phaser.Scene {
       attack: 'F',
       restart: 'R',
       debug: 'ZERO',
+      choiceOne: 'ONE',
+      choiceTwo: 'TWO',
     });
     // Stop the page from scrolling when the player uses space / arrows.
     this.input.keyboard.addCapture(['SPACE', 'UP', 'DOWN', 'LEFT', 'RIGHT']);
@@ -471,6 +541,8 @@ export default class GameScene extends Phaser.Scene {
       laneFront: JustDown(k.s),
       interact: JustDown(k.interact),
       attackPressed: JustDown(k.attack),
+      choiceOne: JustDown(k.choiceOne),
+      choiceTwo: JustDown(k.choiceTwo),
     };
   }
 
@@ -664,6 +736,11 @@ export default class GameScene extends Phaser.Scene {
   // ------------------------------------------------------------ interactions
 
   updateInteractables(input) {
+    if (this.dialogueState) {
+      this.prompt.setVisible(false);
+      return;
+    }
+
     const p = this.player;
     let best = null;
     let bestDist = 62;
@@ -675,21 +752,146 @@ export default class GameScene extends Phaser.Scene {
       const dy = Math.abs(it.sprite.y - p.y);
       if (dx < bestDist && dy < 100) {
         bestDist = dx;
-        best = it;
+        best = { type: 'interactable', item: it, x: it.sprite.x, y: it.sprite.y };
       }
     });
 
-    this.activeInteractable = best;
+    this.npcs.forEach((npc) => {
+      if (npc.def.lane !== p.lane) return;
+      const dx = Math.abs(npc.sprite.x - p.x);
+      const dy = Math.abs(npc.sprite.y - p.y);
+      if (dx < bestDist && dy < 110) {
+        bestDist = dx;
+        best = { type: 'npc', item: npc, x: npc.sprite.x, y: npc.sprite.y };
+      }
+    });
+
+    this.activeInteractable = best?.type === 'interactable' ? best.item : null;
+    this.activeNPC = best?.type === 'npc' ? best.item : null;
+
+    this.npcs.forEach((npc) => npc.label.setAlpha(npc === this.activeNPC ? 1 : 0));
 
     if (best) {
       this.prompt
         .setVisible(true)
-        .setPosition(best.sprite.x, best.sprite.y - best.sprite.displayHeight - 10);
+        .setText(best.type === 'npc' ? '[E] SPEAK' : '[E]')
+        .setPosition(best.x, best.item.sprite.y - best.item.sprite.displayHeight - 10);
     } else {
       this.prompt.setVisible(false);
     }
 
-    if (input.interact && best) this.fireInteractable(best);
+    if (input.interact && best) {
+      if (best.type === 'npc') this.openDialogue(best.item);
+      else this.fireInteractable(best.item);
+    }
+  }
+
+  openDialogue(npc) {
+    if (this.dialogueState) return;
+
+    npc.talked += 1;
+    const nodeId = npc.talked === 1 ? 'start' : 'repeat';
+    this.dialogueState = {
+      npc,
+      nodeId,
+      lineIndex: 0,
+      waitingChoice: false,
+    };
+    this.player.frozen = true;
+    this.player.setVelocity(0, 0);
+    this.prompt.setVisible(false);
+    this.showDialogueNode();
+  }
+
+  showDialogueNode() {
+    const state = this.dialogueState;
+    if (!state) return;
+
+    const node = state.npc.story[state.nodeId];
+    state.lineIndex = 0;
+    state.waitingChoice = false;
+    this.game.events.emit('hud:dialogue:line', {
+      speaker: state.npc.story.name,
+      role: state.npc.story.role,
+      text: node.lines[0],
+      line: 1,
+      total: node.lines.length,
+    });
+  }
+
+  advanceDialogue() {
+    const state = this.dialogueState;
+    if (!state || state.waitingChoice) return;
+
+    const node = state.npc.story[state.nodeId];
+    if (state.lineIndex < node.lines.length - 1) {
+      state.lineIndex += 1;
+      this.game.events.emit('hud:dialogue:line', {
+        speaker: state.npc.story.name,
+        role: state.npc.story.role,
+        text: node.lines[state.lineIndex],
+        line: state.lineIndex + 1,
+        total: node.lines.length,
+      });
+      return;
+    }
+
+    if (node.choices) {
+      state.waitingChoice = true;
+      this.game.events.emit('hud:dialogue:choices', {
+        choices: node.choices.map((choice) => choice.label),
+      });
+    } else {
+      this.closeDialogue();
+    }
+  }
+
+  selectDialogueChoice(index) {
+    const state = this.dialogueState;
+    if (!state || !state.waitingChoice) return;
+
+    const node = state.npc.story[state.nodeId];
+    const choice = node.choices?.[index];
+    if (!choice) return;
+
+    if (choice.memory) {
+      this.registry.set('memory', Math.max(0, this.registry.get('memory') + choice.memory));
+    }
+    if (choice.witness) {
+      this.registry.set('witnesses', Math.max(0, this.registry.get('witnesses') + choice.witness));
+    }
+    if (choice.final) {
+      this.registry.set('finalChoice', choice.id);
+      this.game.events.emit(
+        'hud:toast',
+        choice.id === 'awake' ? 'the world has heard you remember' : 'the world has accepted your forgiveness',
+      );
+    }
+
+    state.nodeId = choice.next;
+    this.showDialogueNode();
+  }
+
+  updateDialogueInput() {
+    const JustDown = Phaser.Input.Keyboard.JustDown;
+    if (JustDown(this.keys.choiceOne)) {
+      this.selectDialogueChoice(0);
+    } else if (JustDown(this.keys.choiceTwo)) {
+      this.selectDialogueChoice(1);
+    } else if (
+      JustDown(this.keys.interact) ||
+      JustDown(this.keys.jump) ||
+      JustDown(this.keys.up)
+    ) {
+      this.advanceDialogue();
+    }
+  }
+
+  closeDialogue() {
+    if (!this.dialogueState) return;
+    this.dialogueState = null;
+    this.player.frozen = false;
+    this.game.events.emit('hud:dialogue:close');
   }
 
   fireInteractable(it) {
@@ -799,6 +1001,9 @@ export default class GameScene extends Phaser.Scene {
     this.game.events.emit('hud:win', {
       score: this.registry.get('score'),
       coins: this.registry.get('coins'),
+      choice: this.registry.get('finalChoice'),
+      memory: this.registry.get('memory'),
+      witnesses: this.registry.get('witnesses'),
     });
   }
 
@@ -819,8 +1024,14 @@ export default class GameScene extends Phaser.Scene {
     this.updateParallax();
     if (this.finished) return;
 
+    if (this.dialogueState) {
+      this.updateDialogueInput();
+      return;
+    }
+
     const input = this.readInput();
     this.player.update(delta, input);
+    this.updateWorld();
     this.updateEnemies();
     this.updateInteractables(input);
     this.updateMarkers();
@@ -837,6 +1048,15 @@ export default class GameScene extends Phaser.Scene {
     this.fogLow.tilePositionX = sx * 0.68 + t * 0.009;
     this.fogDrift.tilePositionX = sx * 0.95 + t * 0.016;
     this.foreground.tilePositionX = sx * 1.25;
+  }
+
+  updateWorld() {
+    const x = this.player.x;
+    let index = 0;
+    for (let i = 0; i < STORY_WORLDS.length; i += 1) {
+      if (x >= STORY_WORLDS[i].startX) index = i;
+    }
+    if (index !== this.activeWorldIndex) this.switchWorld(index);
   }
 
   updateEnemies() {
@@ -874,7 +1094,14 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
-    if (p.lane === LANE_NEAR && Math.abs(p.x - this.goalSprite.x) < 42) this.win();
+    if (p.lane === LANE_NEAR && Math.abs(p.x - this.goalSprite.x) < 42) {
+      if (this.registry.get('finalChoice')) {
+        this.win();
+      } else if (!this.finalReminderShown) {
+        this.finalReminderShown = true;
+        this.game.events.emit('hud:toast', 'The gate is waiting for your answer. Find the last person.');
+      }
+    }
   }
 
   /**

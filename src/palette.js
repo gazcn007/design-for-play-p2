@@ -9,8 +9,8 @@ export const PAL = {
   skyHorizon: 0x454e5c,
   skyLow: 0x1b1f26,
 
-  // The skyline is now a painted backdrop (src/assets/yharnam.png), not
-  // generated layers — but the rule it had to obey still governs everything
+  // The skyline is now a set of painted simulation panoramas, not generated
+  // layers — but the rule it has to obey still governs everything
   // else. The scene is one monotonic value ramp, darker the closer a plane is
   // to the camera:
   //   backdrop > FAR lane > NEAR lane > foreground brambles

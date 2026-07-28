@@ -261,6 +261,29 @@ export function buildTextures(scene) {
     c.fillEllipse(14, 5, 26, 8);
   });
 
+  // The witnesses all share one body plan. Their differences are carried by
+  // tint and dialogue, which makes the repeated silhouette feel intentional:
+  // the simulation can change a setting faster than it can invent a person.
+  bake('npc', 34, 66, (c) => {
+    c.fillStyle(PAL.actor, 1);
+    // head, with the face turned slightly away from the player
+    c.fillCircle(17, 11, 8);
+    c.fillTriangle(8, 10, 17, 2, 28, 10);
+    c.fillRect(11, 16, 12, 16);
+    // coat that nearly reaches the ground
+    c.fillTriangle(4, 62, 12, 26, 22, 26);
+    c.fillTriangle(30, 62, 22, 26, 12, 26);
+    c.fillRect(10, 29, 14, 28);
+    // arms held too still to be natural
+    c.fillRect(5, 29, 6, 25);
+    c.fillRect(23, 29, 6, 25);
+    c.fillCircle(8, 55, 4);
+    c.fillCircle(26, 55, 4);
+    // two narrow feet, barely visible under the hem
+    c.fillRect(10, 57, 5, 8);
+    c.fillRect(19, 57, 5, 8);
+  });
+
   // A fast, narrow silver trail for the hunter's cleaver. It is deliberately
   // brief and cool-coloured, so an attack reads without turning into a bright
   // arcade projectile.

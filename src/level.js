@@ -120,4 +120,17 @@ export const LEVEL = {
       message: 'A bridge rumbles into place in the far lane.',
     },
   ],
+
+  // The people are not enemies and do not collide. They are anchors for the
+  // story: each one remembers a different failed explanation of the world.
+  npcs: [
+    { id: 'caretaker', lane: LANE_NEAR, x: 360 },
+    { id: 'mara', lane: LANE_FAR, x: 620 },
+    { id: 'operator', lane: LANE_NEAR, x: 1360 },
+    { id: 'archivist', lane: LANE_FAR, x: 1560 },
+    { id: 'mother', lane: LANE_NEAR, x: 2350 },
+    { id: 'child', lane: LANE_FAR, x: 2760 },
+    { id: 'janitor', lane: LANE_NEAR, x: 4280 },
+    { id: 'last', lane: LANE_NEAR, x: 5140 },
+  ],
 };

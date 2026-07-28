@@ -1,8 +1,8 @@
 # Nightfall
 
-A 2D lane-shifting action platformer built with Phaser 3 — a gaslit gothic
-skyline, silhouette traversal, a quick cleaver strike, and two depth lanes to
-shift between.
+A 2D lane-shifting psychological horror game built with Phaser 3. The player
+crosses eleven versions of the same world, meets witnesses who remember failed
+runs, and makes a final choice about whether the simulation should continue.
 
 ```bash
 npm install
@@ -21,8 +21,28 @@ npm run build    # -> dist/
 | `S` | Shift toward the camera (near lane) |
 | `F` | Strike |
 | `E` | Interact — levers |
+| `E` / `Space` | Advance dialogue |
+| `1` / `2` | Choose a dialogue response |
 | `R` | Restart |
 | `0` | Toggle Arcade physics debug |
+
+## Story mode
+
+The environments in `src/assets/` are treated as revisions of one simulation,
+not as a literal historical timeline. The player is the **witness process**:
+something the world needs in order to prove that a person once lived inside it.
+
+Eight NPCs are placed along the existing platforming route. Each NPC has a
+first conversation, a meaningful question with two responses, and a shorter
+repeat line when revisited. Dialogue choices track **memory** and **witnesses**;
+the final NPC offers two endings:
+
+- **I remember** — the player rejects the role of player and wakes the world.
+- **I forgive you** — the player stays, becoming the shape used to render the
+  next person.
+
+The game uses repetition, contradictions, and changing scenery for tension. It
+does not rely on jump scares.
 
 ## How the depth lanes work
 
@@ -63,7 +83,7 @@ and refuses the shift if it would put the player inside solid rock.
 | Move platforms, enemies, and pits | `src/level.js` |
 | Change lane depth/scale/tint | `src/constants.js` → `LANES` |
 | Redraw any sprite | `src/textures.js` |
-| Swap the backdrop painting | the import in `src/scenes/BootScene.js` |
+| Change the simulation worlds | `src/story.js` → `STORY_WORLDS` |
 | Reframe the backdrop | `src/constants.js` → `BACKDROP` |
 | Retune the value ramp / fog | `src/palette.js` + `LANES` tints |
 | Move lamps, hearses, fences, graves | `src/level.js` → `decor` |
@@ -87,8 +107,9 @@ Scripted launches go through `Player.launch()`, which deliberately clears
 
 Three layers, and the distinctions matter:
 
-- **The backdrop** is a painting (`src/assets/yharnam.png`) — the one real
-  asset in the project. It replaced the procedurally generated skyline.
+- **The backdrops** are the eleven panoramas in `src/assets/`; the scene swaps
+  them as the player moves through the map, turning traversal into a sequence
+  of simulation revisions.
 - **Silhouettes** are drawn in grey and *tinted* per lane. Tint is
   multiplicative, so every texture is drawn at its lightest value and each lane
   multiplies it down. Against a painting, both lanes go nearly black.
@@ -155,7 +176,7 @@ street now shows through the gap between the two lanes.
 
 ## Assets
 
-Exactly one: the backdrop painting. Everything else — every sprite, tile, fog
+The world panoramas are real assets. Everything else — every sprite, tile, fog
 bank, glow and vignette — is drawn with the Graphics API at boot in
 `src/textures.js` and baked into a texture, and all sound is synthesized with
 WebAudio oscillators in `src/sfx.js`.
@@ -188,8 +209,9 @@ src/
   textures.js      procedural art
   sfx.js           WebAudio blips
   palette.js       the value ramp — every colour in the game
-  assets/          the backdrop painting (the only asset)
+  assets/          the eleven simulation panoramas
   Player.js        movement, jump, lane shifting
+  story.js         world revisions, NPC dialogue, and final choice branches
   scenes/
     BootScene.js   bakes textures, starts Game
     GameScene.js   world build, collisions, interactions
