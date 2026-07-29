@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_W, GAME_H } from '../constants.js';
-import { buildTextures } from '../textures.js';
+import { buildAnimations, buildTextures } from '../textures.js';
 import { STORY_WORLDS } from '../story.js';
 import { queueWorldAsset, resolvePreviewWorldIndex } from '../worlds/worldAssets.js';
 
@@ -42,6 +42,7 @@ export default class BootScene extends Phaser.Scene {
 
   create() {
     buildTextures(this);
+    buildAnimations(this);
     this.scene.start('Game');
   }
 }
