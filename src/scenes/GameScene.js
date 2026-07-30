@@ -14,6 +14,15 @@ import { PAL } from '../palette.js';
 import Player from '../Player.js';
 import { sfx } from '../sfx.js';
 import { NPC_DIALOGUES, STORY_WORLDS } from '../story.js';
+import TutorialCarArt from '../art/tutorialCarArt.js';
+import TutorialTrainRoomsArt from '../art/tutorialTrainRoomsArt.js';
+import TimetablePuzzle from '../tutorial/TimetablePuzzle.js';
+import {
+  getWorldAsset,
+  isWorldAssetLoaded,
+  resolvePreviewWorldIndex,
+  WorldAssetLoader,
+} from '../worlds/worldAssets.js';
 
 // Surfaces that get an explicit moonlit lip; the rest read as flat silhouettes.
 const RIMMED = new Set(['ground', 'platform', 'bridge']);
@@ -32,8 +41,63 @@ export default class GameScene extends Phaser.Scene {
     this.npcs = [];
     this.dialogueState = null;
     this.activeWorldIndex = -1;
+    this.requestedWorldIndex = -1;
+    this.previewWorldIndex = resolvePreviewWorldIndex(STORY_WORLDS);
+    this.initialWorldIndex = this.previewWorldIndex ?? 0;
+    this.worldAssetLoader = new WorldAssetLoader(this);
+    this.backdropChunks = [];
     this.checkpointTaken = false;
     this.finalReminderShown = false;
+    this.tutorialExitBlockedNotified = false;
+    this.prologueTransitionActive = false;
+    this.departureScroll = 0;
+    this.hitstopRestoreTimer = null;
+    this.tutorialPuzzle = {
+      phase: 'idle',
+      briefed: false,
+      frames: [],
+      recordStartedAt: 0,
+      playbackStartedAt: 0,
+      playbackCursor: 0,
+      pastActive: false,
+      presentActive: false,
+      serviceActive: false,
+      routeActive: false,
+      poweredSegments: 0,
+      breakerActive: false,
+      syncAligned: [false, false],
+      recordVisited: [false, false],
+      syncHotIndex: -1,
+      syncHoldStartedAt: 0,
+      playbackLeadUntil: 0,
+      gateAnimating: LEVEL.tutorialPuzzle.stages.map(() => false),
+      relayStates: Object.fromEntries(
+        LEVEL.tutorialPuzzle.stages
+          .flatMap((stage) => stage.relays ?? [])
+          .map((relay) => [relay.id, relay.initial]),
+      ),
+      stageIndex: 0,
+      stageComplete: LEVEL.tutorialPuzzle.stages.map(() => false),
+      faultUntil: 0,
+      anomalyActive: false,
+      queue: [],
+      executionStep: -1,
+      activeCommand: null,
+      manualUntil: 0,
+      echoRecorded: false,
+      echoSyncIndex: -1,
+      echoWindowUntil: 0,
+      echoVented: false,
+      // Section V: analogue line pressure, driven by how long VENT is held.
+      pressure: 100,
+      pressureVenting: false,
+      pressureBraked: false,
+      pressureSettled: false,
+      // Section VI: which echo gates the player has cleared from above.
+      echoGateIndex: 0,
+      echoGatesCleared: [],
+      echoAtValve: false,
+    };
 
     this.registry.set('score', 0);
     this.registry.set('coins', 0);
@@ -42,11 +106,17 @@ export default class GameScene extends Phaser.Scene {
     this.registry.set('finalChoice', null);
     this.registry.set('lives', 3);
     this.registry.set('lane', LANE_NEAR);
+    this.registry.set('tutorialPowerState', 'off');
+    this.registry.set('tutorialPowerRestored', false);
 
     this.physics.world.setBounds(0, -600, WORLD_W, 2200);
     this.cameras.main.setBounds(0, 0, WORLD_W, GAME_H);
 
     this.buildBackground();
+    this.tutorialCarArt = new TutorialCarArt(this);
+    this.tutorialCarArt.setVisible(false);
+    this.tutorialTrainRoomsArt = new TutorialTrainRoomsArt(this, LEVEL.tutorialPuzzle.stages);
+    this.tutorialTrainRoomsArt.setVisible(this.activeWorldIndex === 0);
 
     this.solids = this.physics.add.staticGroup();
     this.coins = this.physics.add.group({ allowGravity: false, immovable: true });
@@ -59,6 +129,7 @@ export default class GameScene extends Phaser.Scene {
     this.buildEnemies();
     this.buildInteractables();
     this.buildNPCs();
+    this.buildTutorialPuzzleProps();
     this.buildMarkers();
     this.buildOverlays();
 
@@ -101,8 +172,10 @@ export default class GameScene extends Phaser.Scene {
 
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
     this.cameras.main.setDeadzone(180, 140);
+    this.setTutorialCameraMode(this.activeWorldIndex);
 
     this.setupInput();
+    this.setupTutorialQA();
 
     this.physics.world.createDebugGraphic();
     this.physics.world.drawDebug = false;
@@ -110,7 +183,19 @@ export default class GameScene extends Phaser.Scene {
 
     if (!this.scene.isActive('Hud')) this.scene.launch('Hud');
     else this.game.events.emit('hud:reset');
-    this.time.delayedCall(80, () => this.game.events.emit('hud:world', STORY_WORLDS[0]));
+    this.time.delayedCall(80, () => {
+      if (!this.tutorialQAActive) {
+        this.game.events.emit('hud:world', STORY_WORLDS[this.initialWorldIndex]);
+      }
+    });
+    this.events.once('shutdown', () => {
+      this.clearHitstop();
+      sfx.setPrologueAmbient(false);
+      this.worldAssetLoader.destroy();
+      this.tutorialCarArt?.destroy();
+      this.tutorialTrainRoomsArt?.destroy();
+      this.timetablePuzzle?.destroy();
+    });
   }
 
   // ------------------------------------------------------------- level build
@@ -148,6 +233,7 @@ export default class GameScene extends Phaser.Scene {
     // No inter-lane treeline any more: the painting's own lamplit street shows
     // through the gap between the lanes and reads far better than a drawn band.
     this.foreground = layer(GAME_H - 74, 84, 'foreground', 45);
+    this.foregroundBaseAlpha = this.foreground.alpha;
 
     // Ash drifting across the whole frame, pinned to the camera.
     this.ash = this.add.particles(0, 0, 'mote', {
@@ -169,67 +255,98 @@ export default class GameScene extends Phaser.Scene {
       .setOrigin(0)
       .setDisplaySize(GAME_W, GAME_H)
       .setScrollFactor(0)
-      .setDepth(70);
+      .setDepth(70)
+      .setAlpha(0.86);
+    this.vignetteBaseAlpha = 0.86;
   }
 
-  /**
-   * The current simulation panorama. Each authored world uses the same
-   * framing so a hard change of explanation can still feel spatially natural.
-   *
-   * It is one Image, not a tileSprite. Tiling a painting this specific would
-   * repeat its moon several times across the level and put a visible seam at
-   * every wrap. Instead the scroll factor is derived so the panorama pans
-   * across exactly once end to end — no repeat, no seam, and the far side of
-   * the city is a reward for reaching the far side of the level.
-   */
+  /** Build the current panorama from GPU-safe horizontal texture chunks. */
   buildBackdrop() {
-    const firstWorld = STORY_WORLDS[0];
-    const src = this.textures.get(firstWorld.texture).getSourceImage();
-
-    const scale = BACKDROP.height / src.height;
-    const w = src.width * scale;
-    const h = src.height * scale;
-
-    // Pan the panorama's full width over the camera's full travel. Clamped
-    // because a painting narrower than the viewport cannot pan at all.
-    const travel = Math.max(1, WORLD_W - GAME_W);
-    const factor = Phaser.Math.Clamp((w - GAME_W) / travel, 0, 1);
-
-    // Anchor by the painting's horizon rather than by a guessed y offset, so
-    // this still lands correctly if the image is swapped or rescaled.
-    const y = BACKDROP.horizonY - BACKDROP.horizonFrac * h;
-
-    this.backdrop = this.add
-      .image(0, y, firstWorld.texture)
-      .setOrigin(0, 0)
-      .setScale(scale)
-      .setScrollFactor(factor, 0)
-      .setDepth(1)
-      .setTint(BACKDROP.tint);
-
-    this.activeWorldIndex = 0;
+    this.applyBackdropWorld(this.initialWorldIndex, false);
+    this.prefetchBackdropNeighbors(this.initialWorldIndex);
   }
 
   switchWorld(index, announce = true) {
     const world = STORY_WORLDS[index];
-    if (!world || index === this.activeWorldIndex && !announce) return;
+    if (!world || (index === this.activeWorldIndex && !announce)) return;
+    this.requestedWorldIndex = index;
 
-    const src = this.textures.get(world.texture).getSourceImage();
-    const scale = BACKDROP.height / src.height;
-    const w = src.width * scale;
+    if (isWorldAssetLoaded(this, world.texture)) {
+      this.applyBackdropWorld(index, announce);
+      return;
+    }
+
+    this.worldAssetLoader
+      .load(world.texture)
+      .then(() => {
+        if (this.requestedWorldIndex === index) this.applyBackdropWorld(index, announce);
+      })
+      .catch((error) => console.error(error));
+  }
+
+  applyBackdropWorld(index, announce) {
+    const world = STORY_WORLDS[index];
+    const asset = getWorldAsset(world.texture);
+    const scale = BACKDROP.height / asset.sourceHeight;
+    const w = asset.sourceWidth * scale;
+    const h = asset.sourceHeight * scale;
     const travel = Math.max(1, WORLD_W - GAME_W);
+    // Keep the existing framing behavior. The chunk pipeline changes texture
+    // safety and loading cost, not the authored parallax or gameplay.
     const factor = Phaser.Math.Clamp((w - GAME_W) / travel, 0, 1);
-    const y = BACKDROP.horizonY - BACKDROP.horizonFrac * src.height * scale;
+    const y = BACKDROP.horizonY - BACKDROP.horizonFrac * h + (world.backdropOffsetY ?? 0);
+    const xOffset = world.backdropOffsetX ?? 0;
 
-    this.backdrop.setTexture(world.texture).setPosition(0, y).setScale(scale).setScrollFactor(factor, 0);
+    this.backdropChunks.forEach((chunk) => chunk.destroy());
+    this.backdropChunks = asset.chunks.map((chunk) => {
+      const image = this.add
+        .image(chunk.x * scale, y, chunk.textureKey)
+        .setOrigin(0, 0)
+        .setScale(scale)
+        .setScrollFactor(factor, 0)
+        .setDepth(1)
+        .setTint(BACKDROP.tint);
+      image.x += xOffset;
+      image.backdropBaseX = image.x;
+      return image;
+    });
+    this.backdrop = this.backdropChunks[0];
     this.activeWorldIndex = index;
+    this.requestedWorldIndex = index;
+    sfx.setPrologueAmbient(index === 0);
+    this.tutorialCarArt?.setVisible(false);
+    this.tutorialTrainRoomsArt?.setVisible(index === 0);
+    this.setTutorialPuzzleVisible(index === 0);
+    this.setTutorialCameraMode(index);
 
     if (announce) {
       this.game.events.emit('hud:world', world);
       // The scenery changes like a page being replaced, never like an attack.
-      this.backdrop.setAlpha(0.42);
-      this.tweens.add({ targets: this.backdrop, alpha: 1, duration: 1800, ease: 'Sine.easeInOut' });
+      this.backdropChunks.forEach((chunk) => chunk.setAlpha(0.42));
+      this.tweens.add({
+        targets: this.backdropChunks,
+        alpha: 1,
+        duration: 1800,
+        ease: 'Sine.easeInOut',
+      });
     }
+
+    this.prefetchBackdropNeighbors(index);
+  }
+
+  prefetchBackdropNeighbors(index) {
+    const nearby = [index - 1, index, index + 1]
+      .filter((candidate) => candidate >= 0 && candidate < STORY_WORLDS.length)
+      .map((candidate) => STORY_WORLDS[candidate].texture);
+    // World zero remains resident so an ordinary GameScene restart never has
+    // to wait for an async background before create() can finish.
+    const keep = [STORY_WORLDS[0].texture, ...nearby];
+    this.worldAssetLoader.releaseExcept(keep);
+    nearby.forEach((texture) => {
+      if (!isWorldAssetLoaded(this, texture)) {
+        this.worldAssetLoader.load(texture).catch((error) => console.error(error));
+      }
+    });
   }
 
   /** Additive light. Never lane-tinted, so it survives a near-black lane. */
@@ -241,6 +358,31 @@ export default class GameScene extends Phaser.Scene {
       .setTint(color)
       .setAlpha(alpha)
       .setBlendMode(Phaser.BlendModes.ADD);
+  }
+
+  pulseTutorialDevice(sprite, color = 0x75d4cd) {
+    if (!sprite) return;
+    const baseScaleX = sprite.scaleX;
+    const baseScaleY = sprite.scaleY;
+    const halo = this.addLight(sprite.x, sprite.y - sprite.displayHeight * 0.48, 42, color, 0.48, 63);
+    this.cameras.main.shake(90, 0.0018);
+    this.tweens.add({
+      targets: sprite,
+      scaleX: baseScaleX * 0.86,
+      scaleY: baseScaleY * 0.86,
+      duration: 65,
+      yoyo: true,
+      ease: 'Quad.easeOut',
+      onComplete: () => sprite.setScale(baseScaleX, baseScaleY),
+    });
+    this.tweens.add({
+      targets: halo,
+      alpha: 0,
+      scale: halo.scale * 1.55,
+      duration: 260,
+      ease: 'Quad.easeOut',
+      onComplete: () => halo.destroy(),
+    });
   }
 
   buildDecor() {
@@ -405,12 +547,15 @@ export default class GameScene extends Phaser.Scene {
     LEVEL.npcs.forEach((def) => {
       const story = NPC_DIALOGUES[def.id];
       const lane = LANES[def.lane];
+      const isConductor = def.id === 'caretaker';
+      const texture = isConductor ? 'conductor-idle-0' : 'npc';
       const sprite = this.add
-        .sprite(def.x, lane.baseY + 2, 'npc')
+        .sprite(def.x, lane.baseY + 2, texture)
         .setOrigin(0.5, 1)
         .setDepth(lane.depth + 1)
         .setScale(lane.scale * 0.92)
         .setTint(story.tint);
+      if (isConductor) sprite.play('conductor-idle');
 
       // A label is only shown while the player is close. Keeping names out of
       // the opening frame lets the silhouettes feel like part of the place
@@ -435,7 +580,26 @@ export default class GameScene extends Phaser.Scene {
   buildInteractables() {
     LEVEL.interactables.forEach((def) => {
       const lane = LANES[def.lane];
-      const tex = def.kind === 'lever' ? 'lever-off' : 'sign';
+      const textureByKind = {
+        lever: 'lever-off',
+        breaker: 'lever-off',
+        recorder: 'echo-recorder-idle',
+        generator: 'hand-generator-off',
+        'timetable-command': 'circuit-relay-0',
+        'rail-control': 'lever-off',
+        'timetable-run': 'hand-generator-off',
+        'timetable-manual': 'lever-off',
+      };
+      const tex =
+        def.kind === 'rail-control'
+          ? def.command === 'power'
+            ? 'hand-generator-off'
+            : def.command === 'vent'
+              ? 'circuit-relay-0'
+              : 'lever-off'
+        : def.kind === 'relay'
+          ? `circuit-relay-${this.tutorialPuzzle.relayStates[def.id]}`
+          : textureByKind[def.kind] || 'sign';
       const sprite = this.add
         .sprite(def.x, lane.baseY, tex)
         .setOrigin(0.5, 1)
@@ -454,8 +618,487 @@ export default class GameScene extends Phaser.Scene {
         padding: { x: 6, y: 3 },
       })
       .setOrigin(0.5, 1)
-      .setDepth(60)
+      .setDepth(64)
       .setVisible(false);
+  }
+
+  buildTutorialPuzzleProps() {
+    const config = LEVEL.tutorialPuzzle;
+    if (config.mode === 'timetable') {
+      this.timetablePuzzle = new TimetablePuzzle(this, config);
+      this.timetablePuzzle.build();
+      return;
+    }
+    const stages = config.stages;
+    const lane = LANES[LANE_NEAR];
+    this.tutorialPressures = stages.map((stage) =>
+      this.add
+        .sprite(stage.plateX, lane.baseY + 1, 'pressure-pad-off')
+        .setOrigin(0.5, 1)
+        .setDepth(lane.depth + 2)
+        .setTint(lane.figureTint),
+    );
+
+    this.echoSprite = this.add
+      .sprite(stages[0].recorderX, lane.baseY, 'player-idle-0')
+      .setOrigin(0.5, 1)
+      .setDepth(lane.depth + 3)
+      .setTint(0x75d4cd)
+      .setAlpha(0.2)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setVisible(false);
+    this.echoReflection = this.add
+      .sprite(stages[0].recorderX, 320, 'player-idle-0')
+      .setOrigin(0.5, 1)
+      .setDepth(26)
+      .setScale(0.86)
+      .setTint(0x9ce8e2)
+      .setAlpha(0.58)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setVisible(false);
+
+    const labelStyle = {
+      fontFamily: 'ui-monospace, Menlo, monospace',
+      fontSize: '9px',
+      color: '#71828a',
+      backgroundColor: '#071016',
+      padding: { x: 4, y: 2 },
+    };
+    this.tutorialDeviceLabels = stages.flatMap((stage) => [
+      this.add.text(stage.recorderX, 380, 'MEMORY RECORDER', labelStyle),
+      this.add.text(stage.plateX, 432, 'PAST', labelStyle),
+      ...stage.relays.map((relay, index) =>
+        this.add.text(relay.x, 408, `ROUTER ${String.fromCharCode(65 + index)}`, labelStyle),
+      ),
+      this.add.text(stage.generatorX, 380, 'PRESENT', labelStyle),
+    ]).map((label) => label.setOrigin(0.5).setDepth(58));
+
+    this.tutorialStageSigns = stages.map((stage, index) =>
+      this.add
+        .text(stage.startX + 32, 310, stage.title, {
+          ...labelStyle,
+          fontSize: '11px',
+          color: index === 0 ? '#f2d49a' : '#71828a',
+          padding: { x: 8, y: 5 },
+        })
+        .setDepth(58),
+    );
+
+    this.tutorialGates = stages.map((stage, index) => {
+      const gate = this.add
+        .rectangle(stage.endX, 246, 22, 216, 0x1c2830, 0.96)
+        .setOrigin(0.5, 0)
+        .setDepth(44)
+        .setStrokeStyle(2, index === stages.length - 1 ? 0xcaa66b : 0xe45a5f, 0.8);
+      const light = this.add
+        .circle(stage.endX, 274, 5, 0xe45a5f, 1)
+        .setDepth(59)
+        .setBlendMode(Phaser.BlendModes.ADD);
+      return { gate, light };
+    });
+
+    this.tutorialRouteGraphics = this.add.graphics().setDepth(56);
+    this.tutorialRoutePulse = this.add
+      .circle(stages[0].plateX, 507, 4, 0x75d4cd, 1)
+      .setDepth(57)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setVisible(false);
+
+    this.tutorialGuideGraphics = this.add.graphics().setDepth(55);
+    stages.forEach((stage, index) => {
+      const guideStart = index === 0 ? 125 : stage.startX + 34;
+      const guideTarget = stage.underfloor ? stage.syncNodes.at(-1).x : stage.plateX;
+      this.tutorialGuideGraphics.lineStyle(2, 0xcaa66b, 0.26);
+      this.tutorialGuideGraphics.lineBetween(guideStart, 447, guideTarget, 447);
+      for (let x = guideStart + 42; x < guideTarget - 12; x += 48) {
+        this.tutorialGuideGraphics.fillStyle(0xe5c98f, 0.34);
+        this.tutorialGuideGraphics.fillTriangle(x, 442, x + 9, 447, x, 452);
+      }
+    });
+
+    // The first room teaches through a silent tableau: one remembered body on
+    // PAST, one present body at the generator, and a pulse between them.
+    this.tutorialDemoEcho = this.add
+      .sprite(stages[0].plateX, lane.baseY, 'player-idle-0')
+      .setOrigin(0.5, 1)
+      .setDepth(lane.depth + 1)
+      .setTint(0x75d4cd)
+      .setAlpha(0.18)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    this.tutorialDemoPresent = this.add
+      .sprite(stages[0].generatorX - 34, lane.baseY, 'player-idle-0')
+      .setOrigin(0.5, 1)
+      .setDepth(lane.depth + 1)
+      .setTint(0xcaa66b)
+      .setAlpha(0.11);
+    this.tutorialDemoPulse = this.add
+      .circle(stages[0].plateX, 507, 3, 0x75d4cd, 0.72)
+      .setDepth(57)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    this.tweens.add({
+      targets: this.tutorialDemoPulse,
+      x: stages[0].generatorX - 26,
+      duration: 1700,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+
+    const underfloorStage = stages.find((stage) => stage.underfloor);
+    this.tutorialUnderfloorGraphics = this.add.graphics().setDepth(53);
+    this.tutorialUnderfloorGraphics.fillStyle(0x071016, 0.98);
+    this.tutorialUnderfloorGraphics.fillRoundedRect(
+      underfloorStage.startX - 20,
+      505,
+      underfloorStage.endX - underfloorStage.startX + 40,
+      390,
+      18,
+    );
+    this.tutorialUnderfloorGraphics.lineStyle(3, 0x52636b, 0.7);
+    this.tutorialUnderfloorGraphics.strokeRoundedRect(
+      underfloorStage.startX - 20,
+      505,
+      underfloorStage.endX - underfloorStage.startX + 40,
+      390,
+      18,
+    );
+    // Dense service architecture: power buses, hanging cable bundles, fuses,
+    // and transformer coils. It should read as a second world, not empty void.
+    this.tutorialUnderfloorGraphics.lineStyle(5, 0x243943, 0.92);
+    [570, 620, 835].forEach((y) =>
+      this.tutorialUnderfloorGraphics.lineBetween(
+        underfloorStage.startX + 20,
+        y,
+        underfloorStage.endX - 20,
+        y,
+      ),
+    );
+    this.tutorialUnderfloorGraphics.lineStyle(2, 0xcaa66b, 0.42);
+    for (let x = underfloorStage.startX + 40; x < underfloorStage.endX; x += 76) {
+      this.tutorialUnderfloorGraphics.lineBetween(x, 525, x - 32, 875);
+      this.tutorialUnderfloorGraphics.strokeCircle(x + 18, 655, 12);
+      this.tutorialUnderfloorGraphics.strokeCircle(x + 18, 655, 7);
+      this.tutorialUnderfloorGraphics.fillStyle(0x52636b, 0.5);
+      this.tutorialUnderfloorGraphics.fillRect(x - 16, 790, 30, 18);
+    }
+    this.tutorialUnderfloorLabel = this.add
+      .text(underfloorStage.startX + 44, 528, '▼', {
+        ...labelStyle,
+        fontSize: '20px',
+        color: '#f2d49a',
+        padding: { x: 7, y: 2 },
+      })
+      .setDepth(58);
+
+    this.tutorialSyncColumns = (underfloorStage.syncNodes ?? []).map((node, index) => {
+      const beam = this.add
+        .rectangle(node.x, 610, 5, 310, 0x52636b, 0.16)
+        .setOrigin(0.5)
+        .setDepth(54);
+      const upper = this.add
+        .ellipse(node.x, 454, 72, 12, 0x52636b, 0.74)
+        .setDepth(58)
+        .setStrokeStyle(2, 0xcaa66b, 0.52);
+      const lower = this.add
+        .ellipse(node.x, 760, 88, 16, 0x182a32, 0.95)
+        .setDepth(58)
+        .setStrokeStyle(3, 0x52636b, 0.8);
+      const lamp = this.add
+        .circle(node.x, 420, 7, 0x52636b, 0.82)
+        .setDepth(60)
+        .setBlendMode(Phaser.BlendModes.ADD);
+      const indexMarks = this.add
+        .text(node.x, 800, index === 0 ? 'I' : 'II', {
+          fontFamily: 'ui-monospace, Menlo, monospace',
+          fontSize: '12px',
+          color: '#71828a',
+        })
+        .setOrigin(0.5)
+        .setDepth(59);
+      return { node, beam, upper, lower, lamp, indexMarks };
+    });
+
+    this.tutorialObjectiveArrow = this.add
+      .text(125, 330, '▼', {
+        fontFamily: 'ui-monospace, Menlo, monospace',
+        fontSize: '20px',
+        color: '#f2d49a',
+      })
+      .setOrigin(0.5)
+      .setDepth(61);
+    this.tutorialObjectiveLabel = this.add
+      .text(125, 348, 'SPEAK', {
+        ...labelStyle,
+        color: '#f2d49a',
+      })
+      .setOrigin(0.5)
+      .setDepth(61);
+    this.tweens.add({
+      targets: this.tutorialObjectiveArrow,
+      y: 336,
+      duration: 620,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+
+    this.echoTimelineBg = this.add
+      .rectangle(370, 194, 220, 6, 0x17232b, 0.95)
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(58)
+      .setVisible(false);
+    this.echoTimelineFill = this.add
+      .rectangle(370, 194, 220, 4, 0xe45a5f, 1)
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(59)
+      .setVisible(false);
+    this.echoTimelineLabel = this.add
+      .text(480, 178, '', labelStyle)
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(59)
+      .setVisible(false);
+
+    if (this.previewWorldIndex === null) this.tutorialCarArt?.setCircuitProgress();
+    this.refreshTutorialRouteState();
+    this.setTutorialPuzzleVisible(this.activeWorldIndex === 0);
+  }
+
+  setTutorialPuzzleVisible(visible) {
+    if (LEVEL.tutorialPuzzle.mode === 'timetable') {
+      this.tutorialWorldVisible = visible;
+      this.timetablePuzzle?.setVisible(visible);
+      return;
+    }
+    this.tutorialWorldVisible = visible;
+    this.interactables
+      ?.filter((it) => ['recorder', 'relay', 'breaker', 'generator'].includes(it.def.kind))
+      .forEach((it) => it.sprite.setVisible(visible));
+    this.tutorialPressures?.forEach((pressure, index) =>
+      pressure.setVisible(visible && !LEVEL.tutorialPuzzle.stages[index].underfloor),
+    );
+    // Interaction prompts and the live circuit carry the teaching load. The
+    // old permanent labels made the car read like a debug screen.
+    this.tutorialDeviceLabels?.forEach((label) => label.setVisible(false));
+    this.tutorialStageSigns?.forEach((label, index) =>
+      label.setVisible(visible && index === this.tutorialPuzzle.stageIndex),
+    );
+    this.tutorialGates?.forEach(({ gate, light }) => {
+      gate.setVisible(visible);
+      light.setVisible(visible);
+    });
+    const showUnderfloor = visible && this.tutorialPuzzle.stageIndex === 2;
+    this.tutorialUnderfloorGraphics?.setVisible(showUnderfloor);
+    this.tutorialUnderfloorLabel?.setVisible(showUnderfloor);
+    const showDemo =
+      visible && this.tutorialPuzzle.stageIndex === 0 && this.tutorialPuzzle.phase === 'idle';
+    this.tutorialDemoEcho?.setVisible(showDemo);
+    this.tutorialDemoPresent?.setVisible(showDemo);
+    this.tutorialDemoPulse?.setVisible(showDemo);
+    this.tutorialSyncColumns?.forEach((column) =>
+      Object.values(column)
+        .filter((value) => value?.setVisible)
+        .forEach((object) => object.setVisible(showUnderfloor)),
+    );
+
+    const showEcho =
+      visible &&
+      ['playback', 'syncing', 'complete'].includes(this.tutorialPuzzle?.phase) &&
+      (this.tutorialPuzzle?.phase !== 'complete' || this.tutorialPuzzle?.anomalyActive);
+    this.echoSprite?.setVisible(showEcho);
+    this.echoReflection?.setVisible(showEcho);
+    this.tutorialCompletionLight?.setVisible(visible);
+    this.tutorialRouteGraphics?.setVisible(visible);
+    const showGuidance =
+      visible && ['recording', 'playback', 'syncing'].includes(this.tutorialPuzzle?.phase);
+    this.tutorialGuideGraphics?.setVisible(showGuidance);
+    this.tutorialRoutePulse?.setVisible(visible && this.tutorialPuzzle?.pastActive);
+    this.tutorialObjectiveArrow?.setVisible(visible);
+    this.tutorialObjectiveLabel?.setVisible(visible);
+    const showTimeline = visible && ['recording', 'playback', 'syncing'].includes(this.tutorialPuzzle?.phase);
+    this.echoTimelineBg?.setVisible(showTimeline);
+    this.echoTimelineFill?.setVisible(showTimeline);
+    this.echoTimelineLabel?.setVisible(showTimeline);
+    if (visible) this.updateTutorialObjectiveMarker();
+    this.refreshTutorialSyncVisuals();
+  }
+
+  refreshTutorialSyncVisuals() {
+    const puzzle = this.tutorialPuzzle;
+    this.tutorialSyncColumns?.forEach((column, index) => {
+      const aligned = puzzle.syncAligned[index];
+      const hot = puzzle.syncHotIndex === index;
+      const color = aligned ? 0x75d4cd : hot ? 0xf2d49a : 0x52636b;
+      column.beam
+        .setFillStyle(color, hot || aligned ? 0.72 : 0.16)
+        .setScale(hot ? 1.8 : 1, 1);
+      column.upper.setFillStyle(color, aligned ? 0.92 : hot ? 0.68 : 0.74);
+      column.lower.setStrokeStyle(aligned ? 4 : 3, color, hot || aligned ? 1 : 0.8);
+      column.lamp.setFillStyle(color, 1).setScale(hot ? 1.7 : aligned ? 1.35 : 1);
+      column.indexMarks.setColor(aligned ? '#baf5ef' : hot ? '#f2d49a' : '#71828a');
+    });
+  }
+
+  updateTutorialObjectiveMarker() {
+    if (LEVEL.tutorialPuzzle.mode === 'timetable') {
+      if (this.activeWorldIndex === 0 && this.tutorialWorldVisible) {
+        this.timetablePuzzle?.updateObjective();
+      } else {
+        this.tutorialObjectiveArrow?.setVisible(false);
+        this.tutorialObjectiveLabel?.setVisible(false);
+      }
+      return;
+    }
+    const puzzle = this.tutorialPuzzle;
+    const stage = this.getTutorialStage();
+    if (
+      !this.tutorialObjectiveArrow ||
+      !this.tutorialWorldVisible ||
+      this.dialogueState ||
+      !['recording', 'playback'].includes(puzzle.phase)
+    ) {
+      this.tutorialObjectiveArrow?.setVisible(false);
+      this.tutorialObjectiveLabel?.setVisible(false);
+      return;
+    }
+
+    let x = stage.plateX;
+    let label = 'STAND HERE';
+    if (stage.underfloor && puzzle.phase === 'recording') {
+      const nextNode = stage.syncNodes.find((_, index) => !puzzle.recordVisited[index]);
+      x = nextNode?.x ?? stage.generatorX;
+      label = 'TRACE THE MARKS';
+    } else if (stage.underfloor && puzzle.phase === 'playback' && !puzzle.routeActive) {
+      const nextNode = stage.syncNodes.find((_, index) => !puzzle.syncAligned[index]);
+      x = nextNode?.x ?? stage.generatorX;
+      label = 'ALIGN';
+    } else if (puzzle.phase === 'recording' || (puzzle.phase === 'playback' && !puzzle.pastActive)) {
+      x = stage.plateX;
+      label = puzzle.phase === 'recording' ? 'STAND HERE' : 'PAST';
+    } else if (puzzle.phase === 'playback' && !puzzle.routeActive) {
+      const relay = stage.relays.find(
+        (candidate) => puzzle.relayStates[candidate.id] !== candidate.correct,
+      );
+      x = relay?.x ?? stage.generatorX;
+      label = 'TRACE PULSE';
+    } else if (puzzle.phase === 'playback') {
+      x = stage.generatorX;
+      label = 'GENERATE';
+    }
+
+    this.tutorialObjectiveArrow.setVisible(true).setX(x);
+    this.tutorialObjectiveLabel.setVisible(true).setPosition(x, 348).setText(label);
+  }
+
+  setTutorialCameraMode(worldIndex) {
+    if (!this.player) return;
+    if (worldIndex === 0) {
+      this.tutorialCameraLocked = true;
+      this.cameras.main.setBounds(0, 0, WORLD_W, 900);
+      this.cameras.main.startFollow(this.player, true, 0.075, 0.11, 0, 150);
+      this.cameras.main.setDeadzone(220, 170);
+    } else if (this.tutorialCameraLocked) {
+      this.tutorialCameraLocked = false;
+      this.cameras.main.setBounds(0, 0, WORLD_W, GAME_H);
+      this.cameras.main.setScroll(this.cameras.main.scrollX, 0);
+      this.cameras.main.startFollow(this.player, true, 0.12, 0.12, 0, 0);
+      this.cameras.main.setDeadzone(180, 140);
+    }
+  }
+
+  applyHitstop(durationMs = 55, scale = 0.12) {
+    if (
+      this.prologueTransitionActive ||
+      this.tutorialCameraCinematic ||
+      ['opening', 'departure', 'complete'].includes(this.tutorialPuzzle?.phase)
+    ) return;
+    if (this.hitstopRestoreTimer) window.clearTimeout(this.hitstopRestoreTimer);
+    this.time.timeScale = scale;
+    this.hitstopRestoreTimer = window.setTimeout(() => {
+      this.time.timeScale = 1;
+      this.hitstopRestoreTimer = null;
+    }, durationMs);
+  }
+
+  clearHitstop() {
+    if (this.hitstopRestoreTimer) window.clearTimeout(this.hitstopRestoreTimer);
+    this.hitstopRestoreTimer = null;
+    this.time.timeScale = 1;
+  }
+
+  pulseTutorialVignette(tint = 0x8e2634, peakAlpha = 1, duration = 420) {
+    if (!this.vignette) return;
+    this.tweens.killTweensOf(this.vignette);
+    this.vignette.setTintFill(tint);
+    this.tweens.add({
+      targets: this.vignette,
+      alpha: peakAlpha,
+      duration: Math.round(duration * 0.28),
+      ease: 'Cubic.easeOut',
+      yoyo: true,
+      hold: Math.round(duration * 0.12),
+      onComplete: () => this.vignette.clearTint().setAlpha(this.vignetteBaseAlpha),
+    });
+  }
+
+  setCompletionVignette(active) {
+    if (!this.vignette) return;
+    this.tweens.killTweensOf(this.vignette);
+    if (active) {
+      this.vignette.setTintFill(0x5f7477);
+      this.tweens.add({
+        targets: this.vignette,
+        alpha: 0.89,
+        duration: 220,
+        ease: 'Cubic.easeOut',
+      });
+      this.tweens.add({
+        targets: this.foreground,
+        alpha: 0,
+        duration: 180,
+        ease: 'Cubic.easeOut',
+      });
+      return;
+    }
+    this.tweens.add({
+      targets: this.vignette,
+      alpha: this.vignetteBaseAlpha,
+      duration: 260,
+      ease: 'Cubic.easeOut',
+      onComplete: () => this.vignette.clearTint(),
+    });
+    this.tweens.add({
+      targets: this.foreground,
+      alpha: this.foregroundBaseAlpha,
+      duration: 240,
+      ease: 'Cubic.easeOut',
+    });
+  }
+
+  getTutorialStage(index = this.tutorialPuzzle.stageIndex) {
+    return LEVEL.tutorialPuzzle.stages[Phaser.Math.Clamp(index, 0, LEVEL.tutorialPuzzle.stages.length - 1)];
+  }
+
+  updateTutorialCamera(input, delta) {
+    if (this.activeWorldIndex !== 0 || !this.tutorialCameraLocked || this.tutorialCameraCinematic) return;
+    const camera = this.cameras.main;
+    const moving = Math.abs(this.player.body.velocity.x) > 28;
+    const direction = moving ? Math.sign(this.player.body.velocity.x) : this.player.facing;
+    const targetX = -direction * (moving ? 112 : 58);
+    const stage = this.getTutorialStage();
+    const canLookDown = stage.underfloor && this.player.x > stage.startX + 90;
+    const lookingDown =
+      canLookDown &&
+      (input.lookDown || this.tutorialForceLookDown) &&
+      this.player.body.blocked.down;
+    const targetY = lookingDown ? -165 : 150;
+    const amount = Phaser.Math.Clamp(delta / (lookingDown ? 260 : 420), 0, 1);
+    camera.setFollowOffset(
+      Phaser.Math.Linear(camera.followOffset.x, targetX, amount),
+      Phaser.Math.Linear(camera.followOffset.y, targetY, amount),
+    );
+    this.tutorialLookingDown = lookingDown;
   }
 
   buildMarkers() {
@@ -502,6 +1145,71 @@ export default class GameScene extends Phaser.Scene {
   buildOverlays() {
     // Reusable floating "+N" score popups.
     this.popups = this.add.group();
+
+    // Speed lines live behind the train shell, so they appear only through
+    // the authored window openings during the prologue departure.
+    this.departureStreaks = [
+      [120, 168, 150, 2], [510, 186, 240, 3], [820, 211, 110, 2],
+      [260, 238, 190, 2], [690, 261, 280, 3], [70, 292, 210, 2],
+      [430, 318, 140, 2], [870, 332, 230, 3],
+    ].map(([x, y, w, h], index) =>
+      this.add
+        .rectangle(x, y, w, h, index % 3 === 0 ? 0xf2d49a : 0xb9dde4, 0.34)
+        .setOrigin(0, 0.5)
+        .setScrollFactor(0)
+        .setDepth(6)
+        .setVisible(false),
+    );
+  }
+
+  playPrologueDeparture(onComplete = () => {}) {
+    if (this.prologueTransitionActive) return;
+    this.clearHitstop();
+    this.prologueTransitionActive = true;
+    this.departureScroll = 0;
+    this.player.frozen = true;
+    this.player.setVelocity(0, 0);
+    this.departureStreaks.forEach((streak) => streak.setVisible(true).setAlpha(0));
+    this.game.events.emit('hud:prologue-transition', {
+      kicker: 'CHAPTER ONE',
+      title: 'THE SAFETY TEST',
+      subtitle: 'The train begins moving backward through its own explanations.',
+    });
+    sfx.door();
+
+    this.tweens.add({
+      targets: this,
+      departureScroll: 2700,
+      duration: 3000,
+      ease: 'Cubic.easeIn',
+    });
+    this.tweens.add({
+      targets: this.departureStreaks,
+      alpha: { from: 0, to: 0.72 },
+      duration: 1700,
+      delay: this.tweens.stagger(80),
+      ease: 'Sine.easeIn',
+    });
+    this.cameras.main.shake(3000, 0.0018);
+
+    // Change scenery only after the HUD has faded fully to black.
+    this.time.delayedCall(3500, () => {
+      this.registry.set('tutorialPowerRestored', true);
+      this.switchWorld(1, false);
+      // The inherited second-world floor begins 120px after its backdrop
+      // threshold; land beyond that gap so the cinematic cannot respawn the
+      // player back into the prologue while the screen is black.
+      this.player.body.reset((STORY_WORLDS[1]?.startX ?? 4800) + 155, 400);
+      this.departureStreaks.forEach((streak) => streak.setVisible(false));
+      this.departureScroll = 0;
+    });
+
+    this.time.delayedCall(7000, () => {
+      this.prologueTransitionActive = false;
+      this.player.frozen = false;
+      this.tutorialExitBlockedNotified = false;
+      onComplete();
+    });
   }
 
   setupInput() {
@@ -509,6 +1217,7 @@ export default class GameScene extends Phaser.Scene {
       left: 'LEFT',
       right: 'RIGHT',
       up: 'UP',
+      down: 'DOWN',
       jump: 'SPACE',
       a: 'A',
       d: 'D',
@@ -526,6 +1235,101 @@ export default class GameScene extends Phaser.Scene {
     this.input.keyboard.addCapture(['SPACE', 'UP', 'DOWN', 'LEFT', 'RIGHT']);
   }
 
+  setupTutorialQA() {
+    if (LEVEL.tutorialPuzzle.mode === 'timetable' && this.timetablePuzzle?.setupQA()) return;
+    if (!import.meta.env.DEV || typeof window === 'undefined') return;
+    const qa = new URLSearchParams(window.location.search).get('qa');
+    if (
+      ![
+        'tutorial-power',
+        'tutorial-recording',
+        'tutorial-playback',
+        'tutorial-route-a',
+        'tutorial-stage-2',
+        'tutorial-undercar',
+        'tutorial-resonance-1',
+        'tutorial-resonance-2',
+        'tutorial-resonance-live',
+        'tutorial-junction-1-clear',
+        'tutorial-junction-2-clear',
+        'tutorial-fail',
+        'tutorial-complete',
+        'tutorial-exit',
+      ].includes(qa)
+    ) return;
+
+    const qaStageIndex =
+      qa === 'tutorial-stage-2' || qa === 'tutorial-route-a' || qa === 'tutorial-junction-2-clear'
+        ? 1
+        : ['tutorial-undercar', 'tutorial-resonance-1', 'tutorial-resonance-2', 'tutorial-resonance-live', 'tutorial-fail', 'tutorial-complete', 'tutorial-exit'].includes(qa)
+          ? 2
+          : 0;
+    this.tutorialPuzzle.stageIndex = qaStageIndex;
+    this.tutorialPuzzle.stageComplete = LEVEL.tutorialPuzzle.stages.map(
+      (_, index) => index < qaStageIndex,
+    );
+    const qaStage = this.getTutorialStage();
+    this.player.resetTo(qa === 'tutorial-power' ? 70 : qaStage.recorderX - 20, 400, LANE_NEAR);
+    this.tutorialPuzzle.briefed = qa !== 'tutorial-power';
+    if (qa === 'tutorial-recording') {
+      this.time.delayedCall(320, () => {
+        const recorder = this.interactables.find((it) => it.def.id === qaStage.recorderId);
+        if (recorder) this.fireInteractable(recorder);
+      });
+    }
+    if (qa === 'tutorial-playback') this.seedTutorialEchoForQA(0, true, 0);
+    if (qa === 'tutorial-route-a' || qa === 'tutorial-stage-2') {
+      this.seedTutorialEchoForQA(1, true, 0);
+    }
+    if (qa === 'tutorial-junction-1-clear' || qa === 'tutorial-junction-2-clear') {
+      this.seedTutorialEchoForQA(qaStageIndex, true, qaStage.relays.length);
+      this.time.delayedCall(420, () => {
+        this.player.body.reset(qaStage.generatorX - 20, 400);
+        const generator = this.interactables.find((it) => it.def.id === qaStage.generatorId);
+        if (generator) this.fireInteractable(generator);
+      });
+    }
+    if (qa === 'tutorial-undercar') {
+      this.seedTutorialEchoForQA(2, true, 0);
+      this.tutorialForceLookDown = true;
+    }
+    if (qa === 'tutorial-resonance-1' || qa === 'tutorial-resonance-2') {
+      this.seedTutorialEchoForQA(2, true, qa === 'tutorial-resonance-1' ? 1 : 2);
+      this.player.body.reset(
+        qaStage.syncNodes[qa === 'tutorial-resonance-1' ? 1 : 0].x,
+        400,
+      );
+      this.tutorialForceLookDown = true;
+    }
+    if (qa === 'tutorial-resonance-live') {
+      this.seedTutorialEchoForQA(2, true, 0);
+      this.player.body.reset(qaStage.syncNodes[0].x, 400);
+      this.tutorialForceLookDown = true;
+    }
+    if (qa === 'tutorial-fail') {
+      this.seedTutorialEchoForQA(2, true, 0);
+      this.time.delayedCall(420, () => {
+        this.player.body.reset(qaStage.generatorX - 20, 400);
+        const generator = this.interactables.find((it) => it.def.id === qaStage.generatorId);
+        if (generator) this.fireInteractable(generator);
+      });
+    }
+    if (qa === 'tutorial-complete' || qa === 'tutorial-exit') {
+      this.seedTutorialEchoForQA(2, true, qaStage.syncNodes?.length ?? qaStage.relays.length);
+      this.time.delayedCall(520, () => {
+        this.player.body.reset(qaStage.generatorX - 20, 400);
+        const generator = this.interactables.find((it) => it.def.id === qaStage.generatorId);
+        if (generator) this.fireInteractable(generator);
+      });
+    }
+    if (qa === 'tutorial-exit') {
+      this.time.delayedCall(4550, () => this.player.body.reset(2415, 400));
+    }
+    this.refreshTutorialStageVisuals();
+    this.setTutorialPuzzleVisible(this.activeWorldIndex === 0);
+    this.updateTutorialObjectiveMarker();
+  }
+
   readInput() {
     const k = this.keys;
     const JustDown = Phaser.Input.Keyboard.JustDown;
@@ -539,7 +1343,13 @@ export default class GameScene extends Phaser.Scene {
       run: k.run.isDown,
       laneBack: JustDown(k.w),
       laneFront: JustDown(k.s),
+      lookDown: k.s.isDown || k.down.isDown,
       interact: JustDown(k.interact),
+      // Held and released edges of the same key. Sections V and VI treat the
+      // valve as an analogue control rather than a switch, so they need the
+      // duration of the press, not just its start.
+      interactHeld: k.interact.isDown,
+      interactReleased: Phaser.Input.Keyboard.JustUp(k.interact),
       attackPressed: JustDown(k.attack),
       choiceOne: JustDown(k.choiceOne),
       choiceTwo: JustDown(k.choiceTwo),
@@ -748,6 +1558,35 @@ export default class GameScene extends Phaser.Scene {
     this.interactables.forEach((it) => {
       if (it.def.lane !== p.lane) return;
       if (it.fired && it.def.once) return;
+      if (it.def.stage !== undefined && it.def.stage !== this.tutorialPuzzle.stageIndex) return;
+      if (
+        LEVEL.tutorialPuzzle.mode === 'timetable' &&
+        this.timetablePuzzle?.isTimetableKind(it.def.kind) &&
+        !this.timetablePuzzle.canInteract(it)
+      ) return;
+      if (
+        this.activeWorldIndex === 0 &&
+        !this.tutorialPuzzle.briefed &&
+        ['recorder', 'relay', 'breaker', 'generator'].includes(it.def.kind)
+      ) return;
+      if (this.tutorialPuzzle.phase === 'recording' && it.def.kind === 'recorder') return;
+      if (
+        it.def.kind === 'relay' &&
+        (this.tutorialPuzzle.phase !== 'playback' || !this.tutorialPuzzle.pastActive)
+      ) return;
+      if (it.def.kind === 'relay' && it.def.id === 'j3-relay-b' && !this.tutorialPuzzle.breakerActive) return;
+      if (
+        it.def.kind === 'breaker' &&
+        (this.tutorialPuzzle.phase !== 'playback' ||
+          !this.tutorialPuzzle.pastActive ||
+          this.tutorialPuzzle.relayStates['j3-relay-a'] !== 0 ||
+          this.tutorialPuzzle.breakerActive)
+      ) return;
+      if (it.def.kind === 'generator' && this.tutorialPuzzle.phase === 'idle') return;
+      if (
+        this.tutorialPuzzle.phase === 'complete' &&
+        ['recorder', 'relay', 'breaker', 'generator'].includes(it.def.kind)
+      ) return;
       const dx = Math.abs(it.sprite.x - p.x);
       const dy = Math.abs(it.sprite.y - p.y);
       if (dx < bestDist && dy < 100) {
@@ -774,8 +1613,28 @@ export default class GameScene extends Phaser.Scene {
     if (best) {
       this.prompt
         .setVisible(true)
-        .setText(best.type === 'npc' ? '[E] SPEAK' : '[E]')
-        .setPosition(best.x, best.item.sprite.y - best.item.sprite.displayHeight - 10);
+        .setText(
+          best.type === 'npc'
+            ? '[E] SPEAK'
+            : LEVEL.tutorialPuzzle.mode === 'timetable' &&
+                this.timetablePuzzle?.isTimetableKind(best.item.def.kind)
+              ? this.timetablePuzzle.promptFor(best.item)
+            : best.item.def.kind === 'recorder'
+              ? this.tutorialPuzzle.phase === 'playback'
+                ? '[E] RE-RECORD'
+                : '[E] RECORD'
+              : best.item.def.kind === 'generator'
+                ? '[E] GENERATE'
+                : best.item.def.kind === 'relay'
+                  ? '[E] ROUTE'
+                  : best.item.def.kind === 'breaker'
+                    ? '[E] INVERT'
+                : '[E]',
+        )
+        .setPosition(
+          best.x,
+          best.item.sprite.y - best.item.sprite.displayHeight - (best.type === 'npc' ? 32 : 10),
+        );
     } else {
       this.prompt.setVisible(false);
     }
@@ -789,6 +1648,9 @@ export default class GameScene extends Phaser.Scene {
   openDialogue(npc) {
     if (this.dialogueState) return;
 
+    sfx.press();
+    this.pulseTutorialDevice(npc.sprite, 0xcaa66b);
+    if (npc.def.id === 'caretaker') this.tutorialPuzzle.briefed = true;
     npc.talked += 1;
     const nodeId = npc.talked === 1 ? 'start' : 'repeat';
     this.dialogueState = {
@@ -800,6 +1662,7 @@ export default class GameScene extends Phaser.Scene {
     this.player.frozen = true;
     this.player.setVelocity(0, 0);
     this.prompt.setVisible(false);
+    this.updateTutorialObjectiveMarker();
     this.showDialogueNode();
   }
 
@@ -883,6 +1746,12 @@ export default class GameScene extends Phaser.Scene {
       JustDown(this.keys.jump) ||
       JustDown(this.keys.up)
     ) {
+      if (this.registry.get('dialogueTyping')) {
+        sfx.press();
+        this.game.events.emit('hud:dialogue:reveal');
+        return;
+      }
+      sfx.press();
       this.advanceDialogue();
     }
   }
@@ -892,12 +1761,29 @@ export default class GameScene extends Phaser.Scene {
     this.dialogueState = null;
     this.player.frozen = false;
     this.game.events.emit('hud:dialogue:close');
+    this.updateTutorialObjectiveMarker();
   }
 
   fireInteractable(it) {
     if (it.fired && it.def.once) return;
 
-    if (it.def.kind === 'lever') {
+    if (
+      LEVEL.tutorialPuzzle.mode === 'timetable' &&
+      this.timetablePuzzle?.handleInteraction(it)
+    ) return;
+
+    this.pulseTutorialDevice(it.sprite, it.def.kind === 'breaker' ? 0xcaa66b : 0x75d4cd);
+    sfx.press();
+
+    if (it.def.kind === 'recorder') {
+      this.startEchoRecording(it);
+    } else if (it.def.kind === 'relay') {
+      this.toggleTutorialRelay(it);
+    } else if (it.def.kind === 'breaker') {
+      this.activateTutorialBreaker(it);
+    } else if (it.def.kind === 'generator') {
+      this.attemptTutorialSync(it);
+    } else if (it.def.kind === 'lever') {
       it.fired = true;
       it.sprite.setTexture('lever-on');
       this.addLight(it.sprite.x, it.sprite.y - 22, 90, PAL.lamp, 0.55, 40);
@@ -907,6 +1793,781 @@ export default class GameScene extends Phaser.Scene {
     }
 
     if (it.def.message) this.game.events.emit('hud:toast', it.def.message);
+  }
+
+  toggleTutorialRelay(relay) {
+    const puzzle = this.tutorialPuzzle;
+    if (puzzle.phase === 'complete' || puzzle.phase === 'syncing') return;
+    const next = puzzle.relayStates[relay.def.id] === 0 ? 1 : 0;
+    puzzle.relayStates[relay.def.id] = next;
+    relay.sprite.setTexture(`circuit-relay-${next}`);
+    this.player.playInteraction();
+    sfx.lever();
+    this.refreshTutorialRouteState();
+    if (puzzle.routeActive) {
+      this.game.events.emit('hud:toast', 'PAST circuit routed. Follow the cyan line to PRESENT.');
+    } else if (puzzle.pastActive) {
+      this.game.events.emit('hud:toast', 'The pulse changed direction. Follow where the light stops.');
+    }
+  }
+
+  activateTutorialBreaker(breaker) {
+    const puzzle = this.tutorialPuzzle;
+    if (
+      puzzle.phase !== 'playback' ||
+      !puzzle.pastActive ||
+      puzzle.relayStates['j3-relay-a'] !== 0 ||
+      puzzle.breakerActive
+    ) return;
+    puzzle.breakerActive = true;
+    breaker.sprite.setTexture('lever-on');
+    this.player.playInteraction();
+    sfx.lever();
+    this.refreshTutorialRouteState();
+    this.game.events.emit('hud:toast', 'The inverted pulse returns beneath the car. Trace where it rises.');
+  }
+
+  playTutorialGateOpen(index, onComplete = () => {}) {
+    const puzzle = this.tutorialPuzzle;
+    const assembly = this.tutorialGates?.[index];
+    if (!assembly || puzzle.gateAnimating[index] || puzzle.stageComplete[index]) {
+      onComplete();
+      return;
+    }
+    puzzle.gateAnimating[index] = true;
+    const { gate, light, vestibuleGlow, window, latchTop, latchBottom } = assembly;
+    this.tweens.killTweensOf([gate, light, vestibuleGlow, window, latchTop, latchBottom]);
+    sfx.door();
+    this.cameras.main.shake(110, 0.0018);
+    vestibuleGlow?.setAlpha(0.04);
+    this.tweens.add({
+      targets: light,
+      alpha: 0.12,
+      scale: 1.9,
+      duration: 88,
+      yoyo: true,
+      repeat: 2,
+      onComplete: () => light.setFillStyle(0x75d4cd, 1).setAlpha(0.92).setScale(1),
+    });
+    this.time.delayedCall(250, () => {
+      this.tweens.add({
+        targets: [latchTop, latchBottom],
+        scaleX: 0.08,
+        alpha: 0.24,
+        duration: 250,
+        ease: 'Back.easeIn',
+      });
+      this.tweens.add({
+        targets: vestibuleGlow,
+        alpha: 0.24,
+        duration: 640,
+        ease: 'Sine.easeOut',
+      });
+      for (let i = 0; i < 4; i += 1) {
+        const side = i % 2 ? -1 : 1;
+        const steam = this.add
+          .circle(
+            gate.x + side * Phaser.Math.Between(9, 16),
+            Phaser.Math.Between(326, 430),
+            Phaser.Math.Between(2, 6),
+            0xc4d8dc,
+            0.28,
+          )
+          .setDepth(61)
+          .setBlendMode(Phaser.BlendModes.ADD);
+        this.tweens.add({
+          targets: steam,
+          x: steam.x + side * Phaser.Math.Between(20, 54),
+          y: steam.y - Phaser.Math.Between(14, 46),
+          scale: Phaser.Math.FloatBetween(1.8, 3.2),
+          alpha: 0,
+          duration: Phaser.Math.Between(520, 900),
+          ease: 'Sine.easeOut',
+          onComplete: () => steam.destroy(),
+        });
+      }
+    });
+    this.time.delayedCall(500, () => {
+      this.cameras.main.shake(320, 0.0018);
+      this.tweens.add({
+        targets: [gate, window],
+        y: '-=308',
+        duration: 760,
+        ease: 'Cubic.easeOut',
+        onComplete: () => {
+          puzzle.gateAnimating[index] = false;
+          puzzle.stageComplete[index] = true;
+          gate.setY(156).setScale(1, 0.08).setAlpha(0.18);
+          window?.setVisible(false);
+          latchTop?.setVisible(false);
+          latchBottom?.setVisible(false);
+          light.setFillStyle(0x75d4cd, 1).setAlpha(0.7);
+          this.refreshTutorialStageVisuals();
+          onComplete();
+        },
+      });
+    });
+  }
+
+  playTutorialCompletionReveal(
+    index,
+    onMachineReady = (finishMachineReveal) => finishMachineReveal(),
+    onReadyForDoor = () => {},
+  ) {
+    const stage = LEVEL.tutorialPuzzle.stages[index];
+    if (!stage || stage.showMachinery === false) {
+      onMachineReady(() => this.time.delayedCall(120, onReadyForDoor));
+      return;
+    }
+    const camera = this.cameras.main;
+    const centerX = (stage.startX + stage.endX) / 2;
+    const machinery = this.timetablePuzzle?.stageAssemblies?.[index]?.machinery;
+    const machineY = machinery
+      ? Phaser.Math.Clamp(
+          Phaser.Math.Linear(machinery.underY, machinery.wheelY, 0.5),
+          520,
+          720,
+        )
+      : 548;
+    this.tutorialCameraCinematic = true;
+    this.tutorialForceLookDown = false;
+    this.player.frozen = true;
+    this.player.setVelocity(0, 0);
+    this.setCompletionVignette(true);
+    camera.stopFollow();
+    camera.pan(centerX, machineY, 420, 'Sine.easeInOut', true, () => {
+      let finished = false;
+      onMachineReady(() => {
+        if (finished) return;
+        finished = true;
+        this.time.delayedCall(120, () => {
+          camera.pan(stage.endX - 44, 356, 420, 'Sine.easeInOut', true, () => {
+            this.setCompletionVignette(false);
+            onReadyForDoor();
+          });
+        });
+      });
+    });
+  }
+
+  finishTutorialCompletionReveal() {
+    if (!this.tutorialCameraCinematic) return;
+    this.setCompletionVignette(false);
+    this.tutorialCameraCinematic = false;
+    this.cameras.main.startFollow(this.player, true, 0.075, 0.11, 0, 150);
+    this.cameras.main.setDeadzone(220, 170);
+  }
+
+  refreshTutorialStageVisuals() {
+    const puzzle = this.tutorialPuzzle;
+    this.tutorialGates?.forEach(({
+      gate,
+      light,
+      vestibuleGlow,
+      window,
+      latchTop,
+      latchBottom,
+      passageGlow,
+      passageArrow,
+    }, index) => {
+      const complete = puzzle.stageComplete[index];
+      const passageActive =
+        this.tutorialWorldVisible &&
+        complete &&
+        puzzle.phase === 'approach' &&
+        index === puzzle.stageIndex - 1;
+      if (!puzzle.gateAnimating[index]) {
+        gate.setY(complete ? 156 : 246).setScale(1, complete ? 0.08 : 1);
+      }
+      gate.setAlpha(complete ? 0.18 : 0.96);
+      gate.setFillStyle(complete ? 0x75d4cd : 0x1c2830, complete ? 0.18 : 0.96);
+      gate.setStrokeStyle(2, complete ? 0x75d4cd : 0xe45a5f, complete ? 0.45 : 0.8);
+      light.setFillStyle(complete ? 0x75d4cd : 0xe45a5f, 1).setAlpha(complete ? 0.7 : 1);
+      vestibuleGlow?.setAlpha(complete ? 0.2 : 0.035);
+      window?.setVisible(this.tutorialWorldVisible && !complete).setY(304).setAlpha(1);
+      [latchTop, latchBottom].forEach((latch, latchIndex) => latch
+        ?.setVisible(this.tutorialWorldVisible && !complete)
+        .setScale(1)
+        .setAlpha(0.88)
+        .setY(latchIndex === 0 ? 336 : 406));
+      passageGlow?.setVisible(passageActive);
+      passageArrow?.setVisible(passageActive);
+      this.tutorialTrainRoomsArt?.setRoomComplete?.(index, complete);
+    });
+    this.tutorialStageSigns?.forEach((label, index) => {
+      const color = puzzle.stageComplete[index]
+        ? '#75d4cd'
+        : index === puzzle.stageIndex
+          ? '#f2d49a'
+          : '#71828a';
+      label
+        .setColor(color)
+        .setVisible(this.tutorialWorldVisible && index === puzzle.stageIndex)
+        .setAlpha(index === puzzle.stageIndex ? 0.62 : 0);
+    });
+    if (LEVEL.tutorialPuzzle.mode === 'timetable') this.timetablePuzzle?.refresh();
+  }
+
+  getTutorialRouteNodes(stage) {
+    const y = stage.underfloor ? 690 : 507;
+    if (stage.underfloor) {
+      return [
+        { x: stage.recorderX, y: 760, kind: 'memory' },
+        ...stage.syncNodes.map((node) => ({ x: node.x, y: 760, kind: 'resonance' })),
+        { x: stage.generatorX - 24, y: 760, kind: 'generator' },
+      ];
+    }
+    return [
+      { x: stage.plateX, y, kind: 'plate' },
+      ...stage.relays.map((relay) => ({ x: relay.x, y, kind: 'relay', relay })),
+      { x: stage.generatorX - 24, y, kind: 'generator' },
+    ];
+  }
+
+  refreshTutorialRouteState() {
+    const puzzle = this.tutorialPuzzle;
+    const stages = LEVEL.tutorialPuzzle.stages;
+    const stage = this.getTutorialStage();
+    let poweredSegments = puzzle.pastActive ? 1 : 0;
+    if (puzzle.pastActive && stage.underfloor) {
+      poweredSegments = 1 + puzzle.syncAligned.filter(Boolean).length;
+    } else if (puzzle.pastActive) {
+      for (const relay of stage.relays) {
+        if (puzzle.relayStates[relay.id] !== relay.correct) break;
+        poweredSegments += 1;
+      }
+    }
+    puzzle.poweredSegments = poweredSegments;
+    puzzle.routeActive = poweredSegments === this.getTutorialRouteNodes(stage).length - 1;
+
+    const g = this.tutorialRouteGraphics;
+    if (g) {
+      g.clear();
+      stages.forEach((candidate, stageIndex) => {
+        const nodes = this.getTutorialRouteNodes(candidate);
+        const isCurrent = stageIndex === puzzle.stageIndex;
+        const stagePowered = puzzle.stageComplete[stageIndex]
+          ? nodes.length - 1
+          : isCurrent
+            ? poweredSegments
+            : 0;
+        for (let index = 0; index < nodes.length - 1; index += 1) {
+          const from = nodes[index];
+          const to = nodes[index + 1];
+          const active = index < stagePowered;
+          g.lineStyle(active ? 4 : 2, active ? 0x75d4cd : 0x52636b, active ? 0.9 : 0.3);
+          g.lineBetween(from.x, from.y, to.x, to.y);
+          const length = Phaser.Math.Distance.Between(from.x, from.y, to.x, to.y);
+          const steps = Math.max(1, Math.floor(length / 58));
+          for (let step = 1; step < steps; step += 1) {
+            const t = step / steps;
+            const x = Phaser.Math.Linear(from.x, to.x, t);
+            const y = Phaser.Math.Linear(from.y, to.y, t);
+            g.fillStyle(active ? 0xbaf5ef : 0x52636b, active ? 0.78 : 0.24);
+            g.fillCircle(x, y, active ? 2.6 : 1.8);
+          }
+        }
+
+        candidate.relays.forEach((relay, index) => {
+          const isCorrect = puzzle.relayStates[relay.id] === relay.correct;
+          const expectedSegment = candidate.underfloor ? (index === 0 ? 1 : 3) : index + 1;
+          const isFirstWrong = isCurrent && puzzle.pastActive && poweredSegments === expectedSegment;
+          const branchDir = puzzle.relayStates[relay.id] === 0 ? -1 : 1;
+          const routeNode = nodes.find((node) => node.relay?.id === relay.id);
+          const routeY = routeNode?.y ?? 507;
+          const branchY = routeY + 54;
+          g.lineStyle(2, isFirstWrong ? 0xe45a5f : 0x52636b, isFirstWrong ? 0.9 : 0.34);
+          g.lineBetween(relay.x, 461, relay.x, routeY);
+          g.lineBetween(relay.x, routeY, relay.x + branchDir * 34, branchY);
+          g.fillStyle(isFirstWrong ? 0xe45a5f : isCorrect ? 0x75d4cd : 0x65757d, 0.9);
+          g.fillCircle(relay.x, routeY, 4);
+
+          if (!candidate.underfloor && isFirstWrong) {
+            g.lineStyle(3, 0xe45a5f, 0.9);
+            g.lineBetween(relay.x + branchDir * 28, 529, relay.x + branchDir * 40, 541);
+            g.lineBetween(relay.x + branchDir * 40, 529, relay.x + branchDir * 28, 541);
+          }
+        });
+      });
+    }
+
+    if (this.time.now >= puzzle.faultUntil) {
+      this.tutorialCarArt?.setCircuitProgress({
+        past: puzzle.stageComplete[0] || (puzzle.stageIndex === 0 && puzzle.routeActive),
+        present: puzzle.stageComplete[1] || (puzzle.stageIndex === 1 && puzzle.routeActive),
+        service: puzzle.stageComplete[2] || puzzle.serviceActive,
+      });
+    }
+    if (puzzle.phase === 'playback') {
+      this.registry.set(
+        'tutorialPowerState',
+        puzzle.routeActive
+          ? `junction-${puzzle.stageIndex + 1}-routed`
+          : puzzle.pastActive
+            ? `junction-${puzzle.stageIndex + 1}-leaking`
+            : `junction-${puzzle.stageIndex + 1}-playback`,
+      );
+    }
+    this.refreshTutorialStageVisuals();
+  }
+
+  updateTutorialRoutePulse(time) {
+    if (LEVEL.tutorialPuzzle.mode === 'timetable') return;
+    const puzzle = this.tutorialPuzzle;
+    const pulse = this.tutorialRoutePulse;
+    if (!pulse || !puzzle.pastActive || this.activeWorldIndex !== 0) {
+      pulse?.setVisible(false);
+      return;
+    }
+    const stage = this.getTutorialStage();
+    const nodes = this.getTutorialRouteNodes(stage);
+    const cutoffIndex = Math.min(Math.max(1, puzzle.poweredSegments), nodes.length - 1);
+    const activeNodes = nodes.slice(0, cutoffIndex + 1);
+    const routeProgress = ((time % 1650) / 1650) * (activeNodes.length - 1);
+    const segmentIndex = Math.min(activeNodes.length - 2, Math.floor(routeProgress));
+    const progress = routeProgress - segmentIndex;
+    const from = activeNodes[segmentIndex];
+    const to = activeNodes[segmentIndex + 1];
+    const faulting = !puzzle.routeActive && progress > 0.84;
+    pulse
+      .setVisible(true)
+      .setPosition(
+        Phaser.Math.Linear(from.x, to.x, progress),
+        Phaser.Math.Linear(from.y, to.y, progress),
+      )
+      .setFillStyle(faulting ? 0xe45a5f : 0x75d4cd, 1)
+      .setScale(faulting ? 1.7 : 1 + Math.sin(time * 0.012) * 0.18);
+  }
+
+  startEchoRecording(recorder) {
+    const puzzle = this.tutorialPuzzle;
+    const stage = this.getTutorialStage();
+    if (puzzle.phase === 'complete' || puzzle.phase === 'syncing') return;
+    if (recorder.def.stage !== puzzle.stageIndex) return;
+
+    puzzle.phase = 'recording';
+    puzzle.frames = [];
+    puzzle.recordStartedAt = this.time.now;
+    puzzle.playbackCursor = 0;
+    puzzle.pastActive = false;
+    puzzle.presentActive = false;
+    puzzle.serviceActive = false;
+    puzzle.breakerActive = false;
+    puzzle.syncAligned = [false, false];
+    puzzle.recordVisited = [false, false];
+    puzzle.syncHotIndex = -1;
+    puzzle.syncHoldStartedAt = 0;
+    puzzle.faultUntil = 0;
+    const breaker = this.interactables.find((it) => it.def.id === stage.breakerId);
+    breaker?.sprite.setTexture('lever-off');
+    recorder.sprite.setTexture('echo-recorder-recording');
+    this.echoSprite.setVisible(false);
+    this.echoReflection.setVisible(false);
+    this.tutorialDemoEcho?.setVisible(false);
+    this.tutorialDemoPresent?.setVisible(false);
+    this.tutorialDemoPulse?.setVisible(false);
+    this.tutorialPressures[puzzle.stageIndex].setTexture('pressure-pad-off');
+    this.tutorialGuideGraphics?.setVisible(this.activeWorldIndex === 0);
+    this.refreshTutorialRouteState();
+    this.refreshTutorialSyncVisuals();
+    this.registry.set('tutorialPowerState', 'recording');
+    this.echoTimelineBg.setVisible(true);
+    this.echoTimelineFill.setVisible(true).setFillStyle(0xe45a5f).setScale(0.001, 1);
+    this.echoTimelineLabel
+      .setVisible(true)
+      .setText(`MEMORY RECORDING  /  ${(stage.recordMs / 1000).toFixed(1)} SEC`);
+    this.player.playInteraction();
+    sfx.lever();
+    this.game.events.emit(
+      'hud:toast',
+      stage.underfloor ? 'Two contacts wake beneath the floor.' : 'The car begins to remember.',
+    );
+  }
+
+  finishEchoRecording() {
+    const puzzle = this.tutorialPuzzle;
+    const stage = this.getTutorialStage();
+    if (puzzle.phase !== 'recording' || puzzle.frames.length < 2) return;
+
+    puzzle.phase = 'playback';
+    puzzle.playbackLeadUntil = stage.underfloor ? this.time.now + 900 : this.time.now;
+    puzzle.playbackStartedAt = puzzle.playbackLeadUntil;
+    puzzle.playbackCursor = 0;
+    puzzle.lastPlaybackElapsed = -1;
+    const recorder = this.interactables.find((it) => it.def.id === stage.recorderId);
+    recorder?.sprite.setTexture('echo-recorder-playback');
+    this.echoTimelineFill.setFillStyle(0x75d4cd).setScale(0.001, 1);
+    this.echoTimelineLabel.setText('PAST SELF  /  REPLAYING');
+    this.echoSprite.setVisible(this.activeWorldIndex === 0);
+    this.echoReflection.setVisible(this.activeWorldIndex === 0);
+    this.registry.set('tutorialPowerState', 'playback');
+    sfx.checkpoint();
+    this.game.events.emit('hud:toast', stage.underfloor ? 'Something moves below you.' : 'PAST is replaying.');
+  }
+
+  updateTutorialPuzzle(time, delta = 16) {
+    if (LEVEL.tutorialPuzzle.mode === 'timetable') {
+      this.timetablePuzzle?.update(time, delta);
+      return;
+    }
+    const puzzle = this.tutorialPuzzle;
+    const stage = this.getTutorialStage();
+    const duration = stage.recordMs;
+
+    if (puzzle.phase === 'recording') {
+      const elapsed = Math.min(duration, time - puzzle.recordStartedAt);
+      puzzle.frames.push({
+        at: elapsed,
+        x: this.player.x,
+        y: this.player.y,
+        lane: this.player.lane,
+        facing: this.player.facing,
+        texture: this.player.texture.key,
+      });
+      if (stage.underfloor) {
+        stage.syncNodes.forEach((node, index) => {
+          if (!puzzle.recordVisited[index] && Math.abs(this.player.x - node.x) < 32) {
+            puzzle.recordVisited[index] = true;
+            this.pulseTutorialDevice(this.tutorialSyncColumns[index].upper, 0xcaa66b);
+            sfx.press();
+            this.updateTutorialObjectiveMarker();
+          }
+        });
+      }
+      this.echoTimelineFill.setScale(Math.max(0.001, elapsed / duration), 1);
+      this.echoTimelineLabel.setText(
+        `MEMORY RECORDING  /  ${Math.max(0, (duration - elapsed) / 1000).toFixed(1)} SEC`,
+      );
+      if (elapsed >= duration) this.finishEchoRecording();
+      return;
+    }
+
+    if (puzzle.phase !== 'playback') return;
+    if (stage.underfloor && time < puzzle.playbackLeadUntil) {
+      this.applyEchoFrame(puzzle.frames[0]);
+      return;
+    }
+    const elapsed = (time - puzzle.playbackStartedAt) % duration;
+    if (elapsed < puzzle.lastPlaybackElapsed) puzzle.playbackCursor = 0;
+    puzzle.lastPlaybackElapsed = elapsed;
+    while (
+      puzzle.playbackCursor < puzzle.frames.length - 1 &&
+      puzzle.frames[puzzle.playbackCursor + 1].at <= elapsed
+    ) {
+      puzzle.playbackCursor += 1;
+    }
+    const frame = puzzle.frames[puzzle.playbackCursor] || puzzle.frames[0];
+    this.applyEchoFrame(frame);
+    this.echoTimelineFill.setScale(Math.max(0.001, elapsed / duration), 1);
+
+    const wasActive = puzzle.pastActive;
+    puzzle.pastActive = stage.underfloor
+      ? true
+      : frame.lane === LANE_NEAR && Math.abs(frame.x - stage.plateX) < 28;
+    if (puzzle.pastActive !== wasActive) {
+      this.tutorialPressures[puzzle.stageIndex].setTexture(
+        puzzle.pastActive ? 'pressure-pad-on' : 'pressure-pad-off',
+      );
+      if (puzzle.pastActive) sfx.checkpoint();
+      this.refreshTutorialRouteState();
+    }
+    if (stage.underfloor) this.updateTutorialResonance(frame, time);
+  }
+
+  updateTutorialResonance(frame, time) {
+    const puzzle = this.tutorialPuzzle;
+    const stage = this.getTutorialStage();
+    const targetIndex = stage.syncNodes.findIndex((_, index) => !puzzle.syncAligned[index]);
+    if (targetIndex < 0) {
+      puzzle.syncHotIndex = -1;
+      this.refreshTutorialSyncVisuals();
+      return;
+    }
+    const target = stage.syncNodes[targetIndex];
+    const echoNear = Math.abs(frame.x - target.x) < 38;
+    const playerNear =
+      Math.abs(this.player.x - target.x) < 34 && Boolean(this.player.body?.blocked?.down);
+    const hot = echoNear && playerNear;
+    const previousHot = puzzle.syncHotIndex;
+    puzzle.syncHotIndex = hot ? targetIndex : -1;
+    if (hot) {
+      if (!puzzle.syncHoldStartedAt) puzzle.syncHoldStartedAt = time;
+      if (time - puzzle.syncHoldStartedAt >= 260) {
+        puzzle.syncAligned[targetIndex] = true;
+        puzzle.syncHotIndex = -1;
+        puzzle.syncHoldStartedAt = 0;
+        this.cameras.main.shake(130, 0.0025);
+        this.pulseTutorialDevice(this.tutorialSyncColumns[targetIndex].lamp, 0x75d4cd);
+        sfx.checkpoint();
+        this.refreshTutorialRouteState();
+        this.refreshTutorialSyncVisuals();
+        this.updateTutorialObjectiveMarker();
+      }
+    } else {
+      puzzle.syncHoldStartedAt = 0;
+    }
+    if (previousHot !== puzzle.syncHotIndex) this.refreshTutorialSyncVisuals();
+  }
+
+  applyEchoFrame(frame) {
+    if (!frame) return;
+    const stage = this.getTutorialStage();
+    const texture = this.textures.exists(frame.texture) ? frame.texture : 'player-idle-0';
+    this.echoSprite
+      .setTexture(texture)
+      .setPosition(frame.x, stage.underfloor ? 760 : frame.y)
+      .setFlipX(frame.facing < 0)
+      .setAlpha(stage.underfloor ? 0.46 : 0.2)
+      .setScale(stage.underfloor ? 0.92 : 1)
+      .setDepth(stage.underfloor ? 59 : LANES[LANE_NEAR].depth + 3)
+      .setVisible(this.activeWorldIndex === 0);
+    this.echoReflection
+      .setTexture(texture)
+      .setPosition(frame.x, 320 - (LANES[LANE_NEAR].baseY - frame.y) * 0.18)
+      .setFlipX(frame.facing < 0)
+      .setAlpha(stage.underfloor ? 0.22 : 0.58)
+      .setVisible(this.activeWorldIndex === 0);
+  }
+
+  attemptTutorialSync(generator) {
+    const puzzle = this.tutorialPuzzle;
+    const stage = this.getTutorialStage();
+    if (puzzle.phase === 'complete' || puzzle.phase === 'syncing') return;
+    if (generator.def.stage !== puzzle.stageIndex) return;
+    if (puzzle.phase === 'recording') {
+      this.game.events.emit('hud:toast', 'Finish the recording first.');
+      sfx.blocked();
+      return;
+    }
+    if (puzzle.phase !== 'playback' || !puzzle.pastActive || !puzzle.routeActive) {
+      this.failTutorialSync(generator);
+      return;
+    }
+
+    puzzle.phase = 'syncing';
+    puzzle.presentActive = true;
+    generator.fired = true;
+    generator.sprite.setTexture('hand-generator-on');
+    this.player.playInteraction();
+    this.registry.set('tutorialPowerState', 'syncing');
+    this.tutorialCarArt?.setCircuitProgress({
+      past: true,
+      present: puzzle.stageIndex >= 1,
+      service: puzzle.stageIndex >= 2,
+    });
+    this.echoTimelineLabel.setText('PAST + PRESENT  /  SYNCHRONIZED');
+    const conductor = this.npcs.find((npc) => npc.def.id === 'caretaker');
+    if (conductor && puzzle.stageIndex === LEVEL.tutorialPuzzle.stages.length - 1) {
+      conductor.sprite.play('conductor-switch');
+      conductor.sprite.once('animationcomplete-conductor-switch', () =>
+        conductor.sprite.play('conductor-idle'),
+      );
+    }
+    sfx.lever();
+    this.game.events.emit(
+      'hud:toast',
+      puzzle.stageIndex === LEVEL.tutorialPuzzle.stages.length - 1
+        ? 'The buried circuit reaches PRESENT. The conductor turns SERVICE.'
+        : `Junction ${puzzle.stageIndex + 1} synchronized. The next partition is opening.`,
+    );
+    this.time.delayedCall(650, () => {
+      if (stage === this.getTutorialStage() && puzzle.stageIndex < LEVEL.tutorialPuzzle.stages.length - 1) {
+        this.completeTutorialJunction(generator);
+      } else {
+        this.completeTutorialPower(generator);
+      }
+    });
+  }
+
+  completeTutorialJunction(generator) {
+    const puzzle = this.tutorialPuzzle;
+    const completedIndex = puzzle.stageIndex;
+    generator.fired = true;
+    this.addScore(25, generator.sprite.x, generator.sprite.y - 48);
+    sfx.checkpoint();
+
+    this.playTutorialGateOpen(completedIndex, () => {
+      puzzle.stageIndex = Math.min(completedIndex + 1, LEVEL.tutorialPuzzle.stages.length - 1);
+      puzzle.phase = 'idle';
+      puzzle.frames = [];
+      puzzle.playbackCursor = 0;
+      puzzle.pastActive = false;
+      puzzle.presentActive = false;
+      puzzle.routeActive = false;
+      puzzle.poweredSegments = 0;
+      puzzle.breakerActive = false;
+      this.echoSprite.setVisible(false);
+      this.echoReflection.setVisible(false);
+      this.echoTimelineBg.setVisible(false);
+      this.echoTimelineFill.setVisible(false);
+      this.echoTimelineLabel.setVisible(false);
+      this.tutorialGuideGraphics?.setVisible(false);
+      this.registry.set('tutorialPowerState', `junction-${puzzle.stageIndex + 1}-ready`);
+      this.refreshTutorialRouteState();
+      this.setTutorialPuzzleVisible(this.activeWorldIndex === 0);
+      this.updateTutorialObjectiveMarker();
+      this.game.events.emit(
+        'hud:toast',
+        puzzle.stageIndex === 1
+          ? 'The next car bends the remembered current.'
+          : 'The windows go quiet. Something below begins to move.',
+      );
+    });
+  }
+
+  failTutorialSync(generator) {
+    const puzzle = this.tutorialPuzzle;
+    puzzle.faultUntil = this.time.now + 720;
+    this.registry.set('tutorialPowerState', 'error');
+    this.tutorialCarArt?.setCircuitProgress({ past: puzzle.routeActive, fault: true });
+    generator.sprite.setTexture('hand-generator-on');
+    this.time.delayedCall(150, () => generator.sprite.setTexture('hand-generator-off'));
+    this.cameras.main.shake(150, 0.004);
+    sfx.blocked();
+    this.game.events.emit(
+      'hud:toast',
+      puzzle.pastActive && !puzzle.routeActive
+        ? 'PAST power leaked into a dead rail. Follow the pulse and rotate the junctions.'
+        : 'The present arrived before the past. Synchronization failed.',
+    );
+    this.time.delayedCall(720, () => {
+      if (puzzle.phase !== 'complete' && puzzle.phase !== 'syncing') {
+        this.refreshTutorialRouteState();
+        this.registry.set(
+          'tutorialPowerState',
+          puzzle.routeActive ? 'past-routed' : puzzle.phase === 'idle' ? 'off' : puzzle.phase,
+        );
+      }
+    });
+  }
+
+  completeTutorialPower(generator) {
+    const puzzle = this.tutorialPuzzle;
+    if (puzzle.phase !== 'syncing') return;
+    puzzle.phase = 'complete';
+    puzzle.serviceActive = true;
+    this.tutorialGuideGraphics?.setVisible(false);
+    this.refreshTutorialStageVisuals();
+    this.registry.set('tutorialPowerState', 'complete');
+    this.tutorialCarArt?.setCircuitProgress({ past: true, present: true, service: true });
+    this.tutorialCarArt?.playPowerRestore();
+    this.tutorialCompletionLight = this.addLight(
+      generator.sprite.x,
+      generator.sprite.y - 28,
+      74,
+      0x75d4cd,
+      0.46,
+      40,
+    );
+    this.cameras.main.shake(180, 0.0035);
+    sfx.goal();
+    this.addScore(50, generator.sprite.x, generator.sprite.y - 48);
+    this.game.events.emit(
+      'hud:toast',
+      'Auxiliary power stable. Waiting for the memory process to terminate.',
+    );
+    this.time.delayedCall(1150, () => this.playEchoAnomaly());
+  }
+
+  playEchoAnomaly() {
+    const puzzle = this.tutorialPuzzle;
+    if (puzzle.phase !== 'complete') return;
+    puzzle.anomalyActive = true;
+    const faceRight = this.player.x >= this.echoSprite.x;
+    [this.echoSprite, this.echoReflection].forEach((echo) => {
+      echo.setTexture('player-idle-2').setFlipX(!faceRight).setVisible(this.activeWorldIndex === 0);
+      this.tweens.add({
+        targets: echo,
+        alpha: echo === this.echoReflection ? 0.88 : 0.42,
+        scaleX: echo.scaleX * 1.06,
+        scaleY: echo.scaleY * 1.06,
+        duration: 520,
+        yoyo: true,
+        repeat: 1,
+        ease: 'Sine.easeInOut',
+      });
+    });
+    this.echoTimelineLabel.setText('RECORDING ENDED  /  SUBJECT STILL PRESENT');
+    this.game.events.emit('hud:toast', 'CONDUCTOR: The recording ended. It should not be looking at you.');
+    this.time.delayedCall(1750, () => {
+      if (puzzle.phase !== 'complete') return;
+      this.playTutorialGateOpen(puzzle.stageIndex, () => {
+        this.registry.set('tutorialPowerRestored', true);
+        this.tutorialExitBlockedNotified = false;
+        sfx.checkpoint();
+        this.game.events.emit('hud:toast', 'The memory is severed. The next-car door unlocks.');
+      });
+    });
+    this.time.delayedCall(2600, () => {
+      puzzle.anomalyActive = false;
+      this.tweens.add({
+        targets: [this.echoSprite, this.echoReflection, this.echoTimelineBg, this.echoTimelineFill, this.echoTimelineLabel],
+        alpha: 0,
+        duration: 700,
+        onComplete: () => {
+          this.echoSprite.setVisible(false);
+          this.echoReflection.setVisible(false);
+          this.echoTimelineBg.setVisible(false).setAlpha(1);
+          this.echoTimelineFill.setVisible(false).setAlpha(1);
+          this.echoTimelineLabel.setVisible(false).setAlpha(1);
+        },
+      });
+    });
+  }
+
+  seedTutorialEchoForQA(stageIndex = 0, pastReady = true, correctedRelays = 0) {
+    const puzzle = this.tutorialPuzzle;
+    puzzle.stageIndex = stageIndex;
+    puzzle.stageComplete = LEVEL.tutorialPuzzle.stages.map((_, index) => index < stageIndex);
+    const stage = this.getTutorialStage();
+    const duration = stage.recordMs;
+    const echoX = pastReady ? stage.plateX : stage.recorderX;
+    puzzle.phase = 'playback';
+    puzzle.frames = stage.underfloor
+      ? [
+          { at: 0, x: stage.recorderX, y: 432, lane: LANE_NEAR, facing: 1, texture: 'player-idle-0' },
+          ...stage.syncNodes.map((node, index) => ({
+            at: duration * (0.34 + index * 0.27),
+            x: node.x,
+            y: 432,
+            lane: LANE_NEAR,
+            facing: 1,
+            texture: `player-walk-${index % 4}`,
+          })),
+          { at: duration, x: stage.generatorX - 30, y: 432, lane: LANE_NEAR, facing: 1, texture: 'player-idle-2' },
+        ]
+      : [
+          { at: 0, x: echoX, y: 432, lane: LANE_NEAR, facing: 1, texture: 'player-idle-0' },
+          { at: duration, x: echoX, y: 432, lane: LANE_NEAR, facing: 1, texture: 'player-idle-2' },
+        ];
+    puzzle.playbackStartedAt = this.time.now;
+    puzzle.playbackCursor = 0;
+    puzzle.lastPlaybackElapsed = -1;
+    puzzle.pastActive = pastReady;
+    puzzle.syncAligned = stage.underfloor
+      ? stage.syncNodes.map((_, index) => index < correctedRelays)
+      : [false, false];
+    puzzle.recordVisited = stage.underfloor ? [true, true] : [false, false];
+    puzzle.breakerActive = stage.underfloor && correctedRelays > 1;
+    stage.relays.forEach((relay, index) => {
+      const state = index < correctedRelays ? relay.correct : relay.initial;
+      puzzle.relayStates[relay.id] = state;
+      const interactable = this.interactables.find((it) => it.def.id === relay.id);
+      interactable?.sprite.setTexture(`circuit-relay-${state}`);
+    });
+    const breaker = this.interactables.find((it) => it.def.id === stage.breakerId);
+    breaker?.sprite.setTexture(puzzle.breakerActive ? 'lever-on' : 'lever-off');
+    this.tutorialPressures.forEach((pressure, index) =>
+      pressure.setTexture(index === stageIndex && pastReady ? 'pressure-pad-on' : 'pressure-pad-off'),
+    );
+    this.echoTimelineBg.setVisible(true);
+    this.echoTimelineFill.setVisible(true).setFillStyle(0x75d4cd).setScale(0.001, 1);
+    this.echoTimelineLabel.setVisible(true).setText('PAST SELF  /  REPLAYING');
+    const recorder = this.interactables.find((it) => it.def.id === stage.recorderId);
+    recorder?.sprite.setTexture('echo-recorder-playback');
+    this.applyEchoFrame(puzzle.frames[0]);
+    this.refreshTutorialRouteState();
+    this.updateTutorialObjectiveMarker();
   }
 
   raiseBridge() {
@@ -1030,7 +2691,17 @@ export default class GameScene extends Phaser.Scene {
     }
 
     const input = this.readInput();
+    if (this.activeWorldIndex === 0) {
+      input.laneBack = false;
+      input.laneFront = false;
+    }
+    // Section V reads the held state of E every frame, not just its edge.
+    this.inputState = input;
     this.player.update(delta, input);
+    this.updateTutorialCamera(input, delta);
+    this.updateTutorialPuzzle(time, delta);
+    this.updateTutorialRoutePulse(time);
+    this.updateTutorialObjectiveMarker();
     this.updateWorld();
     this.updateEnemies();
     this.updateInteractables(input);
@@ -1048,10 +2719,53 @@ export default class GameScene extends Phaser.Scene {
     this.fogLow.tilePositionX = sx * 0.68 + t * 0.009;
     this.fogDrift.tilePositionX = sx * 0.95 + t * 0.016;
     this.foreground.tilePositionX = sx * 1.25;
+    if (this.prologueTransitionActive && this.activeWorldIndex === 0) {
+      this.backdropChunks.forEach((chunk) => {
+        chunk.x = (chunk.backdropBaseX ?? chunk.x) - this.departureScroll;
+      });
+      this.departureStreaks?.forEach((streak, index) => {
+        streak.x = (([120, 510, 820, 260, 690, 70, 430, 870][index] - this.departureScroll * (0.7 + index * 0.04) + 1200) % 1200) - 180;
+      });
+    }
   }
 
   updateWorld() {
+    if (this.previewWorldIndex !== null) return;
     const x = this.player.x;
+    const tutorialExit = STORY_WORLDS[1]?.startX ?? 510;
+    if (this.activeWorldIndex === 0) {
+      const stage = this.getTutorialStage();
+      if (x >= stage.endX - 10 && !this.tutorialPuzzle.stageComplete[this.tutorialPuzzle.stageIndex]) {
+        this.player.body.reset(stage.endX - 12, this.player.y);
+        this.player.setAccelerationX(0);
+        if (!this.tutorialExitBlockedNotified) {
+          this.tutorialExitBlockedNotified = true;
+          sfx.blocked();
+          this.cameras.main.shake(100, 0.003);
+          this.game.events.emit(
+            'hud:toast',
+            `Junction ${this.tutorialPuzzle.stageIndex + 1} is still out of phase.`,
+          );
+        }
+        return;
+      }
+      if (x < stage.endX - 80) this.tutorialExitBlockedNotified = false;
+    }
+    if (
+      this.activeWorldIndex === 0 &&
+      x >= tutorialExit - 10 &&
+      !this.registry.get('tutorialPowerRestored')
+    ) {
+      this.player.body.reset(tutorialExit - 12, this.player.y);
+      this.player.setAccelerationX(0);
+      if (!this.tutorialExitBlockedNotified) {
+        this.tutorialExitBlockedNotified = true;
+        sfx.blocked();
+        this.cameras.main.shake(100, 0.003);
+        this.game.events.emit('hud:toast', 'The door needs PAST, PRESENT, and SERVICE power synchronized.');
+      }
+      return;
+    }
     let index = 0;
     for (let i = 0; i < STORY_WORLDS.length; i += 1) {
       if (x >= STORY_WORLDS[i].startX) index = i;

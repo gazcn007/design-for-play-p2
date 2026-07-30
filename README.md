@@ -6,9 +6,35 @@ runs, and makes a final choice about whether the simulation should continue.
 
 ```bash
 npm install
+npm run assets:prepare   # only after a source panorama changes
 npm run dev      # http://localhost:5180
 npm run build    # -> dist/
 ```
+
+## World background pipeline
+
+The full-resolution PNG files in `src/assets/` are source masters, not runtime
+textures. `npm run assets:prepare` converts the ten unique panoramas into
+overlapping JPEG chunks no wider than 4096 pixels and writes a generated
+manifest under `src/assets/generated/worlds/`.
+
+At runtime, Phaser loads only the current world and its neighbors. Distant
+world textures are released from GPU memory. The two cyberpunk story revisions
+share one generated asset instead of bundling the same panorama twice. Normal
+gameplay, story triggers, world order, and level geometry are unchanged.
+
+To preview a background without walking through the level, add `?world=N` or a
+texture key to the development URL:
+
+```text
+http://localhost:5180/?world=5
+http://localhost:5180/?world=backdrop-05
+```
+
+The canonical source-to-texture mapping lives in
+`src/worlds/world-assets.json`. Builds run `npm run assets:check` automatically
+and fail with a direct instruction if a source image changed without regenerating
+its game assets.
 
 ## Controls
 
@@ -84,6 +110,7 @@ and refuses the shift if it would put the player inside solid rock.
 | Change lane depth/scale/tint | `src/constants.js` → `LANES` |
 | Redraw any sprite | `src/textures.js` |
 | Change the simulation worlds | `src/story.js` → `STORY_WORLDS` |
+| Replace or add a panorama source | `src/worlds/world-assets.json`, then `npm run assets:prepare` |
 | Reframe the backdrop | `src/constants.js` → `BACKDROP` |
 | Retune the value ramp / fog | `src/palette.js` + `LANES` tints |
 | Move lamps, hearses, fences, graves | `src/level.js` → `decor` |
