@@ -83,3 +83,11 @@ BROWSER ROUTE:    ?qa=phase2..6&state=entry all playable; continuous run scripte
 - BLOCKERS: none
 - OWNERS: single-threaded, no agents, no commit/push
 - FILES: src/tutorial/underfloorView.js, tests/tutorial/underfloorView.test.mjs, src/level.js, src/scenes/GameScene.js, src/tutorial/TimetablePuzzle.js, 游戏/phase3/undercarriage/, 游戏/phase4/undercarriage/, 游戏/phase6/undercarriage-run.mjs
+
+## SHIP MODE final leg (2026-08-03 PM)
+- IV bogie/trolley redraw accepted: six same-viewport shots in 游戏/phase4/ship/ (pinned cam 2240,300; canvas bottom cuts ~game y 814 in headless 513px viewport — scrollY 300 is the max bound 900-600).
+- Phase I entry teaching verified playable as-is (speak -> dialogue -> PUNCH DOOR -> partition). No changes needed.
+- Phase VII verified: real E in the VI arming window -> biting -> departure -> chapter card -> world 1 (x 4955, grace on).
+- I-VII continuous single-session run: 游戏/continuous/ship-i-vii-run.mjs (to-v then vi). VI replay consumed the run's own IV trace (source 'player', 69 samples, 9100ms).
+- Driver lessons: approach->idle flips at stage.startX+72 (walk targets must clear it); relay wiring drives scene-level _onRelayPointerDown/Move/Up with relayArt.getState()/getHitRegions() world coords; III bleed is a real E hold; VI energize keeps the page-internal interact fallback.
+- 508/508 tests, build, git diff --check all green. No commits.

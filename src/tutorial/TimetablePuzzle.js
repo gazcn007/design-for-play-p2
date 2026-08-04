@@ -80,10 +80,12 @@ const BOGIE_SERVICE_STAGE_INDEX = 4;
 // QA warp and the objective text key off this.
 const ECHO_LOAD_STAGE_INDEX = 5;
 
-// Phase VI world prompts: terse, on the device, never the answer.
+// Phase VI world prompts: terse, on the device, never the answer. The
+// engage handle only speaks once the first observation loop has mechanically
+// unlocked it (VISIBLE SYSTEM ARC CORRECTION §4).
 const ECHO_LOAD_PROMPTS = Object.freeze({
-  testOff: '[E] ENERGIZE THE DEPARTURE LINE',
-  testOn: '[E] CUT THE DEPARTURE LINE',
+  testOff: '[E]  接合牵引',
+  testOn: '[E]  断开牵引',
 });
 // Scene-level readability tuning: the pure interlock keeps its reusable 550ms
 // default, while this long underfloor run gives a first-time player enough
@@ -761,10 +763,15 @@ export default class TimetablePuzzle {
       });
       // Primary and secondary suspension, brake pipe, reservoir and motor.
       g.lineStyle(5, 0x53656d, 1);
-      for (let springX = center - 90; springX <= center + 90; springX += 180) {
-        for (let y = underY - 88; y < underY - 18; y += 12) {
-          g.lineBetween(springX - 18, y, springX + 18, y + 6);
-          g.lineBetween(springX + 18, y + 6, springX - 18, y + 12);
+      // SHIP MODE (IV bogie redraw): junction-4 draws a real suspension —
+      // hanger columns and bellows air springs — so the mattress-coil zigzag
+      // stays only on the bogie-diagnosis stages that were accepted with it.
+      if (!stage.weightTransfer) {
+        for (let springX = center - 90; springX <= center + 90; springX += 180) {
+          for (let y = underY - 88; y < underY - 18; y += 12) {
+            g.lineBetween(springX - 18, y, springX + 18, y + 6);
+            g.lineBetween(springX + 18, y + 6, springX - 18, y + 12);
+          }
         }
       }
       g.fillStyle(0x17262d, 1);
@@ -887,7 +894,10 @@ export default class TimetablePuzzle {
           55,
         )
       : null;
-    const airReservoir = stage.underfloor
+    // SHIP MODE (IV bogie redraw): the floating grey capsule stays on the
+    // bogie-diagnosis stages; junction-4 plumbs its suspension branch into
+    // the two bellows air springs instead of a detached tank.
+    const airReservoir = stage.underfloor && !stage.weightTransfer
       ? this.track(
           scene.add
             .rectangle(left + 76, underY - 70, 116, 31, 0x43545b, 0.92)
@@ -1001,6 +1011,77 @@ export default class TimetablePuzzle {
           57,
         )
       : null;
+    // SHIP MODE (IV bogie redraw): a complete mechanical skeleton in place of
+    // the mattress coils — H-frame on two axleboxed wheelsets standing on a
+    // railed track, hanger columns and bellows air springs carrying the car
+    // floor, traction motor with cooling fins and a gearbox on the drive
+    // axle, and a brake cylinder rigged to all four shoes. Two faint load
+    // columns tie the trolley's travel above to the springs and the drive
+    // wheel below: weight over the bogie -> spring compressed -> adhesion.
+    const bogieDress = stage.weightTransfer ? this.track(scene.add.graphics(), 54) : null;
+    const bogieDressFront = stage.weightTransfer ? this.track(scene.add.graphics(), 56) : null;
+    if (bogieDress && bogieDressFront) {
+      const rearWheelX = secondWheelX;
+      // Rail and sleepers the bogie stands on.
+      bogieDress.lineStyle(4, 0x607078, 0.9);
+      bogieDress.lineBetween(left + 6, wheelY + 58, right - 6, wheelY + 58);
+      bogieDress.lineStyle(2, 0x2d3c43, 0.85);
+      for (let tieX = left + 20; tieX <= right - 20; tieX += 52) {
+        bogieDress.lineBetween(tieX, wheelY + 60, tieX, wheelY + 72);
+      }
+      // H-frame: lower side beam, cross beams down to the axleboxes, axlebox
+      // housings on each journal (the wheel rings pass behind them).
+      bogieDress.fillStyle(0x2a3940, 0.96);
+      bogieDress.fillRect(wheelX - 96, underY + 6, rearWheelX - wheelX + 192, 14);
+      bogieDress.lineStyle(3, 0x91a3a9, 0.7);
+      bogieDress.strokeRect(wheelX - 96, underY + 6, rearWheelX - wheelX + 192, 14);
+      [wheelX, rearWheelX].forEach((axleX) => {
+        bogieDress.fillStyle(0x2a3940, 0.96);
+        bogieDress.fillRect(axleX - 9, underY + 6, 18, 40);
+        bogieDress.fillStyle(0x263840, 1);
+        bogieDress.fillRect(axleX - 19, wheelY - 22, 38, 30);
+        bogieDress.lineStyle(2, 0x91a3a9, 0.75);
+        bogieDress.strokeRect(axleX - 19, wheelY - 22, 38, 30);
+        bogieDress.lineBetween(axleX - 10, wheelY + 8, axleX + 10, wheelY + 8);
+      });
+      // Hanger columns from the car floor to each bellows, and the spring
+      // seats they press against on the frame — the vertical load path.
+      [stage.startX + 140, stage.endX - 190].forEach((bagX) => {
+        bogieDress.fillStyle(0x2a3940, 1);
+        bogieDress.fillRect(bagX - 6, underY - 2, 12, 28);
+        bogieDress.fillRect(bagX - 26, underY + 62, 52, 10);
+        bogieDress.lineStyle(2, 0x91a3a9, 0.55);
+        bogieDress.strokeRect(bagX - 26, underY + 62, 52, 10);
+        // Faint load column from the trolley floor down through the slab.
+        bogieDress.lineStyle(2, 0x9fb7c0, 0.14);
+        bogieDress.lineBetween(bagX, 470, bagX, underY - 2);
+      });
+      // Brake cylinder on the frame, rigged to all four shoes (the front
+      // pair is the tracked animated pair; the rear pair is static here).
+      bogieDress.fillStyle(0x263840, 1);
+      bogieDress.fillRect(center - 17, underY + 12, 34, 18);
+      bogieDress.lineStyle(2, 0x91a3a9, 0.6);
+      bogieDress.strokeRect(center - 17, underY + 12, 34, 18);
+      bogieDress.fillStyle(0xe45a5f, 0.5);
+      bogieDress.fillRect(rearWheelX - 69 - 9, wheelY - 27, 18, 54);
+      bogieDress.fillRect(rearWheelX + 69 - 9, wheelY - 27, 18, 54);
+      bogieDress.lineStyle(2, 0x6c7a80, 0.75);
+      [wheelX - 69, wheelX + 69, rearWheelX - 69, rearWheelX + 69].forEach((shoeX) => {
+        bogieDress.lineBetween(center, underY + 30, shoeX, wheelY - 30);
+      });
+      // Traction motor cooling fins and the gearbox on the drive axle,
+      // shafted to the motor.
+      bogieDressFront.lineStyle(2, 0x91a3a9, 0.5);
+      for (let finX = center - 30; finX <= center + 30; finX += 12) {
+        bogieDressFront.lineBetween(finX, underY + 34, finX, underY + 62);
+      }
+      bogieDressFront.lineStyle(5, 0x53656d, 0.9);
+      bogieDressFront.lineBetween(center + 34, underY + 52, rearWheelX - 20, wheelY - 4);
+      bogieDressFront.fillStyle(0x17262d, 0.95);
+      bogieDressFront.fillCircle(rearWheelX, wheelY, 26);
+      bogieDressFront.lineStyle(2, 0x91a3a9, 0.8);
+      bogieDressFront.strokeCircle(rearWheelX, wheelY, 26);
+    }
     const drumKeyLabels = stage.drum
       ? DRUM_KEYS.map((command, keyIndex) => {
           const spec = COMMANDS[command];
@@ -1017,25 +1098,70 @@ export default class TimetablePuzzle {
           );
         })
       : null;
-    const trolley = index === 3
-      ? this.track(scene.add.rectangle(stage.weightTransfer?.trolley.leftX ?? stage.startX + 355, 429, 112, 45, 0x28353c, 1).setStrokeStyle(2, 0xb68bc3, 0.75), 37)
+    // SHIP MODE (IV trolley redraw): the counterweight is now a rail
+    // maintenance trolley — guide rails and sleepers on the floor, small
+    // flanged wheels, a steel chassis (the tracked `trolley` object, whose
+    // setX/setFillStyle the refresh and the grab flash already own), stacked
+    // ballast ingots, a push handle and a locking lever. The follower parts
+    // ride along through machinery.trolleyFollowers in the refresh.
+    const trolleyRail = index === 3 && stage.weightTransfer
+      ? this.track(scene.add.graphics(), 36)
       : null;
-    // Phase IV underfloor hardware (WEIGHT / ADHESION): the two air springs
-    // that visibly collapse while the suspension branch leaks flat, the car
-    // floor line that tilts with the load split, and the TEST stand lamp that
-    // follows the motor state. The dial only corroborates what these show.
+    if (trolleyRail) {
+      const track = stage.weightTransfer.trolley;
+      trolleyRail.lineStyle(3, 0x53656d, 0.9);
+      trolleyRail.lineBetween(track.leftX - 34, 459, track.rightX + 34, 459);
+      trolleyRail.lineStyle(2, 0x53656d, 0.55);
+      trolleyRail.lineBetween(track.leftX - 34, 465, track.rightX + 34, 465);
+      trolleyRail.lineStyle(2, 0x2d3c43, 0.8);
+      for (let tieX = track.leftX - 22; tieX <= track.rightX + 22; tieX += 34) {
+        trolleyRail.lineBetween(tieX, 455, tieX, 468);
+      }
+    }
+    const trolley = index === 3
+      ? this.track(scene.add.rectangle(stage.weightTransfer?.trolley.leftX ?? stage.startX + 355, 445, 118, 12, 0x3a4a52, 1).setStrokeStyle(2, 0x8b9ba0, 0.8), 37)
+      : null;
+    const mkTrolleyPart = (dx, build) => (index === 3 && stage.weightTransfer
+      ? this.track(build((stage.weightTransfer.trolley.leftX ?? stage.startX + 355) + dx), 37)
+      : null);
+    const trolleyWheelA = mkTrolleyPart(-42, (x) => scene.add.circle(x, 455, 7, 0x111a20, 1).setStrokeStyle(2, 0x91a3a9, 0.9));
+    const trolleyWheelB = mkTrolleyPart(42, (x) => scene.add.circle(x, 455, 7, 0x111a20, 1).setStrokeStyle(2, 0x91a3a9, 0.9));
+    const trolleyBallastA = mkTrolleyPart(-4, (x) => scene.add.rectangle(x, 434, 66, 10, 0x222d33, 1).setStrokeStyle(1, 0x8b9ba0, 0.7));
+    const trolleyBallastB = mkTrolleyPart(5, (x) => scene.add.rectangle(x, 424, 58, 10, 0x222d33, 1).setStrokeStyle(1, 0x8b9ba0, 0.7));
+    const trolleyBallastC = mkTrolleyPart(-2, (x) => scene.add.rectangle(x, 414, 48, 10, 0x222d33, 1).setStrokeStyle(1, 0x8b9ba0, 0.7));
+    const trolleyHandle = mkTrolleyPart(56, (x) => scene.add.rectangle(x, 424, 7, 34, 0x2a3940, 1).setStrokeStyle(1, 0x91a3a9, 0.75));
+    const trolleyHandleGrip = mkTrolleyPart(48, (x) => scene.add.rectangle(x, 408, 24, 6, 0x2a3940, 1).setStrokeStyle(1, 0x91a3a9, 0.75));
+    const trolleyLock = mkTrolleyPart(-52, (x) => scene.add.rectangle(x, 436, 6, 20, 0x53656d, 1).setStrokeStyle(1, 0xc1c9c6, 0.7));
+    const trolleyFollowers = index === 3 && stage.weightTransfer
+      ? [
+        [trolleyWheelA, -42],
+        [trolleyWheelB, 42],
+        [trolleyBallastA, -4],
+        [trolleyBallastB, 5],
+        [trolleyBallastC, -2],
+        [trolleyHandle, 56],
+        [trolleyHandleGrip, 48],
+        [trolleyLock, -52],
+      ]
+      : null;
+    // Phase IV underfloor hardware (WEIGHT / ADHESION): two bellows air
+    // springs that visibly collapse while the suspension branch leaks flat,
+    // the car floor line that tilts with the load split, and the TEST stand
+    // lamp that follows the motor state. The dial only corroborates what
+    // these show. The bags hang from the floor line onto their seats on the
+    // bogie frame — inflating pushes the car up, deflating drops it.
     const suspensionBagFront = stage.weightTransfer
       ? this.track(
-          scene.add.rectangle(stage.startX + 140, underY + 26, 46, 26, 0x43545b, 0.92)
-            .setStrokeStyle(2, 0xc1c9c6, 0.6)
+          scene.add.rectangle(stage.startX + 140, underY + 26, 44, 40, 0x24323a, 0.95)
+            .setStrokeStyle(2, 0xc1c9c6, 0.7)
             .setOrigin(0.5, 0),
           55,
         )
       : null;
     const suspensionBagRear = stage.weightTransfer
       ? this.track(
-          scene.add.rectangle(stage.endX - 190, underY + 26, 46, 26, 0x43545b, 0.92)
-            .setStrokeStyle(2, 0xc1c9c6, 0.6)
+          scene.add.rectangle(stage.endX - 190, underY + 26, 44, 40, 0x24323a, 0.95)
+            .setStrokeStyle(2, 0xc1c9c6, 0.7)
             .setOrigin(0.5, 0),
           55,
         )
@@ -1044,6 +1170,28 @@ export default class TimetablePuzzle {
       ? this.track(
           scene.add.rectangle(center, underY - 2, right - left - 60, 4, 0x9fb7c0, 0.5),
           54,
+        )
+      : null;
+    // VISIBLE SYSTEM ARC CORRECTION §2 (Phase IV equalizer): a real, readable
+    // equalizer beam between the two bellows air springs. The beam pivots on
+    // a central fulcrum; when the counterweight walks toward the drive bogie
+    // the beam visibly tips drive-side-down, its linkage presses the drive
+    // air spring, the drive axlebox SINKS and the wheel-rail contact glows.
+    // All of it is redrawn every frame from the frozen snapshot — the motion
+    // itself is the lesson; no arrows, no labels.
+    const equalizerArt = stage.weightTransfer ? this.track(scene.add.graphics(), 58) : null;
+    const driveAxleDrop = stage.weightTransfer
+      ? this.track(
+          scene.add.rectangle(secondWheelX, wheelY - 7, 40, 32, 0x263840, 1)
+            .setStrokeStyle(2, 0x91a3a9, 0.75),
+          57,
+        )
+      : null;
+    const driveContactGlow = stage.weightTransfer
+      ? this.track(
+          scene.add.circle(secondWheelX, wheelY + 52, 13, 0xf2d49a, 0)
+            .setBlendMode(Phaser.BlendModes.ADD),
+          58,
         )
       : null;
     const testLamp = stage.weightTransfer
@@ -1099,7 +1247,7 @@ export default class TimetablePuzzle {
       : null;
     const servicePin = stage.bogieService
       ? this.track(
-          scene.add.rectangle(rearBogieX - 64, bogieY - 34, 34, 6, 0x697980, 0.95)
+          scene.add.rectangle(3740, bogieY - 27, 34, 6, 0x697980, 0.95)
             .setStrokeStyle(1, 0xc1c9c6, 0.6),
           59,
         )
@@ -1110,6 +1258,101 @@ export default class TimetablePuzzle {
             .setStrokeStyle(2, 0x91a3a9, 0.66),
           56,
         )
+      : null;
+    // VISIBLE SYSTEM ARC CORRECTION §3 (Phase V diagnostic space): the five
+    // generic floor levers are demolished. Every control is now a real device
+    // bolted onto the machinery it moves, in the underfloor band between the
+    // two wheelsets, and connected by pipe, rod or cable — nothing floats:
+    //   TEST    — a shared maintenance bench BETWEEN the bogies, motor cables
+    //             splitting to both wheelsets.
+    //   ISOLATE — a cutout cock on the rear bogie's LOCAL brake supply riser.
+    //   VENT    — a bleed wheel at that pipe's lowest point, exhaust stub
+    //             pointing down.
+    //   LOCK    — the steel pin sliding through a guide that bars the
+    //             actuator linkage (positions moved to the rod: 3740/3778).
+    //   REPAIR  — the access cover on the seized actuator itself.
+    const bogieServiceArt = stage.bogieService ? this.track(scene.add.graphics(), 56) : null;
+    if (bogieServiceArt) {
+      const art = bogieServiceArt;
+      // --- TEST bench between the bogies, cables to both motor leads ------
+      art.fillStyle(0x263840, 1);
+      art.fillRect(3468, bogieY - 66, 64, 26);
+      art.lineStyle(2, 0x91a3a9, 0.75);
+      art.strokeRect(3468, bogieY - 66, 64, 26);
+      art.fillStyle(0x17262d, 1);
+      art.fillRect(3476, bogieY - 40, 8, 40);
+      art.fillRect(3516, bogieY - 40, 8, 40);
+      art.lineStyle(3, 0xcaa66b, 0.8);
+      art.lineBetween(3484, bogieY - 40, 3320, bogieY - 6); // bench -> front bogie
+      art.lineBetween(3516, bogieY - 40, 3680, bogieY - 6); // bench -> rear bogie
+      art.fillStyle(0xcaa66b, 0.85);
+      art.fillCircle(3320, bogieY - 6, 4);
+      art.fillCircle(3680, bogieY - 6, 4);
+      // --- The rear bogie's LOCAL brake line: riser off the header, down ---
+      // --- to the low point, across, then up into the actuator.        ---
+      art.lineStyle(6, 0x53656d, 0.95);
+      art.lineBetween(3580, underY - 59, 3580, bogieY + 45); // supply riser
+      art.lineBetween(3580, bogieY + 45, 3810, bogieY + 45); // low run
+      art.lineBetween(3810, bogieY + 45, 3810, bogieY - 20); // actuator riser
+      art.lineBetween(3810, bogieY - 20, 3842, bogieY - 28); // into the cylinder
+      art.lineStyle(2, 0x75d4cd, 0.4);
+      art.lineBetween(3580, underY - 59, 3580, bogieY + 45);
+      art.lineBetween(3580, bogieY + 45, 3810, bogieY + 45);
+      art.lineBetween(3810, bogieY + 45, 3810, bogieY - 20);
+      // Tee collar where the riser leaves the header.
+      art.fillStyle(0x263840, 1);
+      art.fillRect(3573, underY - 66, 14, 14);
+      // ISOLATE cutout cock ON the riser: valve body + handwheel.
+      art.fillStyle(0x2a3940, 1);
+      art.fillRect(3570, bogieY - 108, 20, 22);
+      art.lineStyle(2, 0x91a3a9, 0.8);
+      art.strokeRect(3570, bogieY - 108, 20, 22);
+      art.lineStyle(3, 0xc1c9c6, 0.9);
+      art.strokeCircle(3580, bogieY - 116, 11);
+      art.lineBetween(3580, bogieY - 127, 3580, bogieY - 105);
+      art.lineBetween(3569, bogieY - 116, 3591, bogieY - 116);
+      // VENT bleed wheel at the pipe's lowest point + downward exhaust stub.
+      art.fillStyle(0x263840, 1);
+      art.fillRect(3653, bogieY + 38, 14, 12);
+      art.lineStyle(3, 0xc1c9c6, 0.9);
+      art.strokeCircle(3660, bogieY + 62, 10);
+      art.lineBetween(3660, bogieY + 52, 3660, bogieY + 72);
+      art.lineBetween(3650, bogieY + 62, 3670, bogieY + 62);
+      art.lineStyle(2, 0x53656d, 0.8);
+      art.lineBetween(3666, bogieY + 68, 3666, bogieY + 84);
+      // The healthy front bogie's plain feed stub — no cocks, for contrast.
+      art.lineStyle(5, 0x53656d, 0.7);
+      art.lineBetween(3300, underY - 59, 3300, bogieY - 30);
+      // --- Actuator housing, linkage rod and the service-pin guide ---------
+      art.fillStyle(0x17262d, 1);
+      art.fillRect(3836, bogieY - 40, 48, 26);
+      art.lineStyle(2, 0x91a3a9, 0.7);
+      art.strokeRect(3836, bogieY - 40, 48, 26);
+      art.lineStyle(4, 0x8b9ba0, 0.85);
+      art.lineBetween(3762, bogieY - 27, 3840, bogieY - 27); // piston rod -> shoe
+      // Pin guide straddling the rod: the seated pin visibly bars the rod.
+      art.fillStyle(0x2a3940, 1);
+      art.fillRect(3768, bogieY - 44, 14, 34);
+      art.lineStyle(2, 0xc1c9c6, 0.7);
+      art.strokeRect(3768, bogieY - 44, 14, 34);
+      // REPAIR access cover on the actuator: hinged plate + pull handle.
+      art.fillStyle(0x263840, 1);
+      art.fillRect(3844, bogieY - 62, 32, 20);
+      art.lineStyle(2, 0xcaa66b, 0.7);
+      art.strokeRect(3844, bogieY - 62, 32, 20);
+      art.lineBetween(3850, bogieY - 52, 3870, bogieY - 52);
+    }
+    const mkServiceGlow = (x, y, r) => (stage.bogieService
+      ? this.track(scene.add.circle(x, y, r, 0x75d4cd, 0).setBlendMode(Phaser.BlendModes.ADD), 55)
+      : null);
+    const serviceGlows = stage.bogieService
+      ? {
+        test: mkServiceGlow(3500, bogieY - 53, 34),
+        isolate: mkServiceGlow(3580, bogieY - 110, 24),
+        vent: mkServiceGlow(3660, bogieY + 62, 24),
+        lock: mkServiceGlow(3775, bogieY - 27, 22),
+        repair: mkServiceGlow(3860, bogieY - 40, 24),
+      }
       : null;
     // Phase VI underfloor hardware (PAST RIDES THE LOAD): the echo's trolley
     // re-rides the Phase IV trace on its own rail below the floor. The brass
@@ -1165,9 +1408,11 @@ export default class TimetablePuzzle {
           57,
         )
       : null;
-    // The drive wheelset under test, and the five-lamp condition strip that
-    // reads the six-condition chain (lock §6): interlock / air path / brake
-    // sync steady from the repaired systems, load + bite live from the rhythm.
+    // The drive wheelset under test. The five-lamp condition strip is
+    // DEMOLISHED (VISIBLE SYSTEM ARC CORRECTION §4): the player reads the
+    // four systems in the world — copper cable, cyan air run, the echo's own
+    // weight cycle and the healthy brake hardware — not a row of unlabeled
+    // lamps.
     const echoDriveSpoke = stage.echoLoad
       ? this.track(
           scene.add.rectangle(
@@ -1181,21 +1426,7 @@ export default class TimetablePuzzle {
           58,
         )
       : null;
-    const echoConditionLamps = stage.echoLoad
-      ? ['interlock', 'airPath', 'synced', 'load', 'biting'].map((key, lampIndex) => ({
-          key,
-          lamp: this.track(
-            scene.add.circle(
-              stage.echoLoad.machines.test.x - 52 + lampIndex * 26,
-              underY - 84,
-              6,
-              0x405159,
-              0.5,
-            ).setStrokeStyle(1, 0x91a3a9, 0.5),
-            57,
-          ),
-        }))
-      : null;
+    const echoConditionLamps = null;
     const echoWindowLamp = stage.echoLoad
       ? this.track(
           scene.add.circle(
@@ -1204,6 +1435,77 @@ export default class TimetablePuzzle {
             8,
             0x405159,
             0.45,
+          ).setBlendMode(Phaser.BlendModes.ADD),
+          58,
+        )
+      : null;
+    // VISIBLE SYSTEM ARC CORRECTION §4 (Phase VI convergence): the four
+    // repaired systems are drawn INTO this room and visibly converge on the
+    // drive bogie and the traction engage handle —
+    //   II  a copper cable runs in from the relay/contactor direction,
+    //   III a cyan air run feeds door / suspension / brake branches,
+    //   V   the repaired rear bogie stands healthy on that run (pin parked,
+    //       actuator brass, shoe released),
+    //   IV  the past self re-rides the counterweight on the rail below.
+    // All four end at the drive wheelset and the large engage handle.
+    const convergenceArt = stage.echoLoad ? this.track(scene.add.graphics(), 55) : null;
+    if (convergenceArt && echoRailSpec) {
+      const art = convergenceArt;
+      const standX = stage.echoLoad.machines.test.x; // 4400
+      const driveX = echoRailSpec.x0 + (echoRailSpec.x1 - echoRailSpec.x0) * 0.875; // 4655
+      // II: copper cable from the contactor direction into the controller,
+      // then onward to the drive bogie.
+      art.lineStyle(6, 0xcaa66b, 0.85);
+      art.lineBetween(left + 6, underY - 72, standX, underY - 72);
+      art.lineBetween(standX, underY - 72, standX, underY - 40);
+      art.lineBetween(standX + 20, underY - 24, driveX - 16, bogieY - 46);
+      // III: cyan air run with three readable branch tees.
+      art.lineStyle(5, 0x75d4cd, 0.55);
+      art.lineBetween(left + 6, underY - 40, driveX - 8, bogieY - 18);
+      // Door branch tee + glyph.
+      art.lineBetween(4120, underY - 48, 4120, underY - 96);
+      art.fillStyle(0x75d4cd, 0.5);
+      art.fillRect(4112, underY - 108, 6, 14);
+      art.fillRect(4122, underY - 108, 6, 14);
+      // Suspension branch tee + bag glyph.
+      art.lineBetween(4260, underY - 52, 4260, underY - 96);
+      art.fillStyle(0x75d4cd, 0.5);
+      art.fillRoundedRect(4250, underY - 112, 20, 16, 5);
+      // V: the repaired rear bogie on the brake branch — healthy, at rest.
+      art.lineStyle(5, 0x75d4cd, 0.55);
+      art.lineBetween(4180, underY - 44, 4180, bogieY - 34);
+      art.lineStyle(4, 0x607078, 0.9);
+      art.strokeCircle(4180, bogieY - 4, 26);
+      art.lineStyle(3, 0x53656d, 0.6); // released shoe hangs clear of the wheel
+      art.lineBetween(4214, bogieY - 26, 4214, bogieY + 10);
+      art.fillStyle(C(CAR.BRASS_MID), 0.85); // freed actuator, brass
+      art.fillRect(4228, bogieY - 34, 34, 14);
+      art.lineStyle(3, 0x8b9ba0, 0.8);
+      art.lineBetween(4206, bogieY - 27, 4228, bogieY - 27);
+      art.fillStyle(0x697980, 0.9); // service pin parked clear of the rod
+      art.fillRect(4196, bogieY - 30, 18, 5);
+      // IV path ends here: the brass zone stripe + ghost already ride above.
+      // The traction controller at the stand: junction box + cable entries.
+      art.fillStyle(0x263840, 1);
+      art.fillRect(standX - 30, underY - 96, 60, 74);
+      art.lineStyle(2, 0xcaa66b, 0.7);
+      art.strokeRect(standX - 30, underY - 96, 60, 74);
+      // Drive wheelset ring + rail under the spoke.
+      art.lineStyle(5, 0x607078, 0.9);
+      art.strokeCircle(driveX, bogieY - 6, 34);
+      art.lineStyle(4, 0x607078, 0.9);
+      art.lineBetween(driveX - 60, bogieY + 52, driveX + 60, bogieY + 52);
+    }
+    // Per-frame handle/window/lock redraw + contact glow.
+    const engageArt = stage.echoLoad ? this.track(scene.add.graphics(), 57) : null;
+    const echoContactGlow = stage.echoLoad && echoRailSpec
+      ? this.track(
+          scene.add.circle(
+            echoRailSpec.x0 + (echoRailSpec.x1 - echoRailSpec.x0) * 0.875,
+            bogieY + 46,
+            12,
+            0xf2d49a,
+            0,
           ).setBlendMode(Phaser.BlendModes.ADD),
           58,
         )
@@ -1277,9 +1579,24 @@ export default class TimetablePuzzle {
       axlePulse,
       drumKeyLabels,
       trolley,
+      trolleyRail,
+      trolleyWheelA,
+      trolleyWheelB,
+      trolleyBallastA,
+      trolleyBallastB,
+      trolleyBallastC,
+      trolleyHandle,
+      trolleyHandleGrip,
+      trolleyLock,
+      trolleyFollowers,
+      bogieDress,
+      bogieDressFront,
       suspensionBagFront,
       suspensionBagRear,
       bodyTilt,
+      equalizerArt,
+      driveAxleDrop,
+      driveContactGlow,
       testLamp,
       frontSpoke,
       rearSpoke,
@@ -1287,6 +1604,8 @@ export default class TimetablePuzzle {
       rearShoe,
       servicePin,
       actuatorPiston,
+      bogieServiceArt,
+      serviceGlows,
       echoRailBeam,
       echoZoneStripe,
       echoTrolleyCar,
@@ -1295,6 +1614,9 @@ export default class TimetablePuzzle {
       echoDriveSpoke,
       echoConditionLamps,
       echoWindowLamp,
+      convergenceArt,
+      engageArt,
+      echoContactGlow,
       couplerLeft,
       couplerRight,
       controlLink,
@@ -1305,13 +1627,22 @@ export default class TimetablePuzzle {
       // Phase IV spark origin: the drive (rear) bogie's wheel-rail contact.
       __driveWheelX: stage.weightTransfer ? center + 185 : undefined,
       __driveWheelY: stage.weightTransfer ? wheelY : undefined,
+      // Phase IV equalizer geometry (world coords), read by the per-frame
+      // equalizer redraw in refreshWeightTransferVisuals.
+      __bagFrontX: stage.weightTransfer ? stage.startX + 140 : undefined,
+      __bagRearX: stage.weightTransfer ? stage.endX - 190 : undefined,
+      __beamPivotY: stage.weightTransfer ? underY + 12 : undefined,
+      __driveAxleX: stage.weightTransfer ? secondWheelX : undefined,
       // Phase V shoe poses and pin travel (world x), read by refreshBogieVisuals.
+      // The pin's parked/seated positions now sit ON the actuator linkage
+      // (VISIBLE SYSTEM ARC CORRECTION §3): parked clear of the guide at
+      // 3740, driven through the guide and barring the rod at 3778.
       __frontShoeOn: stage.bogieService ? frontBogieX + 44 : undefined,
       __frontShoeOff: stage.bogieService ? frontBogieX + 58 : undefined,
       __rearShoeOn: stage.bogieService ? rearBogieX + 44 : undefined,
       __rearShoeOff: stage.bogieService ? rearBogieX + 58 : undefined,
-      __pinParkedX: stage.bogieService ? rearBogieX - 64 : undefined,
-      __pinSeatedX: stage.bogieService ? rearBogieX - 18 : undefined,
+      __pinParkedX: stage.bogieService ? 3740 : undefined,
+      __pinSeatedX: stage.bogieService ? 3778 : undefined,
       // Phase VI echo rail endpoints (world x), read by refreshEchoVisuals.
       __echoRailX0: echoRailSpec?.x0,
       __echoRailX1: echoRailSpec?.x1,
@@ -1496,6 +1827,10 @@ export default class TimetablePuzzle {
       if (!phase) return null;
       const snap = phase.snapshot();
       if (snap.stageComplete) return null;
+      // The handle is mechanically barred for the whole first observation
+      // loop: no prompt, no offer. The rhythm must be WATCHED once before
+      // the stand answers (VISIBLE SYSTEM ARC CORRECTION §4).
+      if (snap.observationLoop) return null;
       return snap.motor.energized
         ? ECHO_LOAD_PROMPTS.testOn
         : ECHO_LOAD_PROMPTS.testOff;
@@ -2625,7 +2960,10 @@ export default class TimetablePuzzle {
     if (stage.solution.some((command) => ['power', 'door'].includes(command))) {
       machinery.powerLamp.setFillStyle(0x75d4cd, 1).setScale(1.12);
     }
-    if (machinery.trolley) machinery.trolley.setX(machinery.initialTrolleyX + 146);
+    if (machinery.trolley) {
+      machinery.trolley.setX(machinery.initialTrolleyX + 146);
+      machinery.trolleyFollowers?.forEach(([part, dx]) => part?.setX(machinery.initialTrolleyX + 146 + dx));
+    }
     if (machinery.couplerLeft && stage.solution.includes('couple')) {
       machinery.couplerLeft.setX(machinery.initialCouplerLeftX - 34);
       machinery.couplerRight.setX(machinery.initialCouplerRightX + 34);
@@ -2776,7 +3114,10 @@ export default class TimetablePuzzle {
     machinery.wheelSpokeLeft?.setAngle(0);
     machinery.wheelSpokeRight?.setAngle(0);
     machinery.axlePulse?.setAlpha(0.08).setScale(1);
-    if (machinery.trolley) machinery.trolley.setX(machinery.initialTrolleyX);
+    if (machinery.trolley) {
+      machinery.trolley.setX(machinery.initialTrolleyX);
+      machinery.trolleyFollowers?.forEach(([part, dx]) => part?.setX(machinery.initialTrolleyX + dx));
+    }
     if (machinery.couplerLeft) {
       machinery.couplerLeft.setX(machinery.initialCouplerLeftX);
       machinery.couplerRight.setX(machinery.initialCouplerRightX);
@@ -3241,9 +3582,11 @@ export default class TimetablePuzzle {
     if (machinery.trolley) {
       machinery.trolley.setX(trolleyWorldX);
       machinery.trolley.setFillStyle(
-        snap.grabbed ? C(CAR.BRASS_MID) : 0x28353c,
+        snap.grabbed ? C(CAR.BRASS_MID) : 0x3a4a52,
         1,
       );
+      // Rails stay put; the maintenance trolley's parts ride the chassis.
+      machinery.trolleyFollowers?.forEach(([part, dx]) => part?.setX(trolleyWorldX + dx));
     }
     // The proximity target follows the moving counterweight.
     if (!this._trolleyDevice) {
@@ -3256,18 +3599,77 @@ export default class TimetablePuzzle {
     }
     if (this._trolleyDevice) this._trolleyDevice.sprite.setX(trolleyWorldX);
 
-    // Air springs: the bags inflate with branch pressure, and the car floor
-    // line tilts with the load split. THIS is the load gauge — the dial is
-    // only corroboration.
+    // Air springs + EQUALIZER BEAM (VISIBLE SYSTEM ARC CORRECTION §2): each
+    // bag carries its own side of the load split — the drive-side bag
+    // compresses as the counterweight walks home, the far side unloads. The
+    // equalizer beam pivots on its central fulcrum with the same split, its
+    // link rods press the drive bag AND the drive axlebox (which sinks), and
+    // the wheel-rail contact glows. THIS is the load gauge — the dial is
+    // only corroboration, and no arrows or labels stand in for the motion.
     const health = snap.suspensionHealth;
-    [machinery.suspensionBagFront, machinery.suspensionBagRear].forEach((bag) => {
+    const rearLoad = Phaser.Math.Clamp(snap.motor.axleLoad.rear ?? 0, 0, 1);
+    const frontLoad = Phaser.Math.Clamp(snap.motor.axleLoad.front ?? 0, 0, 1);
+    [
+      [machinery.suspensionBagFront, frontLoad],
+      [machinery.suspensionBagRear, rearLoad],
+    ].forEach(([bag, sideLoad]) => {
       if (!bag) return;
-      bag.setScale(1, 0.3 + health * 0.7);
+      bag.setScale(1, (0.3 + health * 0.7) * (1 - 0.3 * sideLoad));
       bag.setFillStyle(
         snap.suspension.venting ? C(CAR.LAMP_ALERT) : 0x43545b,
         0.92,
       );
     });
+    if (machinery.equalizerArt) {
+      const art = machinery.equalizerArt;
+      const pivotX = (machinery.__bagFrontX + machinery.__bagRearX) / 2;
+      const pivotY = machinery.__beamPivotY;
+      const half = (machinery.__bagRearX - machinery.__bagFrontX) / 2 - 8;
+      // The load split is narrow by design (the frozen motor caps it near
+      // ±0.2), so the beam amplifies it into an unmistakable rock: ±0.2 of
+      // split reads as ~6° at the pivot — the whole room can see which end
+      // the counterweight is pressing down.
+      const ang = (rearLoad - frontLoad) * 0.55;
+      const cosA = Math.cos(ang);
+      const sinA = Math.sin(ang);
+      const leftEnd = { x: pivotX - half * cosA, y: pivotY - half * sinA };
+      const rightEnd = { x: pivotX + half * cosA, y: pivotY + half * sinA };
+      const sink = rearLoad * 9;
+      art.clear();
+      // Fulcrum: an unmistakable central pivot the beam rocks on.
+      art.fillStyle(0x2a3940, 1);
+      art.fillTriangle(pivotX - 19, pivotY + 34, pivotX + 19, pivotY + 34, pivotX, pivotY + 2);
+      art.lineStyle(2, 0xc1c9c6, 0.85);
+      art.strokeTriangle(pivotX - 19, pivotY + 34, pivotX + 19, pivotY + 34, pivotX, pivotY + 2);
+      // The beam itself: heavy steel body, brass top edge.
+      art.lineStyle(12, 0x53656d, 1);
+      art.lineBetween(leftEnd.x, leftEnd.y, rightEnd.x, rightEnd.y);
+      art.lineStyle(3, C(CAR.BRASS_MID), 0.95);
+      art.lineBetween(leftEnd.x, leftEnd.y - 6, rightEnd.x, rightEnd.y - 6);
+      art.fillStyle(C(CAR.BRASS_HI), 1);
+      art.fillCircle(pivotX, pivotY, 5);
+      // Link rods: beam ends -> both air-spring seats, and the drive-side
+      // rod continuing down to the sinking drive axlebox.
+      art.lineStyle(4, 0x53656d, 0.95);
+      art.lineBetween(leftEnd.x, leftEnd.y, machinery.__bagFrontX, pivotY + 14);
+      art.lineBetween(rightEnd.x, rightEnd.y, machinery.__bagRearX, pivotY + 14);
+      art.lineBetween(rightEnd.x, rightEnd.y, machinery.__driveAxleX, machinery.__driveWheelY - 23 + sink);
+      // Drive axle sink: the axlebox overlay and the wheel spoke drop with
+      // the load; the rail stays put, so the wheel visibly presses INTO it.
+      if (machinery.driveAxleDrop) {
+        machinery.driveAxleDrop.setY(machinery.__driveWheelY - 7 + sink);
+        machinery.driveAxleDrop.setStrokeStyle(2, sink > 1 ? C(CAR.BRASS_MID) : 0x91a3a9, 0.75);
+      }
+      if (machinery.wheelSpokeRight) {
+        machinery.wheelSpokeRight.setY(machinery.__driveWheelY + sink);
+      }
+      if (machinery.driveContactGlow) {
+        const biting = snap.motor.wheelState === 'biting';
+        machinery.driveContactGlow.setAlpha(
+          Phaser.Math.Clamp(0.06 + rearLoad * 0.5 + (biting ? 0.35 : 0), 0, 0.95) * (health > 0.05 ? 1 : 0.25),
+        );
+      }
+    }
     if (machinery.bodyTilt) {
       const split = snap.motor.axleLoad.rear - snap.motor.axleLoad.front;
       machinery.bodyTilt.setAngle(split * 4.5);
@@ -3311,25 +3713,6 @@ export default class TimetablePuzzle {
       machinery.axlePulse.setAlpha(
         wheelState === 'biting' ? 0.5 : wheelState === 'spinning' ? 0.14 : 0.08,
       );
-    }
-    if (snap.motor.wheelState === 'spinning' && machinery.__driveWheelX) {
-      if (!this._slipSparkUntil || scene.time.now > this._slipSparkUntil) {
-        this._slipSparkUntil = scene.time.now + 110;
-        const spark = this.track(
-          scene.add
-            .circle(machinery.__driveWheelX + 14, machinery.__driveWheelY + 46, 2.5, C(CAR.BRASS_HI), 0.85)
-            .setBlendMode(Phaser.BlendModes.ADD),
-          59,
-        );
-        scene.tweens.add({
-          targets: spark,
-          x: spark.x + Phaser.Math.Between(-26, 26),
-          y: spark.y - Phaser.Math.Between(6, 20),
-          alpha: 0,
-          duration: 260,
-          onComplete: () => spark.destroy(),
-        });
-      }
     }
   }
 
@@ -3391,14 +3774,60 @@ export default class TimetablePuzzle {
       suspensionHealth: transfer?.suspensionHealth ?? 1,
     });
     phase.drainEvents().forEach((evt) => this.handleBogieDiagnosisEvent(evt));
-    this.refreshBogieVisuals(phase.snapshot());
+    const bogieSnap = phase.snapshot();
+    this.refreshBogieVisuals(bogieSnap);
+
+    // After isolation the trapped air has exactly one way out: small flow
+    // pulses run down the local line toward the bleed wheel until the line
+    // is flat (VISIBLE SYSTEM ARC CORRECTION §3 — the pipe, not a paragraph,
+    // points at the next device).
+    this._bogieFlowCooldown = (this._bogieFlowCooldown ?? 0) - delta;
+    if (bogieSnap.brake.isolated && bogieSnap.brake.pressure > 3 && this._bogieFlowCooldown <= 0) {
+      this._bogieFlowCooldown = 380;
+      this.spawnBogieFlowPulse();
+    }
+  }
+
+  // One pulse of trapped air travelling the isolated local line: riser down,
+  // along the low run, then out of the bleed wheel's downward exhaust stub.
+  spawnBogieFlowPulse() {
+    const { scene } = this;
+    const pulse = this.track(
+      scene.add.circle(3580, 655, 4, 0x9fb7c0, 0.85).setBlendMode(Phaser.BlendModes.ADD),
+      59,
+    );
+    scene.tweens.add({
+      targets: pulse,
+      y: 800,
+      duration: 260,
+      ease: 'Sine.easeIn',
+      onComplete: () => {
+        scene.tweens.add({
+          targets: pulse,
+          x: 3664,
+          duration: 180,
+          ease: 'Sine.easeInOut',
+          onComplete: () => {
+            scene.tweens.add({
+              targets: pulse,
+              y: 838,
+              alpha: 0,
+              scale: 1.8,
+              duration: 220,
+              ease: 'Quad.easeOut',
+              onComplete: () => pulse.destroy(),
+            });
+          },
+        });
+      },
+    });
   }
 
   operateBogieService(interactable) {
     const { scene } = this;
     const puzzle = scene.tutorialPuzzle;
     const phase = puzzle.bogieDiagnosis;
-    if (!phase || this.bogieQaFreeze) return;
+    if (!phase || this.bogieQaFreeze || this._bogieObserving) return;
     const command = interactable.def.command;
     scene.player.playInteraction();
     if (command === 'brake-vent') {
@@ -3429,6 +3858,15 @@ export default class TimetablePuzzle {
         );
       }
       sfx.lever();
+      // VISIBLE SYSTEM ARC CORRECTION §3: the FIRST test gets a short,
+      // automatic observation beat — the camera frames both bogies while the
+      // current pulse reaches the healthy wheelset and DIES at the seized
+      // actuator, the brake shoe still clamped. Then the camera hands the
+      // room back. Later tests stay fully player-owned.
+      if (evt.type === 'test-energized' && !this._bogieFirstTestSeen) {
+        this._bogieFirstTestSeen = true;
+        this.runBogieContradictionObserve();
+      }
       return;
     }
     if (evt.type === 'brake-branch-isolated' || evt.type === 'brake-branch-restored') {
@@ -3484,6 +3922,108 @@ export default class TimetablePuzzle {
     }
   }
 
+  // First-TEST observation beat (VISIBLE SYSTEM ARC CORRECTION §3): a short
+  // automatic framing of the mechanical contradiction. The camera pans to
+  // hold BOTH bogies, the test pulse runs the bench cables, the front
+  // wheelset answers, the rear pulse dies at the seized actuator with the
+  // shoe still clamped — then the room is handed back. ~2.9s total; input
+  // is fenced by _bogieObserving so a reflex second E cannot cut the motor
+  // mid-beat.
+  runBogieContradictionObserve() {
+    const { scene } = this;
+    const camera = scene.cameras.main;
+    this._bogieObserving = true;
+    scene.tutorialCameraCinematic = true;
+    scene.player.frozen = true;
+    scene.player.setVelocity(0, 0);
+    camera.stopFollow();
+    camera.pan(3550, 700, 460, 'Sine.easeInOut', true, (cam, progress) => {
+      if (progress < 1) return;
+      this.spawnBogieTestPulses();
+      scene.time.delayedCall(2100, () => {
+        camera.pan(scene.player.x, 430, 420, 'Sine.easeInOut', true, (cam2, progress2) => {
+          if (progress2 < 1) return;
+          camera.startFollow(scene.player, true, 0.075, 0.11, 0, 150);
+          camera.setDeadzone(220, 170);
+          scene.tutorialCameraCinematic = false;
+          scene.player.frozen = false;
+          this._bogieObserving = false;
+        });
+      });
+    });
+  }
+
+  // The evidence itself: one pulse down each motor cable. The front pulse
+  // arrives and the healthy wheelset turns (the steady-state refresh owns
+  // the spin); the rear pulse travels on — and STOPS at the seized actuator,
+  // where the clamped shoe flashes once. Nothing narrates it.
+  spawnBogieTestPulses() {
+    const { scene } = this;
+    const bench = { x: 3500, y: 715 };
+    const front = this.track(
+      scene.add.circle(bench.x - 14, bench.y, 5, 0xe8d5a7, 0.95).setBlendMode(Phaser.BlendModes.ADD),
+      60,
+    );
+    scene.tweens.add({
+      targets: front,
+      x: 3300,
+      y: 749,
+      duration: 520,
+      ease: 'Sine.easeIn',
+      onComplete: () => {
+        scene.tweens.add({
+          targets: front,
+          alpha: 0,
+          scale: 2.2,
+          duration: 260,
+          onComplete: () => front.destroy(),
+        });
+      },
+    });
+    const rear = this.track(
+      scene.add.circle(bench.x + 14, bench.y, 5, 0xe8d5a7, 0.95).setBlendMode(Phaser.BlendModes.ADD),
+      60,
+    );
+    scene.tweens.add({
+      targets: rear,
+      x: 3700,
+      y: 749,
+      duration: 640,
+      ease: 'Sine.easeIn',
+      onComplete: () => {
+        // The pulse keeps looking for the brake path — and dies at the
+        // seized actuator, short of the wheel.
+        scene.tweens.add({
+          targets: rear,
+          x: 3836,
+          y: 728,
+          duration: 420,
+          ease: 'Sine.easeInOut',
+          onComplete: () => {
+            sfx.blocked();
+            const machinery = this.stageAssemblies[BOGIE_SERVICE_STAGE_INDEX]?.machinery;
+            if (machinery?.rearShoe) {
+              scene.tweens.add({
+                targets: machinery.rearShoe,
+                alpha: 0.25,
+                duration: 130,
+                yoyo: true,
+                repeat: 2,
+              });
+            }
+            scene.tweens.add({
+              targets: rear,
+              alpha: 0,
+              scale: 0.4,
+              duration: 300,
+              onComplete: () => rear.destroy(),
+            });
+          },
+        });
+      },
+    });
+  }
+
   // Brake shoes, the service pin, wheel spokes and the line gauge all read
   // the same snapshot. The healthy bogie spins under TEST; the faulty one
   // stays dark until the chain is honestly repaired.
@@ -3492,6 +4032,28 @@ export default class TimetablePuzzle {
     const puzzle = scene.tutorialPuzzle;
     const machinery = this.stageAssemblies[puzzle.stageIndex]?.machinery;
     if (!machinery) return;
+
+    // VISIBLE SYSTEM ARC CORRECTION §3: the five generic floor-lever sprites
+    // are retired. Invisible anchors now sit ON the real devices, so the
+    // proximity pick and the [E] bubble land on the hardware itself.
+    if (!this._bogieDevicesAnchored) {
+      this._bogieDevicesAnchored = true;
+      const anchors = {
+        test: [3500, 700],
+        'brake-isolate': [3580, 650],
+        'brake-vent': [3660, 817],
+        'service-lock': [3775, 728],
+        repair: [3860, 703],
+      };
+      scene.interactables
+        .filter((it) => it.def.kind === 'bogie-service')
+        .forEach((it) => {
+          const anchor = anchors[it.def.command];
+          if (!anchor) return;
+          it.sprite.setVisible(false);
+          it.sprite.setPosition(anchor[0], anchor[1]);
+        });
+    }
 
     // The gauge corroborates the LOCAL brake line (faulty side).
     if (machinery.gaugeNeedle) {
@@ -3543,6 +4105,31 @@ export default class TimetablePuzzle {
       machinery.testLamp
         .setFillStyle(snap.motor.energized ? C(CAR.BRASS_HI) : 0x405159, 0.95)
         .setAlpha(snap.motor.energized ? 0.9 : 0.45);
+    }
+    // Progressive physical disclosure (VISIBLE SYSTEM ARC CORRECTION §3):
+    // only the next physically-meaningful device carries the light — the
+    // cutout cock while the line is live, the bleed wheel once isolated,
+    // the pin seat once flat, the access cover once locked. Everything else
+    // stays at ember level. No text ever lists the order.
+    if (machinery.serviceGlows) {
+      let focus = 'test';
+      if (this._bogieFirstTestSeen) {
+        focus = !snap.brake.isolated
+          ? 'isolate'
+          : snap.brake.pressure > 3
+            ? 'vent'
+            : !snap.rear.serviceLockEngaged
+              ? 'lock'
+              : !snap.rear.repaired
+                ? 'repair'
+                : null;
+      }
+      if (snap.stageComplete) focus = null;
+      const pulse = 0.42 + 0.26 * Math.sin(scene.time.now / 240);
+      Object.entries(machinery.serviceGlows).forEach(([key, glow]) => {
+        if (!glow) return;
+        glow.setAlpha(key === focus ? pulse : 0.08);
+      });
     }
   }
 
@@ -3602,7 +4189,84 @@ export default class TimetablePuzzle {
       suspensionHealth: transfer?.suspensionHealth ?? 1,
     });
     phase.drainEvents().forEach((evt) => this.handleEchoReplayEvent(evt));
-    this.refreshEchoVisuals(phase.snapshot());
+    const echoSnap = phase.snapshot();
+    this.refreshEchoVisuals(echoSnap);
+
+    // Early-engage feedback (VISIBLE SYSTEM ARC CORRECTION §4): energizing
+    // OUTSIDE the load window free-revs the drive wheel, and the rail says
+    // so — sparks at the contact patch, faster while the attempt is stale.
+    this._echoSparkCooldown = (this._echoSparkCooldown ?? 0) - delta;
+    if (echoSnap.motor.wheelState === 'spinning' && this._echoSparkCooldown <= 0) {
+      this._echoSparkCooldown = echoSnap.attempt === 'stale' ? 120 : 210;
+      this.spawnEchoWheelSpark();
+    }
+  }
+
+  // Free-rev sparks at the drive wheelset's rail contact (the VI twin of the
+  // Phase IV slip sparks): rate and brightness follow the wasted energy.
+  spawnEchoWheelSpark() {
+    const { scene } = this;
+    const machinery = this.stageAssemblies[ECHO_LOAD_STAGE_INDEX]?.machinery;
+    const x0 = machinery?.__echoRailX0 ?? 4060;
+    const x1 = machinery?.__echoRailX1 ?? 4740;
+    const originX = x0 + (x1 - x0) * 0.875;
+    const originY = 807; // drive wheel-rail contact (bogieY + 52)
+    const spark = this.track(
+      scene.add.rectangle(
+        originX + Phaser.Math.Between(-8, 8),
+        originY + Phaser.Math.Between(-3, 3),
+        Phaser.Math.Between(4, 9),
+        2,
+        C(CAR.BRASS_HI),
+        0.95,
+      ).setBlendMode(Phaser.BlendModes.ADD),
+      59,
+    );
+    scene.tweens.add({
+      targets: spark,
+      x: spark.x - Phaser.Math.Between(24, 60),
+      y: spark.y + Phaser.Math.Between(8, 26),
+      alpha: 0,
+      duration: Phaser.Math.Between(220, 420),
+      ease: 'Quad.easeIn',
+      onComplete: () => spark.destroy(),
+    });
+  }
+
+  // The bite proves the chain: current visibly runs the two repaired supply
+  // paths — the copper cable (II) and the cyan air run (III/V) — into the
+  // drive bogie at the moment the wheels catch.
+  spawnEchoConvergencePulses() {
+    const { scene } = this;
+    const machinery = this.stageAssemblies[ECHO_LOAD_STAGE_INDEX]?.machinery;
+    const x0 = machinery?.__echoRailX0 ?? 4060;
+    const x1 = machinery?.__echoRailX1 ?? 4740;
+    const driveX = x0 + (x1 - x0) * 0.875;
+    [
+      { y: 618, color: 0xcaa66b, dur: 700 }, // copper cable
+      { y: 650, color: 0x75d4cd, dur: 820 }, // cyan air run
+    ].forEach(({ y, color, dur }) => {
+      const pulse = this.track(
+        scene.add.circle(x0 - 14, y, 5, color, 0.95).setBlendMode(Phaser.BlendModes.ADD),
+        59,
+      );
+      scene.tweens.add({
+        targets: pulse,
+        x: driveX - 10,
+        y: y + (driveX - x0) * 0.28,
+        duration: dur,
+        ease: 'Sine.easeIn',
+        onComplete: () => {
+          scene.tweens.add({
+            targets: pulse,
+            alpha: 0,
+            scale: 2,
+            duration: 240,
+            onComplete: () => pulse.destroy(),
+          });
+        },
+      });
+    });
   }
 
   operateEchoLoad(interactable) {
@@ -3625,6 +4289,17 @@ export default class TimetablePuzzle {
         && it.def.kind === 'echo-load'
         && it.def.command === command,
     );
+    if (evt.type === 'loop-start') {
+      // The first completed loop retracts the handle's lock bar for good
+      // (VISIBLE SYSTEM ARC CORRECTION §4): one mechanical clunk on the
+      // stand, then the local [E] 接合牵引 prompt can appear.
+      if (evt.loopIndex === 1) {
+        sfx.door();
+        const device = findDevice('test');
+        if (device) scene.pulseTutorialDevice(device.sprite, CAR.LAMP_OK);
+      }
+      return;
+    }
     if (evt.type === 'test-energized') {
       // Energizing OUTSIDE the window flashes alert on the stand — the rhythm,
       // not the button, was wrong. Nothing is cleared; release and re-read.
@@ -3649,6 +4324,9 @@ export default class TimetablePuzzle {
     if (evt.type === 'bite-started') {
       sfx.press();
       scene.cameras.main.shake(70, 0.0018);
+      // The wheels caught: current visibly runs the repaired supply paths
+      // into the drive bogie (VISIBLE SYSTEM ARC CORRECTION §4).
+      this.spawnEchoConvergencePulses();
       return;
     }
     if (evt.type === 'bite-broken') {
@@ -3670,6 +4348,7 @@ export default class TimetablePuzzle {
     if (evt.type === 'departure-started') {
       sfx.checkpoint();
       scene.cameras.main.shake(220, 0.0032);
+      this.spawnEchoConvergencePulses();
       return;
     }
     if (evt.type === 'stage-complete') {
@@ -3725,21 +4404,72 @@ export default class TimetablePuzzle {
         biting ? 0.95 : 0.72,
       );
     }
-    // The condition strip reads the six-condition chain in fixed order:
-    // interlock, air path, brake sync (repaired systems — steady), then load
-    // and bite (the live rhythm). Dark red = a repaired system reports NOT
-    // ready; that should never happen in honest play.
-    machinery.echoConditionLamps?.forEach(({ key, lamp }) => {
-      const on = key === 'load'
-        ? snap.windowActive
-        : key === 'biting'
-          ? snap.conditions.biting
-          : snap.conditions[key];
-      lamp.setFillStyle(
-        on ? 0x75d4cd : ['interlock', 'airPath', 'synced'].includes(key) ? 0xe45a5f : 0x405159,
-        on ? 0.95 : 0.55,
+    // The five-lamp strip is gone (VISIBLE SYSTEM ARC CORRECTION §4). In its
+    // place: the departure stand's sprite is hidden and re-anchored onto the
+    // big engage handle, and the handle/window/lock are redrawn every frame
+    // from the live snapshot.
+    const stage = this.currentStage();
+    const standX = stage.echoLoad.machines.test.x;
+    if (!this._echoDevicesAnchored) {
+      this._echoDevicesAnchored = true;
+      scene.interactables
+        .filter((it) => it.def.kind === 'echo-load')
+        .forEach((it) => {
+          it.sprite.setVisible(false);
+          it.sprite.setPosition(standX, 690);
+        });
+    }
+    if (machinery.engageArt) {
+      const art = machinery.engageArt;
+      const standY = 690; // underY — the controller band
+      const pivot = { x: standX, y: standY + 12 };
+      art.clear();
+      // Handle slot plate under the controller.
+      art.fillStyle(0x17262d, 1);
+      art.fillRect(standX - 13, standY - 22, 26, 44);
+      art.lineStyle(2, 0x91a3a9, 0.7);
+      art.strokeRect(standX - 13, standY - 22, 26, 44);
+      // Mechanical window on the controller face: the shutter slides open
+      // while the echo's weight is over the drive axle — on EVERY loop, so
+      // loop 0 already teaches the rhythm.
+      art.lineStyle(2, 0x75d4cd, snap.windowActive ? 0.95 : 0.35);
+      art.strokeRect(standX - 22, standY - 78, 20, 12);
+      if (!snap.windowActive) {
+        art.fillStyle(0x2a3940, 0.95);
+        art.fillRect(standX - 22, standY - 78, 20, 12);
+      }
+      // The engage handle itself: a LONG throw lever — thrown toward the
+      // drive bogie while the line is energized, parked back while
+      // disengaged. Big enough to read across the whole band.
+      const engaged = snap.motor.energized;
+      const ang = engaged ? 0.68 : -0.68;
+      const hx = pivot.x + Math.sin(ang) * 54;
+      const hy = pivot.y - Math.cos(ang) * 54;
+      art.lineStyle(9, 0x9fb7c0, 1);
+      art.lineBetween(pivot.x, pivot.y, hx, hy);
+      art.fillStyle(engaged ? C(CAR.BRASS_HI) : 0x687981, 1);
+      art.fillCircle(hx, hy, 9);
+      art.lineStyle(2, 0x2a3940, 0.9);
+      art.strokeCircle(hx, hy, 9);
+      art.fillStyle(0x2a3940, 1);
+      art.fillCircle(pivot.x, pivot.y, 7);
+      // The lock bar: loop 0 keeps the handle mechanically barred even while
+      // the window opens; the first completed loop retracts it for good.
+      if (snap.observationLoop) {
+        art.fillStyle(0xe45a5f, 0.9);
+        art.fillRect(standX - 20, standY - 6, 40, 8);
+        art.lineStyle(2, 0xc1c9c6, 0.8);
+        art.strokeRect(standX - 20, standY - 6, 40, 8);
+      }
+    }
+    // Wheel-rail contact glow follows the live drive load and the bite.
+    if (machinery.echoContactGlow) {
+      const driveLoad = snap.motor.axleLoad[snap.motor.driveBogie] ?? 0;
+      const biting = snap.motor.wheelState === 'biting';
+      machinery.echoContactGlow.setAlpha(
+        Phaser.Math.Clamp(0.06 + driveLoad * 0.5 + (biting ? 0.35 : 0), 0, 0.95),
       );
-    });
+    }
     // The gauge corroborates the live drive-axle load against the bite line.
     if (machinery.gaugeNeedle) {
       const fraction = Phaser.Math.Clamp(snap.motor.axleLoad[snap.motor.driveBogie] ?? 0, 0, 1);

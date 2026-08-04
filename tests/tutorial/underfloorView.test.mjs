@@ -11,7 +11,7 @@ import {
   gateTutorialLaneInput,
   createUnderfloorHintState,
   updateUnderfloorHint,
-  UNDERFLOOR_HINT_DWELL_MS,
+  UNDERFLOOR_HINT_LOOK_MS,
 } from '../../src/tutorial/underfloorView.js';
 
 const III = { id: 'junction-3', startX: 1600, endX: 2390, underfloorView: true };
@@ -88,6 +88,10 @@ test('stage flag semantics: view flag alone never implies machinery layout', () 
 });
 
 // ------------------------------------------------------------ [S] hint ---
+// VISIBLE SYSTEM ARC CORRECTION §1: III/IV/V all show the same STRONG prompt
+// on zone entry (no 2800ms dwell, no weak mode); each stage's prompt retires
+// only after a genuine 300ms camera-down hold in THAT stage; VI never prompts
+// (its first loop is camera-led).
 const hintBase = {
   playerX: 1800,
   lookingDown: false,
@@ -97,42 +101,44 @@ const hintBase = {
   deltaMs: 100,
 };
 
-test('hint: III shows the strong prompt on first zone entry, once', () => {
+test('hint: III/IV/V all show the strong prompt immediately on zone entry', () => {
   const state = createUnderfloorHintState();
   assert.deepEqual(updateUnderfloorHint(state, { ...hintBase, stage: III }), { visible: true, style: 'strong' });
-  // Looking down retires it for the session.
-  assert.deepEqual(updateUnderfloorHint(state, { ...hintBase, stage: III, lookingDown: true }), { visible: false, style: null });
-  assert.equal(state.strongSeen, true);
-  assert.deepEqual(updateUnderfloorHint(state, { ...hintBase, stage: III }), { visible: false, style: null });
+  assert.deepEqual(updateUnderfloorHint(state, { ...hintBase, stage: IV, playerX: 2600 }), { visible: true, style: 'strong' });
+  assert.deepEqual(updateUnderfloorHint(state, { ...hintBase, stage: V, playerX: 3400 }), { visible: true, style: 'strong' });
 });
 
-test('hint: III prompt waits for the readable zone', () => {
+test('hint: prompt waits for the readable zone', () => {
   const state = createUnderfloorHintState();
   assert.deepEqual(updateUnderfloorHint(state, { ...hintBase, stage: III, playerX: 1620 }), { visible: false, style: null });
+  assert.deepEqual(updateUnderfloorHint(state, { ...hintBase, stage: IV, playerX: 2410 }), { visible: false, style: null });
+  assert.deepEqual(updateUnderfloorHint(state, { ...hintBase, stage: V, playerX: 3210 }), { visible: false, style: null });
 });
 
-test('hint: IV weak nudge only after dwelling, then retires forever', () => {
+test('hint: retirement needs a 300ms camera-down hold, per stage', () => {
   const state = createUnderfloorHintState();
   const atIv = { ...hintBase, stage: IV, playerX: 2600 };
-  // Before the dwell elapses: nothing.
-  for (let i = 0; i < UNDERFLOOR_HINT_DWELL_MS / 100 - 1; i += 1) {
-    assert.deepEqual(updateUnderfloorHint(state, atIv), { visible: false, style: null });
-  }
-  // Dwell reached: weak prompt.
-  assert.deepEqual(updateUnderfloorHint(state, atIv), { visible: true, style: 'weak' });
-  // Looking down retires it permanently.
+  // A tap shorter than the look threshold retires nothing.
   updateUnderfloorHint(state, { ...atIv, lookingDown: true });
-  assert.equal(state.weakSeen, true);
+  updateUnderfloorHint(state, { ...atIv, lookingDown: false });
+  assert.deepEqual(updateUnderfloorHint(state, atIv), { visible: true, style: 'strong' });
+  // A genuine hold (3 x 100ms with the camera down) retires IV's prompt.
+  for (let i = 0; i < UNDERFLOOR_HINT_LOOK_MS / 100; i += 1) {
+    updateUnderfloorHint(state, { ...atIv, lookingDown: true });
+  }
   assert.deepEqual(updateUnderfloorHint(state, atIv), { visible: false, style: null });
+  // ...but V still teaches the verb in its own room.
+  assert.deepEqual(updateUnderfloorHint(state, { ...hintBase, stage: V, playerX: 3400 }), { visible: true, style: 'strong' });
 });
 
-test('hint: IV dwell resets when the player leaves the zone', () => {
+test('hint: a released hold resets the earned look-down time', () => {
   const state = createUnderfloorHintState();
-  const atIv = { ...hintBase, stage: IV, playerX: 2600 };
-  for (let i = 0; i < 20; i += 1) updateUnderfloorHint(state, atIv);
-  assert.equal(state.dwellMs, 2000);
-  updateUnderfloorHint(state, { ...atIv, playerX: 2410 });
-  assert.equal(state.dwellMs, 0);
+  const atIii = { ...hintBase, stage: III };
+  updateUnderfloorHint(state, { ...atIii, lookingDown: true }); // 100ms earned
+  updateUnderfloorHint(state, { ...atIii, lookingDown: true }); // 200ms earned
+  updateUnderfloorHint(state, { ...atIii, lookingDown: false }); // reset
+  assert.equal(state.lookMs, 0);
+  assert.deepEqual(updateUnderfloorHint(state, atIii), { visible: true, style: 'strong' });
 });
 
 test('hint: never during cinematic, close-up, or after stage complete', () => {
@@ -142,8 +148,9 @@ test('hint: never during cinematic, close-up, or after stage complete', () => {
   assert.deepEqual(updateUnderfloorHint(state, { ...hintBase, stage: III, stageComplete: true }), { visible: false, style: null });
 });
 
-test('hint: V/VI and plain stages never prompt (verb already learned)', () => {
+test('hint: VI and plain stages never prompt (VI is camera-led)', () => {
   const state = createUnderfloorHintState();
-  assert.deepEqual(updateUnderfloorHint(state, { ...hintBase, stage: V, playerX: 3400 }), { visible: false, style: null });
+  const VI = { id: 'junction-6', startX: 4000, endX: 4790, underfloor: true, echoLoad: {} };
+  assert.deepEqual(updateUnderfloorHint(state, { ...hintBase, stage: VI, playerX: 4200 }), { visible: false, style: null });
   assert.deepEqual(updateUnderfloorHint(state, { ...hintBase, stage: II, playerX: 1200 }), { visible: false, style: null });
 });

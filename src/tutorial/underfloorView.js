@@ -54,21 +54,30 @@ export function gateTutorialLaneInput({ activeWorldIndex, laneBack, laneFront })
 }
 
 // ---------------------------------------------------------------- hint ---
-// [S] chevron prompt, screen-anchored. III teaches the verb once, strongly,
-// the first time the player enters the readable zone; IV assumes the verb is
-// known and only offers a weak nudge after the player has stood in the zone
-// ~3s without looking. V/VI carry no prompt (learned by then). The prompt
-// never appears during cinematics, the relay close-up, or after the stage is
-// complete, and looking down retires it for the rest of the session.
+// [HOLD S] prompt, screen-anchored (VISIBLE SYSTEM ARC CORRECTION §1). The
+// weak/dwell model is abolished: III, IV and V ALL show the same strong
+// prompt the moment the player steps into the underfloor readable zone —
+// a first-time player cannot be expected to remember a verb taught two rooms
+// ago, and a 2800ms dwell only read as "the game has nothing to say". VI
+// carries no prompt at all: its first observation loop drives the camera for
+// the player (GameScene auto follow of the echo trolley).
+//
+// Retirement is earned, not timed: the prompt for a stage only leaves once
+// the player has genuinely held S and kept the camera visibly tilted down
+// for UNDERFLOOR_HINT_LOOK_MS in that stage. Each stage retires its own
+// prompt (the correction's "本阶段提示才永久退场"), so IV and V re-teach the
+// verb even after III taught it. The prompt never appears during cinematics,
+// the relay close-up, or after the stage is complete.
 
-export const UNDERFLOOR_HINT_DWELL_MS = 2800;
+export const UNDERFLOOR_HINT_LOOK_MS = 300;
 
 export function createUnderfloorHintState() {
-  return { strongSeen: false, weakSeen: false, dwellMs: 0 };
+  return { retiredByStage: {}, lookMs: 0, activeStageId: null };
 }
 
-// One call per frame. Mutates `state` (dwell accumulation, seen flags) and
-// returns what the scene should show: { visible, style: 'strong'|'weak'|null }.
+// One call per frame. Mutates `state` (look-down accumulation, per-stage
+// retirement) and returns what the scene should show:
+// { visible, style: 'strong'|null }. 'weak' no longer exists.
 export function updateUnderfloorHint(state, {
   stage,
   playerX,
@@ -81,31 +90,33 @@ export function updateUnderfloorHint(state, {
   const hidden = { visible: false, style: null };
   if (!stage || cinematic || relayCloseup || stageComplete) return hidden;
 
-  // III: strong, first zone entry only, retired by one successful look-down.
-  if (stage.underfloorView && !stage.underfloor) {
-    if (state.strongSeen) return hidden;
-    if (lookingDown) {
-      state.strongSeen = true;
+  // VI (echoLoad) and every non-underfloor stage: no prompt. VI's first loop
+  // is camera-led, so teaching the key there would be redundant noise.
+  if (!stageHasUnderfloorView(stage) || stage.echoLoad) return hidden;
+
+  const stageId = stage.id ?? String(stage.startX);
+  if (state.activeStageId !== stageId) {
+    // Entering a new stage's zone re-arms the look-down timer; the retirement
+    // record itself is per stage and survives the switch.
+    state.activeStageId = stageId;
+    state.lookMs = 0;
+  }
+  if (state.retiredByStage[stageId]) return hidden;
+
+  // A real look-down: the key is held AND the camera has tilted (the scene
+  // only reports lookingDown once the resolve gate passes). Accumulate only
+  // while it stays down; releasing resets the earned time.
+  if (lookingDown) {
+    state.lookMs += Math.max(0, deltaMs ?? 0);
+    if (state.lookMs >= UNDERFLOOR_HINT_LOOK_MS) {
+      state.retiredByStage[stageId] = true;
       return hidden;
     }
-    return playerX > stage.startX + 90 ? { visible: true, style: 'strong' } : hidden;
+    // Keep the prompt on screen during the first earned look-downs — it is
+    // the instruction being followed, disappearing mid-gesture reads as a bug.
+  } else {
+    state.lookMs = 0;
   }
 
-  // IV: weak nudge after dwelling in the zone without looking down.
-  if (stage.underfloorView && stage.underfloor) {
-    if (state.weakSeen) return hidden;
-    if (lookingDown) {
-      state.weakSeen = true;
-      return hidden;
-    }
-    if (playerX > stage.startX + 90) {
-      state.dwellMs += deltaMs;
-    } else {
-      state.dwellMs = 0;
-    }
-    return state.dwellMs >= UNDERFLOOR_HINT_DWELL_MS ? { visible: true, style: 'weak' } : hidden;
-  }
-
-  // V/VI and every non-underfloor stage: no prompt.
-  return hidden;
+  return playerX > stage.startX + 90 ? { visible: true, style: 'strong' } : hidden;
 }

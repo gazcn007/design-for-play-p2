@@ -348,15 +348,17 @@ export const LEVEL = {
         commands: ['level-drain', 'level-supply', 'trolley', 'test'],
         layout: [2560, 2660, 2480, 2900],
       },
-      // Stage 4 (junction-5) service devices, in spatial order along the
-      // faulty bogie's local brake line: the shared TEST stand first (the
-      // contradiction must be SEEN before anything is stripped), then the
-      // cutout cock, the bleed wheel, the service pin bracket and the
-      // actuator access. The healthy bogie carries no cocks at all.
+      // Stage 4 (junction-5) service devices, mounted ON the hardware of the
+      // two-bogie diagnostic space (VISIBLE SYSTEM ARC CORRECTION §3): the
+      // shared TEST bench BETWEEN the bogies, the cutout cock on the rear
+      // bogie's local brake supply riser, the bleed wheel at that pipe's
+      // lowest point, the service pin at its guide on the actuator linkage
+      // and the seized actuator's access cover. The healthy bogie carries no
+      // cocks at all.
       {
         stage: 4,
         commands: ['test', 'brake-isolate', 'brake-vent', 'service-lock', 'repair'],
-        layout: [3350, 3560, 3660, 3760, 3860],
+        layout: [3500, 3580, 3660, 3775, 3860],
       },
       // Stage 5 (junction-6): the departure test stand only. The past self
       // re-rides the Phase IV counterweight trace below the floor; the
