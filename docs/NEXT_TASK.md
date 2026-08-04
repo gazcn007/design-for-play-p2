@@ -2,140 +2,349 @@
 
 Status: `READY`
 
-Task: Fix the completion-cinematic void under sections I–IV (Phase 1, task 2 of 5)
+Owner: `penguin`
 
-Plan context: [PROLOGUE_V_VI_REDESIGN.md](PROLOGUE_V_VI_REDESIGN.md) sections 五
-and 六. Task 1 (game-feel and presentation pass) is complete and accepted.
+Base: `georgezboa/design-for-play-p2`, branch
+`codex/playable-train-prologue`, at or after commit `19cf96b`
 
-Note: the Chapter One `THE SAFETY TEST` interaction decision is still open and
-still owned by the product lead, recorded in [PRODUCT_STATE.md](PRODUCT_STATE.md)
-under "Current product gap". It does not block this task.
+Task: Chapter One cyberpunk parkour vertical slice
 
-## Player-facing problem
+## Product decision
 
-Every time a section is completed, the camera freezes play and pans down to the
-machinery. During that pan the player sees an empty black band where the rest of
-the train's underside should be, which breaks the illusion that the train is one
-continuous physical place.
+The product lead approves the teammate-authored cyberpunk direction shown in
+the 2026-08-03 prototype. Keep the neon industrial exterior and make its
+horizontal traversal mechanics playable. This task supersedes Chapter One's
+earlier `The Proctor` / AI-apocalypse direction.
 
-## Root cause (already diagnosed — do not re-investigate)
-
-Nothing is being hidden. The geometry was never drawn. Three compounding causes:
-
-1. The entire under-car bay — bay box, bogie frame, wheelsets, brake shoes, coil
-   springs, air reservoir, brake pipe, traction motor, coupler — is gated behind
-   `if (stage.underfloor)` at `src/art/tutorialTrainRoomsArt.js:144`, drawing into
-   `y = 600..886`. Only stages 5 and 6 set `underfloor: true` in `src/level.js`.
-   Sections I–IV have no geometry below y=600; the room shell stops at y=600
-   (`tutorialTrainRoomsArt.js:51,54`).
-2. `src/scenes/GameScene.js:1897` sets `const machineY = stage.underfloor ? 720 : 548;`
-   Camera bounds are 900 tall with a 600 viewport, so panning to y=720 clamps
-   scrollY to 300 and frames world band y=300..900 — whose lower half is unpainted
-   void for non-underfloor sections.
-3. The completion vignette tweens to alpha 0.94 (`GameScene.js:1041-1046`). It is
-   `setScrollFactor(0)`, depth 70, above all world objects (max world depth 61),
-   and near-opaque at frame edges, so neighbouring sections are crushed to black
-   exactly when the player looks at them.
-
-Also contributing: the foreground silhouette strip at `GameScene.js:226` is solid
-`0x05070b`, `scrollFactor(0)`, depth 45. It does not move when the camera pans, so
-it permanently occludes screen rows 526-600 for depth ≤44 content.
-
-Already ruled out — do not spend time here: the "removed permanent offscreen
-tweens" performance fix (`setCompletedMachinery` at `TimetablePuzzle.js:1226-1264`
-only calls `killTweensOf` then re-asserts static poses, touching no visibility);
-SERVICE SET dimming (implemented via alpha, not visibility; completed sections
-keep `roomPresent === true` at `TimetablePuzzle.js:1539`); Phaser culling (no cull
-API anywhere in `src/`); masks/crops (none); camera-parented room art
-(`tutorialTrainRoomsArt.js:23` forces `setScrollFactor(1)`).
+This approval applies to Chapter One only. It does not turn every later car
+into a left-to-right 2D platformer and does not authorize changes to the frozen
+Prologue or the isolated present-city Car 03 slice.
 
 ## Player outcome
 
-When the camera pans down after completing any section, the player sees a
-continuous train underside running the length of the car, with previously
-completed sections' machinery still legible in their final state.
+Starting at the left side of the cyberpunk space, the player learns that ladders
+and blocks can be dragged horizontally to build a route, uses at least one
+autonomous flying car as a moving platform, and reaches the goal balcony on the
+right. Failure and reset are understandable without leaving stale collision or
+object state behind.
 
 ## In scope
 
-- **Continuous service layer for every section.** Extend
-  `tutorialTrainRoomsArt.js:144` so all six sections have under-car structure
-  below y=600. Sections I–IV do not need full bogie detail — they need continuous,
-  physically plausible car-body understructure (floor beams, frame rails, conduit,
-  shadow) so the band is never empty. Sections V and VI keep their full detail.
-- **Reconcile the pan target with real geometry.** Replace the
-  `stage.underfloor ? 720 : 548` ternary at `GameScene.js:1897` so the pan target
-  derives from the section's actual machinery position (`underY`, currently 548 at
-  `TimetablePuzzle.js:359`) rather than a boolean. The pan must always frame real
-  geometry for every section.
-- **Vignette during the completion move.** Lower the peak alpha from 0.94
-  (`GameScene.js:1041-1046`) to a value that still focuses attention without
-  crushing the neighbouring sections to black. Judge this visually.
-- **Foreground strip during the pan.** Either fade it out for the duration of the
-  completion move, or make it world-space so it travels with the camera. Pick
-  whichever preserves the existing look at rest.
+- Preserve the prototype's approved cyberpunk visual identity and extend it
+  only as needed to make one coherent start-to-goal route.
+- Implement horizontal click/touch dragging for ladders and movable blocks.
+  Dragging must have visible legal/illegal placement feedback, stay within the
+  authored bounds, and update collision when placement commits.
+- Implement autonomous flying-car platforms with readable travel paths. The
+  player can stand on and ride them without sliding through, teleporting, or
+  being stranded by routine timing.
+- Include the hazards already expressed by the prototype, including spikes or
+  falls, with a quick deterministic recovery.
+- Make the elevated goal balcony reachable only after using the taught movable
+  geometry and at least one flying-car platform.
+- Display concise controls for move, jump, drag, and reset. The environment must
+  teach the route before explanatory prose gives away the solution.
+- Wire the slice into the post-Prologue Chapter One hand-off. Do not require a
+  developer URL or QA-only warp for the normal playable route.
+- Expose drag state, movable-object positions, flying-car phase, player state,
+  failure/reset state, and goal completion through
+  `window.render_game_to_text()`.
+- Add deterministic automated coverage for placement bounds, collision updates,
+  flying-platform motion/riding, reset, and goal completion.
 
-## Out of scope
+## File ownership and integration boundary
 
-- Any change to puzzle logic, solutions, guidance tiers, tint hinting, time
-  windows, or stage data in `level.js`. Those are tasks 3–5.
-- The section V and VI mechanic redesigns (tasks 4 and 5).
-- Post-processing pipelines, bloom, chromatic aberration, grain.
-- Changing the material language, the period-motion vocabulary, or the art
-  direction of the existing bogie detail.
-- The `playPrologueDeparture` / `showPrologueTransition` hardcoded-delay coupling.
-- Chapter One content and the inherited combat prototype.
+- Prefer new implementation files under `src/cars/cyberpunkParkour/` and new
+  tests under `tests/chapterOne/`.
+- Minimal integration edits may be made to `src/main.js`, `src/scenes/GameScene.js`,
+  `src/story.js`, `src/level.js`, and `src/textures.js` when required to enter
+  and expose the slice.
+- Do not edit `src/tutorial/**`, `tests/tutorial/**`,
+  `src/cars/presentCity/**`, `tests/car03/**`, or `src/car03-main.js`.
+- Preserve all unrelated uncommitted work, including any existing
+  `package-lock.json` change. Do not discard, rewrite, or include it unless the
+  implementation itself proves a dependency update is necessary and the owner
+  explicitly approves that inclusion.
 
 ## Acceptance criteria
 
-- Completing each of the six sections shows a continuous train underside during
-  the pan, with no empty or unpainted band anywhere in frame.
-- Completed sections' machinery remains legible during the pan — dim, but readable
-  as machinery, not silhouette-black.
-- Sections V and VI lose no existing under-car detail.
-- At rest (normal play, no cinematic) the car looks unchanged from the current
-  build. Compare screenshots before and after at a mid-section standing position.
-- The completion camera grammar is preserved: freeze, descend to machinery,
-  machinery performs its action, rise to the partition.
-- All six sections still complete; the Prologue is playable start to finish
-  through the departure cinematic and the chapter card.
-- `window.render_game_to_text()` still matches visible state and still reports
-  camera center and completion-cinematic state. Add no new required fields.
-- FPS during the completion pan and the departure cinematic is no worse than the
-  current build. The last measurement was 107 FPS during departure. Report before
-  and after numbers.
+1. A fresh player can complete the normal route from the Chapter One entrance
+   to the goal balcony using ordinary controls.
+2. At least one ladder and one block can be repositioned horizontally; legal
+   placement changes the traversable route and illegal placement cannot produce
+   an unrecoverable state.
+3. At least one autonomous flying car is required and works as a stable moving
+   platform through its full route.
+4. Spikes/falls and `R` reset restore the player, movable geometry, collision,
+   and platform timing to the authored start state.
+5. The cyberpunk presentation remains confined to this car; the frozen Prologue
+   and Car 03 behavior and visuals remain unchanged.
+6. The visible state and `window.render_game_to_text()` agree at entrance,
+   during drag, on a moving car, after failure/reset, and at completion.
+7. No new browser console errors occur on the full start-to-goal route.
+
+## Required QA route
+
+1. Pull the named base branch and preserve unrelated local changes.
+2. Enter Chapter One through the normal Prologue hand-off.
+3. Verify legal and illegal drag attempts for both a ladder and a block.
+4. Complete a jump onto, ride on, and jump off an autonomous flying car.
+5. Trigger one spike/fall failure, reset, and confirm all authored state is
+   restored.
+6. Complete the route to the goal balcony and capture visible plus text-state
+   evidence at the five states named in acceptance criterion 6.
+7. Run `npm run assets:check`, the relevant automated tests,
+   `npm run build`, and `git diff --check`.
+
+## Out of scope
+
+- Reopening or polishing Prologue Phases I-VII.
+- Editing the Car 03 social-stealth vertical slice.
+- Applying the cyberpunk theme or horizontal-platformer structure to other cars.
+- Reintroducing `The Proctor`, generic combat progression, or a new story canon
+  inside this implementation task.
+
+---
+
+## Historical appendix: completed Section III handoff
+
+The remainder of this file is retained only as historical design context. It is
+not a second `READY` task and must not be reimplemented.
+
+Latest handoff (2026-08-03): Prologue Phases II–VI are frozen after continuous
+browser acceptance. The later III/IV undercarriage-view teaching wave is also
+frozen at 508/508 tests with both builds and diff checks green. Do not re-run
+the Section III task below as new work; it remains as historical design context.
+The next product work packages are Phase I (`PUNCH THE DOOR`) and Phase VII
+(Prologue exit / world-1 hand-off), which require their own bounded READY brief.
+See `docs/PROLOGUE_III_VI_EXECUTION_STATE.md` for the current authoritative log.
+
+Task: Section III `AIR LOCK` — pressure becomes a resource, and the room becomes
+a machine
+
+Supersedes the previous Living-Timetable task entirely. Design record:
+[SECTION_III_REDESIGN_AUDIT.md](SECTION_III_REDESIGN_AUDIT.md) and the
+`Accepted 2026-07-30 (revised)` section of [PRODUCT_STATE.md](PRODUCT_STATE.md).
+
+**The drum has 3 slots at 2200 ms. There is no slot dial and no 6-slot layout.**
+Every 6-slot reference in earlier drafts of this file is withdrawn; if any
+surviving doc mentions `BRAKE slot 0 / VENT slot 2 / DOOR slot 4`, sparse-vs-tight
+routes, or a `SLOT +1` control, that text is stale and this file wins.
+
+## Player-facing problem
+
+Two problems, both verified in code, not inferred:
+
+1. **The stage has zero real decisions.** `commands` and `solution` are both
+   `['brake','vent','door']`, three cards fill three slots, and
+   [drum.js:95](../src/tutorial/drum.js#L95) `causalBlocker` jams any other order
+   at the first misplaced slot. The worst walking leg leaves 0.70 s of slack, so
+   it is not a dexterity test either. The stage reduces to *remember the order,
+   then walk right*.
+2. **The causal rule is never delivered.** `stage.lesson` is never read anywhere
+   in `src/`. `guidance: 'machine'` has no consuming branch. `waitForHand: true`
+   at [level.js:160](../src/level.js#L160) is read by nothing despite a comment
+   calling it "the single change that makes the timing legible." Together with
+   the already-fixed `drum.waiting`, four fields were declared, argued for in a
+   comment, and never wired.
+
+The user's own verdict on the visuals: it reads as a black HUD panel pasted into
+the carriage, six equal buttons in a row express no physical causality, and the
+protagonist is smaller than the interface.
+
+## Player outcome
+
+The player should look at a pipe, a gauge and a latch, work out that the door is
+being physically held shut by trapped air, and then decide **how tightly to
+schedule the bleed against the door** — knowing that air creeps back. Two plans
+must be legal at different costs. Nothing may name the answer.
+
+## In scope
+
+### S1 — Replace boolean causality with a pressure value
+
+- `causalBlocker`'s boolean chain becomes a continuous pressure value on
+  `puzzle.drumMachine`, e.g. `pipePressure` in `0.0 – 1.0`.
+- BRAKE **traps** pressure (holds it high). VENT **bleeds** it toward 0. DOOR
+  unlatches only while pressure is **below `doorThreshold`**.
+- **Pressure creeps back up after a bleed.** Recovery reaches the threshold
+  again **3000 ms** after the bleed commits. This single number is what makes
+  slot spacing matter; it is not tunable decoration.
+- Actions remain **absolute-set, never toggle** — a re-run must not undo
+  progress. This constraint already holds in `applyDrumAction` and must survive.
+- `machineSatisfied` keeps reading the machine, never the cards.
+
+### S2 — The two decisions this creates
+
+Both must be reachable and both must be legal:
+
+- **Spacing.** VENT and DOOR in adjacent slots fires the door **1.5 s** after the
+  bleed commits (worst case: 0.32 s grace + 0.4 s hold consumed, then the
+  remainder of the slot), inside the 3.0 s window, with **0.38 s** of walking
+  slack over the 220 px VENT→DOOR leg at `speedWalk` 200. Leaving one slot empty
+  between them pushes the door to **3.7 s**, past the window: the latch refuses.
+- **Spending the third card on a second VENT** to widen the door window instead
+  of walking tight. This must work.
+
+Verify both by arithmetic before wiring art, and keep the numbers in a comment
+next to the constant.
+
+### S3 — Implement `waitForHand` or delete it
+
+No third option. If implemented: the slot stays lit and asks for the player's
+hand for the grace period; the pointer does **not** park (the drum keeps turning
+per the existing `ensureDrumState` comment). If that conflicts, delete the field
+and its comment. **A declared-but-unread field is a defect in this task.**
+
+### S4 — Visual reorganization (this is half the task, not polish)
+
+- **Delete the black rounded-rect panel.** The timetable becomes an **enamel
+  recess set into the carriage lining** with a brass bezel, flush with the wall,
+  below the window band. No pure black fills except unlit gaps.
+- **Separate the controls by mounting surface** so they stop reading as a
+  toolbar: BRAKE on a **floor-mounted cast bracket with visible bolts**, VENT a
+  **wall-mounted brass wheel**, DOOR a **latch at the carriage edge** with a
+  tungsten lamp above it. Vary their heights and silhouettes.
+- **One traceable brass air pipe** runs horizontally beneath the window band from
+  above BRAKE to the door latch, with vertical drops to each device. Pressure is
+  visible **travelling along it**. This pipe replaces the row of labels as the
+  carrier of causality.
+- **The gauge moves to eye level and becomes a continuous readout** of
+  `pipePressure` — not the current one-shot `angle: -52` tween. This is the
+  player's only pressure instrument and it must be legible at a glance.
+- **Delete the floating `[E] RUN TIMETABLE` tooltip.** The RUN lever carries its
+  own affordance.
+- **Lighten the protagonist's silhouette** to the dusk exterior mid-tone so he is
+  the brightest moving thing on screen. He remains the visual center and the only
+  directly controlled human.
+- Keep low-pixel. Warm brass and cream enamel against the muted dusk palette; no
+  glow or bloom — read tungsten as reflection on adjacent metal.
+
+### S5 — Failure legible from the machinery alone
+
+Three distinguishable failures, none named by text:
+
+| Failure | What the machine shows |
+| ------- | ---------------------- |
+| Never braked | Gauge needle stays low, shoe never clamps, valve turns but no hiss and the needle does not move |
+| Bled too briefly | Wheel stops mid-travel, needle drops partway then climbs back |
+| Reached the door late, or spaced the slots too far | Needle has visibly climbed back above the mark; the latch lifts a hand's width, holds, and drops with a clank |
+
+`FAIL_LINES[2]` stays `null`. No toast names the right order or the right slot.
+
+### S6 — Diagnostics and QA hooks
+
+`render_game_to_text()` must report, per frame: the three slot statuses and
+commands, `pipePressure`, `doorThreshold`, pointer/active slot, `drum.waiting`,
+hold state (`elapsed` / `required` / `grace`), player x, and per-device presence
+booleans. **Every field a visual reads must appear here**, so a state/visual
+mismatch is catchable without eyes on the screen.
+
+## Out of scope
+
+- **Sections I, II, IV, V, VI are not modified.** No changes to their stage data,
+  layout, solutions, guidance, or timing. Section II keeps `guideSequence`;
+  V and VI keep `pressureHold` and `echoGates`.
+- Rolling the pressure model out to any other section.
+- The pneumatic valve matrix and the airlock-programmer rewrite (candidates only).
+- A hand-pumped primer controlling drum speed — rejected as abstract time math.
+- Requiring presence for BRAKE. It stays the free teaching slot.
+- Removing the 70 px presence radius or the 0.4 s hold.
+- Surfacing `stage.lesson` as displayed text.
+- Any Godot work. `godot-porting` was consulted only to confirm this is in-engine
+  Phaser work; **do not start a migration.**
+- Paid asset generation. No budget is approved (see below).
+
+## Authoritative constants
+
+| Thing | Value |
+| ----- | ----- |
+| Slots | **3** |
+| Slot duration | 2200 ms |
+| Pressure recovery to threshold | **3000 ms** after a bleed commits |
+| Presence radius | 70 px (VENT, DOOR) |
+| VENT hold | 400 ms |
+| Reaction grace | 320 ms |
+| Walk speed budget | `MOVE.speedWalk` 200 — never budget against `speedRun` 310 |
+| Layout x | punch press 1690, RESET 1800, RUN 1900, BRAKE 1990, VENT 2110, DOOR 2330 |
+| Room | `startX` 1600, `endX` 2390 |
+| Hard ceiling | **Nothing at or past x=2378** (incomplete-stage guard resets the player there) |
+| Min control spacing | 90 px (62 px nearest-interactable pickup radius) |
+
+## Asset plan (no cost this round)
+
+Everything in S4 is buildable from Phaser primitives already used in
+[tutorialTrainRoomsArt.js](../src/art/tutorialTrainRoomsArt.js): rects for enamel
+panels and pipe runs, circles for rivets and the gauge bezel, lines for the
+filament and needle. `applyDrumAction` already drives `brakeShoe`, `bogie`,
+`ventValve`, `gaugeNeedle`, `doorLeaf`, and `powerLamp` — **no new machinery has
+to be invented.**
+
+No paid generation is approved. If a 16:9 image-to-image concept reference is
+wanted later, it needs a separate request naming model, per-call price, total cap,
+output path, and whether the result is concept reference or shippable asset.
+
+## Acceptance criteria
+
+1. Punching BRAKE / VENT / DOOR into adjacent slots and walking (never running)
+   completes the stage.
+2. Leaving a slot gap between VENT and DOOR **fails at the latch**, and the gauge
+   needle has visibly climbed before it does.
+3. Spending the third card on a second VENT is a legal alternative plan.
+4. A player who never finds the run key can complete the stage.
+5. Three failure modes are visually distinguishable per the S5 table, with no
+   text naming a cause.
+6. `FAIL_LINES[2]` remains `null`.
+7. No screen state depends on a field that nothing writes. **Grep every new field
+   for both a read site and a write site.**
+8. `waitForHand` is either implemented with a read site or deleted with its comment.
+9. No interactable at or past x=2378; all adjacent gaps ≥ 90 px.
+10. Deleting the `drum` field from `junction-3` restores the shared ordered-queue
+    path and the stage is still completable.
+11. Sections I, II, IV, V, VI behave identically to before — verified, not assumed.
+12. The protagonist is the brightest moving element; no control, label, or panel
+    occludes him or another control.
+13. `npm run build` clean.
 
 ## QA route
 
-1. `npm run assets:check` and `npm run build` clean; `git diff --check` clean.
-2. `npm run dev` (port 5180). Before changing anything, screenshot the completion
-   pan of section I and of section V for comparison.
-3. Complete section I. Confirm the downward pan shows continuous understructure,
-   no void band, and that section II's dormant room is still visible and legible.
-4. Repeat for sections II, III, and IV — these are the four that had no under-car
-   art at all and are the primary fix target.
-5. Complete section V and VI. Confirm the full bogie, wheelsets, brake shoes,
-   springs, reservoir, brake pipe, traction motor, and coupler are all still
-   present and unchanged in detail.
-6. Stand mid-section in normal play and confirm the car reads as it did before.
-7. Complete the Prologue through the departure cinematic and the
-   `CHAPTER ONE // THE SAFETY TEST` card. Confirm timing is unchanged and record
-   FPS.
-8. Confirm `window.render_game_to_text()` matches visible state during a
-   completion pan.
+1. `node --check` on every touched file, then `npm run build`.
+2. **Arithmetic first, before art.** Assert in a scratch script: adjacent-slot
+   door fires at 1.5 s with 0.38 s walk slack; gapped door fires at 3.7 s and is
+   refused; recovery is 3000 ms.
+3. Walk the happy path in a browser at walk speed only. Confirm completion.
+4. Walk the gapped-slot plan. Confirm the latch refuses **and** that the needle
+   climb is visible before the refusal.
+5. Run the double-VENT plan. Confirm it completes.
+6. Reproduce each S5 failure and confirm it is distinguishable **with the text
+   layer ignored** — screenshot each, judge from the machinery only.
+7. Cross-check `render_game_to_text()` against each screenshot: every slot status,
+   the pressure value, and the latch state must agree with what is drawn.
+8. Press RESET mid-run. Confirm the drum stops, three cards clear, machinery
+   returns to initial state, the player does not move, and sections I–II progress
+   survives.
+9. Jam one slot, re-punch only that slot, re-run. Confirm completed slots are not
+   re-executed and no progress is lost.
+10. Field audit: grep every new field for a read site and a write site.
+11. Delete `stage.drum` from `junction-3`, rebuild, confirm the ordered-queue
+    fallback still completes, then restore.
+12. Play sections I, II, IV, V, VI start to finish. Confirm no behavior change.
+13. Frame-hitch regression: simulate a 3 s hitch and a 20 s backgrounded tab;
+    every slot must still be entered exactly once.
 
-## Product notes
+## Failure and rollback rules
 
-This is a visual continuity fix, and it is sequenced second deliberately: it is
-seen on every single section completion, and tasks 4 and 5 will make the player
-look at the undercarriage far more often, so the space below the floor cannot be
-empty before those land.
-
-Keep the confirmed direction that the undercar must read as real train machinery —
-bogies, wheelsets, suspension springs, brake cylinders and shoes, air reservoirs
-and hoses, axle generator or traction motor, coupler and draft gear — with cables
-only as a secondary layer. For sections I–IV the new structure should be quiet
-service understructure, not a second set of hero mechanisms competing with the
-bogie sections.
-
-Do not commit or push. Report the before/after FPS numbers and anything you chose
-to leave out.
+- Failure is **per slot**. The card jams and stays legible; other slots keep
+  their results; the player re-punches only what failed.
+- RESET is player-invoked and **clears everything** — three cards, pointer,
+  section III machinery, pressure. It never moves the player and never rolls back
+  sections I–II. It can stop a turning drum.
+- No attempt limit, no resource cost, no position penalty. If all three slots
+  jam, the machine returns to its documented start state and all three slots are
+  punchable again.
+- **Rollback:** deleting the `drum` field from `junction-3` in `src/level.js`
+  restores the shared ordered-queue path. This must remain true at every commit;
+  criterion 10 tests it.
+- If the pressure model does not read clearly in playtest, fall back to the S4
+  visual reorganization alone — it is independently valuable and independently
+  shippable. Do not fall back to the boolean drum with the old panel art.

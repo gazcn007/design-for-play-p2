@@ -443,6 +443,7 @@ export default class HudScene extends Phaser.Scene {
 
   showWorld(world) {
     const isOpeningCar = world.startX === 0;
+    this.openingCar = isOpeningCar; // remembered so update() can honour this rule when restoring counters
     this.barFrame.setVisible(!isOpeningCar);
     this.barFill.setVisible(!isOpeningCar);
     this.scoreText.setVisible(!isOpeningCar);
@@ -493,5 +494,19 @@ export default class HudScene extends Phaser.Scene {
       this.laneText.setColor(lane === 0 ? '#59636f' : '#9aa6b4');
       this.last.lane = lane;
     }
+
+    // Phase II relay room (Game scene's tutorialPuzzle.stageIndex === 1,
+    // the CONTACT_STAGE_INDEX room): hide the persistent MEMORY /
+    // WITNESSES counters for that room only. Written unconditionally each
+    // frame so event handlers that force-show these counters (showWorld,
+    // showPrologueTransition) are re-reconciled on the next frame; the
+    // restore branch honours showWorld's opening-car rule.
+    const game = this.scene.get('Game');
+    const inRelayRoom = game?.activeWorldIndex === 0
+      && Boolean(game?.timetablePuzzle)
+      && (game?.tutorialPuzzle?.stageIndex ?? -1) === 1;
+    const showCounters = !inRelayRoom && !this.openingCar;
+    this.scoreText.setVisible(showCounters);
+    this.coinText.setVisible(showCounters);
   }
 }

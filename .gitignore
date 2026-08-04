@@ -11,3 +11,12 @@ dist/
 # local env
 .env
 .env.local
+
+# generated asset tooling noise
+__pycache__/
+*.tripo.json
+screenshots/
+dist-car03/
+tmp/
+outputs/car03-acceptance/
+outputs/qa-phase2/

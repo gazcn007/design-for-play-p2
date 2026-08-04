@@ -18,6 +18,12 @@ import TutorialCarArt from '../art/tutorialCarArt.js';
 import TutorialTrainRoomsArt from '../art/tutorialTrainRoomsArt.js';
 import TimetablePuzzle from '../tutorial/TimetablePuzzle.js';
 import {
+  createUnderfloorHintState,
+  gateTutorialLaneInput,
+  resolveUnderfloorLookDown,
+  updateUnderfloorHint as stepUnderfloorHint,
+} from '../tutorial/underfloorView.js';
+import {
   getWorldAsset,
   isWorldAssetLoaded,
   resolvePreviewWorldIndex,
@@ -132,6 +138,7 @@ export default class GameScene extends Phaser.Scene {
     this.buildTutorialPuzzleProps();
     this.buildMarkers();
     this.buildOverlays();
+    this.buildUnderfloorHint();
 
     this.solids.refresh();
 
@@ -587,11 +594,44 @@ export default class GameScene extends Phaser.Scene {
         generator: 'hand-generator-off',
         'timetable-command': 'circuit-relay-0',
         'rail-control': 'lever-off',
+        'timetable-press': 'circuit-relay-0',
+        'drum-machine': 'lever-off',
+        'timetable-reset': 'lever-off',
         'timetable-run': 'hand-generator-off',
-        'timetable-manual': 'lever-off',
       };
       const tex =
-        def.kind === 'rail-control'
+        // Section III's two machines must not share a silhouette: a floor
+        // isolator lever and a wall bleed wheel. Falling through to 'sign'
+        // would have made both read as signposts.
+        def.kind === 'air-lock'
+          ? def.command === 'bleed'
+            ? 'circuit-relay-0'
+            : 'lever-off'
+        // Phase IV's four devices: the drain cock and test stand read as
+        // machinery, the levelling valve as a lever. The trolley's own sprite
+        // stays invisible — the underfloor counterweight rectangle drawn by
+        // TimetablePuzzle is its body, and this def only exists so the
+        // proximity pick can find the moving target.
+        : def.kind === 'weight-transfer'
+          ? def.command === 'level-drain'
+            ? 'circuit-relay-0'
+            : def.command === 'test'
+              ? 'hand-generator-off'
+              : 'lever-off'
+        // Phase V's five devices: the shared TEST stand reads as machinery,
+        // the bleed wheel as a valve, the cutout cock, service pin bracket
+        // and actuator access as levers of different jobs.
+        : def.kind === 'bogie-service'
+          ? def.command === 'test'
+            ? 'hand-generator-off'
+            : def.command === 'brake-vent'
+              ? 'circuit-relay-0'
+              : 'lever-off'
+        // Phase VI's single device: the departure test stand reads as the
+        // same machinery the player already energized in IV and V.
+        : def.kind === 'echo-load'
+          ? 'hand-generator-off'
+        : def.kind === 'rail-control'
           ? def.command === 'power'
             ? 'hand-generator-off'
             : def.command === 'vent'
@@ -860,7 +900,6 @@ export default class GameScene extends Phaser.Scene {
       .setDepth(59)
       .setVisible(false);
 
-    if (this.previewWorldIndex === null) this.tutorialCarArt?.setCircuitProgress();
     this.refreshTutorialRouteState();
     this.setTutorialPuzzleVisible(this.activeWorldIndex === 0);
   }
@@ -1081,17 +1120,35 @@ export default class GameScene extends Phaser.Scene {
   }
 
   updateTutorialCamera(input, delta) {
-    if (this.activeWorldIndex !== 0 || !this.tutorialCameraLocked || this.tutorialCameraCinematic) return;
+    // relayCloseupActive is a separate flag from tutorialCameraCinematic on
+    // purpose: the close-up must not inherit the cinematic's hitstop /
+    // look-down gating, and its camera restore is its own code path.
+    if (
+      this.activeWorldIndex !== 0 ||
+      !this.tutorialCameraLocked ||
+      this.tutorialCameraCinematic ||
+      this.relayCloseupActive
+    ) return;
     const camera = this.cameras.main;
     const moving = Math.abs(this.player.body.velocity.x) > 28;
     const direction = moving ? Math.sign(this.player.body.velocity.x) : this.player.facing;
     const targetX = -direction * (moving ? 112 : 58);
     const stage = this.getTutorialStage();
-    const canLookDown = stage.underfloor && this.player.x > stage.startX + 90;
-    const lookingDown =
-      canLookDown &&
-      (input.lookDown || this.tutorialForceLookDown) &&
-      this.player.body.blocked.down;
+    // The look-down resolution lives in a pure, test-locked module
+    // (src/tutorial/underfloorView.js): III teaches via `underfloorView`
+    // without relocating its hand-placed air circuit; IV/V/VI use the deep
+    // `underfloor` machinery band.
+    const lookingDown = resolveUnderfloorLookDown({
+      activeWorldIndex: this.activeWorldIndex,
+      cameraLocked: this.tutorialCameraLocked,
+      cinematic: this.tutorialCameraCinematic,
+      relayCloseup: this.relayCloseupActive,
+      stage,
+      playerX: this.player.x,
+      grounded: this.player.body.blocked.down,
+      lookDownHeld: input.lookDown,
+      forceLookDown: this.tutorialForceLookDown,
+    });
     const targetY = lookingDown ? -165 : 150;
     const amount = Phaser.Math.Clamp(delta / (lookingDown ? 260 : 420), 0, 1);
     camera.setFollowOffset(
@@ -1099,6 +1156,79 @@ export default class GameScene extends Phaser.Scene {
       Phaser.Math.Linear(camera.followOffset.y, targetY, amount),
     );
     this.tutorialLookingDown = lookingDown;
+  }
+
+  // -------------------------------------------------- [S] look-down hint --
+  // Screen-anchored teaching prompt (UNDERCARRIAGE VIEW TEACHING wave). The
+  // pure state machine in src/tutorial/underfloorView.js decides visibility;
+  // this layer only owns the pixels. III gets one strong prompt, IV a weak
+  // dwell nudge, V/VI none. No tutorial text panels — a keycap and a chevron.
+  buildUnderfloorHint() {
+    // Same recipe as the world [E] prompt — white legend on the game's
+    // standard chip colour — because that object stays legible over this
+    // exact dark, vignetted floor band where a drawn keycap disappeared.
+    // Anchored 100px above the game-height bottom rather than at the edge:
+    // short viewports clip the canvas bottom (headless QA showed 600 -> 513),
+    // and this keeps clear of the player and the [E] prompt regardless.
+    this.underfloorHint = this.add
+      .text(GAME_W / 2, GAME_H - 100, '[S]  ▼', {
+        fontFamily: 'ui-monospace, Menlo, monospace',
+        fontSize: '13px',
+        color: '#e8f2f2',
+        backgroundColor: '#1d2333',
+        padding: { x: 7, y: 4 },
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(96)
+      .setVisible(false);
+    this.underfloorHintState = createUnderfloorHintState();
+    this._underfloorHintShown = { visible: false, style: null };
+  }
+
+  applyUnderfloorHintStyle(style) {
+    const hint = this.underfloorHint;
+    this.tweens.killTweensOf(hint);
+    const [lo, hi] = style === 'weak' ? [0.4, 0.8] : [0.55, 1];
+    hint.setAlpha(lo);
+    // Breathing alpha plus the 5px bob (700–900ms band per the wave brief).
+    this.tweens.add({
+      targets: hint,
+      alpha: hi,
+      duration: 800,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+    this.tweens.add({
+      targets: hint,
+      y: GAME_H - 95,
+      duration: 800,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+  }
+
+  updateUnderfloorHintPrompt(delta) {
+    if (!this.underfloorHint) return;
+    const stage = this.activeWorldIndex === 0 && this.timetablePuzzle ? this.getTutorialStage() : null;
+    const next = stepUnderfloorHint(this.underfloorHintState, {
+      stage,
+      playerX: this.player?.x ?? 0,
+      lookingDown: Boolean(this.tutorialLookingDown),
+      cinematic: Boolean(this.tutorialCameraCinematic),
+      relayCloseup: Boolean(this.relayCloseupActive),
+      // stageComplete is a per-stage array in timetable mode; only the
+      // CURRENT stage's completion retires the prompt.
+      stageComplete: Boolean(this.tutorialPuzzle?.stageComplete?.[this.tutorialPuzzle?.stageIndex]),
+      deltaMs: delta,
+    });
+    const prev = this._underfloorHintShown;
+    if (next.visible === prev.visible && next.style === prev.style) return;
+    this._underfloorHintShown = next;
+    this.underfloorHint.setVisible(next.visible);
+    if (next.visible) this.applyUnderfloorHintStyle(next.style);
   }
 
   buildMarkers() {
@@ -1200,6 +1330,13 @@ export default class GameScene extends Phaser.Scene {
       // threshold; land beyond that gap so the cinematic cannot respawn the
       // player back into the prologue while the screen is black.
       this.player.body.reset((STORY_WORLDS[1]?.startX ?? 4800) + 155, 400);
+      // The landing strip sits inside a world-1 enemy patrol (4940–5220) whose
+      // contact reach covers EVERY standable pixel of it — there is no safe
+      // landing x. Arrival protection therefore holds until the player takes
+      // control (first movement input, cleared in update()) with a 10s safety
+      // cap, instead of letting the patrol farm a helpless arrival.
+      this.player.invulnUntil = Number.POSITIVE_INFINITY;
+      this.prologueArrivalGrace = true;
       this.departureStreaks.forEach((streak) => streak.setVisible(false));
       this.departureScroll = 0;
     });
@@ -1208,6 +1345,14 @@ export default class GameScene extends Phaser.Scene {
       this.prologueTransitionActive = false;
       this.player.frozen = false;
       this.tutorialExitBlockedNotified = false;
+      // Safety cap on the arrival grace: an idle player loses protection 10s
+      // after the hand-off rather than standing invulnerable forever.
+      this.time.delayedCall(10000, () => {
+        if (this.prologueArrivalGrace) {
+          this.prologueArrivalGrace = false;
+          this.player.invulnUntil = this.time.now;
+        }
+      });
       onComplete();
     });
   }
@@ -1230,6 +1375,10 @@ export default class GameScene extends Phaser.Scene {
       debug: 'ZERO',
       choiceOne: 'ONE',
       choiceTwo: 'TWO',
+      choiceThree: 'THREE',
+      // ESC closes the relay cabinet close-up (gated on relayCloseupActive in
+      // update(); it has no other binding).
+      esc: 'ESC',
     });
     // Stop the page from scrolling when the player uses space / arrows.
     this.input.keyboard.addCapture(['SPACE', 'UP', 'DOWN', 'LEFT', 'RIGHT']);
@@ -1353,6 +1502,7 @@ export default class GameScene extends Phaser.Scene {
       attackPressed: JustDown(k.attack),
       choiceOne: JustDown(k.choiceOne),
       choiceTwo: JustDown(k.choiceTwo),
+      choiceThree: JustDown(k.choiceThree),
     };
   }
 
@@ -1551,6 +1701,15 @@ export default class GameScene extends Phaser.Scene {
       return;
     }
 
+    // While the relay cabinet close-up owns the screen, no world device may
+    // be picked or fired: the pointer drives the cabinet, E/ESC closes it.
+    if (this.relayCloseupActive) {
+      this.activeInteractable = null;
+      this.activeNPC = null;
+      this.prompt.setVisible(false);
+      return;
+    }
+
     const p = this.player;
     let best = null;
     let bestDist = 62;
@@ -1611,14 +1770,12 @@ export default class GameScene extends Phaser.Scene {
     this.npcs.forEach((npc) => npc.label.setAlpha(npc === this.activeNPC ? 1 : 0));
 
     if (best) {
-      this.prompt
-        .setVisible(true)
-        .setText(
-          best.type === 'npc'
-            ? '[E] SPEAK'
-            : LEVEL.tutorialPuzzle.mode === 'timetable' &&
-                this.timetablePuzzle?.isTimetableKind(best.item.def.kind)
-              ? this.timetablePuzzle.promptFor(best.item)
+      const promptText =
+        best.type === 'npc'
+          ? '[E] SPEAK'
+          : LEVEL.tutorialPuzzle.mode === 'timetable' &&
+              this.timetablePuzzle?.isTimetableKind(best.item.def.kind)
+            ? this.timetablePuzzle.promptFor(best.item)
             : best.item.def.kind === 'recorder'
               ? this.tutorialPuzzle.phase === 'playback'
                 ? '[E] RE-RECORD'
@@ -1629,14 +1786,35 @@ export default class GameScene extends Phaser.Scene {
                   ? '[E] ROUTE'
                   : best.item.def.kind === 'breaker'
                     ? '[E] INVERT'
-                : '[E]',
-        )
-        .setPosition(
-          best.x,
-          best.item.sprite.y - best.item.sprite.displayHeight - (best.type === 'npc' ? 32 : 10),
-        );
+                : '[E]';
+      // A null prompt text means the device owns its own in-world prompt (the
+      // Phase II interlock latch/contactor); the shared bubble stays hidden.
+      if (promptText == null) {
+        this.prompt.setVisible(false);
+      } else {
+        this.prompt
+          .setVisible(true)
+          .setText(promptText)
+          .setPosition(
+            best.x,
+            best.item.sprite.y - best.item.sprite.displayHeight - (best.type === 'npc' ? 32 : 10),
+          );
+      }
     } else {
       this.prompt.setVisible(false);
+    }
+
+    // The punch press is the one interactable that takes more than E: keys 1/2/3
+    // pick which lettered key is under the hammer. Arrow/A-D are walking keys and
+    // could not be reused here without stealing movement while the player stands
+    // at the bench.
+    if (
+      best?.type === 'interactable' &&
+      best.item.def.kind === 'timetable-press' &&
+      LEVEL.tutorialPuzzle.mode === 'timetable'
+    ) {
+      const pick = input.choiceOne ? 0 : input.choiceTwo ? 1 : input.choiceThree ? 2 : -1;
+      if (pick >= 0) this.timetablePuzzle?.selectPressKey(pick);
     }
 
     if (input.interact && best) {
@@ -1896,6 +2074,12 @@ export default class GameScene extends Phaser.Scene {
         ease: 'Cubic.easeOut',
         onComplete: () => {
           puzzle.gateAnimating[index] = false;
+          // Phase III door chain: the door leaf has ACTUALLY finished opening —
+          // only now may the frozen state machine enter OPEN and fire its
+          // one-shot stage-complete (SYSTEM ARC LOCK §3). The guard line reads
+          // stageComplete below, so passage and the pure-logic OPEN land on
+          // the same frame, after the animation, never before it.
+          if (index === 2) this.tutorialPuzzle?.airCircuit?.confirmDoorOpened();
           puzzle.stageComplete[index] = true;
           gate.setY(156).setScale(1, 0.08).setAlpha(0.18);
           window?.setVisible(false);
@@ -1935,13 +2119,18 @@ export default class GameScene extends Phaser.Scene {
     this.player.setVelocity(0, 0);
     this.setCompletionVignette(true);
     camera.stopFollow();
-    camera.pan(centerX, machineY, 420, 'Sine.easeInOut', true, () => {
-      let finished = false;
+    // Camera.pan's callback fires EVERY FRAME of the effect with
+    // (camera, progress, x, y) — it is an onUpdate, not an onComplete. Gate on
+    // progress >= 1 (true exactly once, on the final frame before the effect
+    // clears itself) or the whole completion chain retriggers per frame.
+    let revealDone = false;
+    camera.pan(centerX, machineY, 420, 'Sine.easeInOut', true, (cam, progress) => {
+      if (progress < 1 || revealDone) return;
+      revealDone = true;
       onMachineReady(() => {
-        if (finished) return;
-        finished = true;
         this.time.delayedCall(120, () => {
-          camera.pan(stage.endX - 44, 356, 420, 'Sine.easeInOut', true, () => {
+          camera.pan(stage.endX - 44, 356, 420, 'Sine.easeInOut', true, (cam2, progress2) => {
+            if (progress2 < 1) return;
             this.setCompletionVignette(false);
             onReadyForDoor();
           });
@@ -2091,13 +2280,6 @@ export default class GameScene extends Phaser.Scene {
       });
     }
 
-    if (this.time.now >= puzzle.faultUntil) {
-      this.tutorialCarArt?.setCircuitProgress({
-        past: puzzle.stageComplete[0] || (puzzle.stageIndex === 0 && puzzle.routeActive),
-        present: puzzle.stageComplete[1] || (puzzle.stageIndex === 1 && puzzle.routeActive),
-        service: puzzle.stageComplete[2] || puzzle.serviceActive,
-      });
-    }
     if (puzzle.phase === 'playback') {
       this.registry.set(
         'tutorialPowerState',
@@ -2350,11 +2532,6 @@ export default class GameScene extends Phaser.Scene {
     generator.sprite.setTexture('hand-generator-on');
     this.player.playInteraction();
     this.registry.set('tutorialPowerState', 'syncing');
-    this.tutorialCarArt?.setCircuitProgress({
-      past: true,
-      present: puzzle.stageIndex >= 1,
-      service: puzzle.stageIndex >= 2,
-    });
     this.echoTimelineLabel.setText('PAST + PRESENT  /  SYNCHRONIZED');
     const conductor = this.npcs.find((npc) => npc.def.id === 'caretaker');
     if (conductor && puzzle.stageIndex === LEVEL.tutorialPuzzle.stages.length - 1) {
@@ -2419,7 +2596,6 @@ export default class GameScene extends Phaser.Scene {
     const puzzle = this.tutorialPuzzle;
     puzzle.faultUntil = this.time.now + 720;
     this.registry.set('tutorialPowerState', 'error');
-    this.tutorialCarArt?.setCircuitProgress({ past: puzzle.routeActive, fault: true });
     generator.sprite.setTexture('hand-generator-on');
     this.time.delayedCall(150, () => generator.sprite.setTexture('hand-generator-off'));
     this.cameras.main.shake(150, 0.004);
@@ -2449,7 +2625,6 @@ export default class GameScene extends Phaser.Scene {
     this.tutorialGuideGraphics?.setVisible(false);
     this.refreshTutorialStageVisuals();
     this.registry.set('tutorialPowerState', 'complete');
-    this.tutorialCarArt?.setCircuitProgress({ past: true, present: true, service: true });
     this.tutorialCarArt?.playPowerRestore();
     this.tutorialCompletionLight = this.addLight(
       generator.sprite.x,
@@ -2691,14 +2866,39 @@ export default class GameScene extends Phaser.Scene {
     }
 
     const input = this.readInput();
-    if (this.activeWorldIndex === 0) {
-      input.laneBack = false;
-      input.laneFront = false;
+    if (
+      this.prologueArrivalGrace
+      && (input.left || input.right || input.jumpPressed)
+    ) {
+      // First deliberate input after the departure hand-off ends arrival
+      // protection (with a small buffer so the same frame can't deal damage).
+      this.prologueArrivalGrace = false;
+      this.player.invulnUntil = time.now + 400;
+    }
+    // Lane keys are a world-1 verb. In the tutorial car W/S are swallowed so
+    // S can be the hold-to-look-down verb without a lane fight (pure gate,
+    // test-locked in tests/tutorial/underfloorView.test.mjs).
+    const laneGate = gateTutorialLaneInput({
+      activeWorldIndex: this.activeWorldIndex,
+      laneBack: input.laneBack,
+      laneFront: input.laneFront,
+    });
+    input.laneBack = laneGate.laneBack;
+    input.laneFront = laneGate.laneFront;
+    // Relay cabinet close-up: ESC or E hands the close back to the puzzle
+    // (it no-ops until the door+camera have fully opened). World interaction
+    // and the tutorial follow camera are already gated on the same flag, and
+    // the close path restores movement, HUD and cursor on every branch.
+    if (this.relayCloseupActive) {
+      if (Phaser.Input.Keyboard.JustDown(this.keys.esc) || input.interact) {
+        this.timetablePuzzle?.closeRelayCloseup();
+      }
     }
     // Section V reads the held state of E every frame, not just its edge.
     this.inputState = input;
     this.player.update(delta, input);
     this.updateTutorialCamera(input, delta);
+    this.updateUnderfloorHintPrompt(delta);
     this.updateTutorialPuzzle(time, delta);
     this.updateTutorialRoutePulse(time);
     this.updateTutorialObjectiveMarker();
