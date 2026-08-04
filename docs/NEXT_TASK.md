@@ -1,6 +1,115 @@
 # Next implementation task
 
-Status: `COMPLETE / SUPERSEDED BY EXECUTION STATE`
+Status: `READY`
+
+Owner: `penguin`
+
+Base: `georgezboa/design-for-play-p2`, branch
+`codex/playable-train-prologue`, at or after commit `19cf96b`
+
+Task: Chapter One cyberpunk parkour vertical slice
+
+## Product decision
+
+The product lead approves the teammate-authored cyberpunk direction shown in
+the 2026-08-03 prototype. Keep the neon industrial exterior and make its
+horizontal traversal mechanics playable. This task supersedes Chapter One's
+earlier `The Proctor` / AI-apocalypse direction.
+
+This approval applies to Chapter One only. It does not turn every later car
+into a left-to-right 2D platformer and does not authorize changes to the frozen
+Prologue or the isolated present-city Car 03 slice.
+
+## Player outcome
+
+Starting at the left side of the cyberpunk space, the player learns that ladders
+and blocks can be dragged horizontally to build a route, uses at least one
+autonomous flying car as a moving platform, and reaches the goal balcony on the
+right. Failure and reset are understandable without leaving stale collision or
+object state behind.
+
+## In scope
+
+- Preserve the prototype's approved cyberpunk visual identity and extend it
+  only as needed to make one coherent start-to-goal route.
+- Implement horizontal click/touch dragging for ladders and movable blocks.
+  Dragging must have visible legal/illegal placement feedback, stay within the
+  authored bounds, and update collision when placement commits.
+- Implement autonomous flying-car platforms with readable travel paths. The
+  player can stand on and ride them without sliding through, teleporting, or
+  being stranded by routine timing.
+- Include the hazards already expressed by the prototype, including spikes or
+  falls, with a quick deterministic recovery.
+- Make the elevated goal balcony reachable only after using the taught movable
+  geometry and at least one flying-car platform.
+- Display concise controls for move, jump, drag, and reset. The environment must
+  teach the route before explanatory prose gives away the solution.
+- Wire the slice into the post-Prologue Chapter One hand-off. Do not require a
+  developer URL or QA-only warp for the normal playable route.
+- Expose drag state, movable-object positions, flying-car phase, player state,
+  failure/reset state, and goal completion through
+  `window.render_game_to_text()`.
+- Add deterministic automated coverage for placement bounds, collision updates,
+  flying-platform motion/riding, reset, and goal completion.
+
+## File ownership and integration boundary
+
+- Prefer new implementation files under `src/cars/cyberpunkParkour/` and new
+  tests under `tests/chapterOne/`.
+- Minimal integration edits may be made to `src/main.js`, `src/scenes/GameScene.js`,
+  `src/story.js`, `src/level.js`, and `src/textures.js` when required to enter
+  and expose the slice.
+- Do not edit `src/tutorial/**`, `tests/tutorial/**`,
+  `src/cars/presentCity/**`, `tests/car03/**`, or `src/car03-main.js`.
+- Preserve all unrelated uncommitted work, including any existing
+  `package-lock.json` change. Do not discard, rewrite, or include it unless the
+  implementation itself proves a dependency update is necessary and the owner
+  explicitly approves that inclusion.
+
+## Acceptance criteria
+
+1. A fresh player can complete the normal route from the Chapter One entrance
+   to the goal balcony using ordinary controls.
+2. At least one ladder and one block can be repositioned horizontally; legal
+   placement changes the traversable route and illegal placement cannot produce
+   an unrecoverable state.
+3. At least one autonomous flying car is required and works as a stable moving
+   platform through its full route.
+4. Spikes/falls and `R` reset restore the player, movable geometry, collision,
+   and platform timing to the authored start state.
+5. The cyberpunk presentation remains confined to this car; the frozen Prologue
+   and Car 03 behavior and visuals remain unchanged.
+6. The visible state and `window.render_game_to_text()` agree at entrance,
+   during drag, on a moving car, after failure/reset, and at completion.
+7. No new browser console errors occur on the full start-to-goal route.
+
+## Required QA route
+
+1. Pull the named base branch and preserve unrelated local changes.
+2. Enter Chapter One through the normal Prologue hand-off.
+3. Verify legal and illegal drag attempts for both a ladder and a block.
+4. Complete a jump onto, ride on, and jump off an autonomous flying car.
+5. Trigger one spike/fall failure, reset, and confirm all authored state is
+   restored.
+6. Complete the route to the goal balcony and capture visible plus text-state
+   evidence at the five states named in acceptance criterion 6.
+7. Run `npm run assets:check`, the relevant automated tests,
+   `npm run build`, and `git diff --check`.
+
+## Out of scope
+
+- Reopening or polishing Prologue Phases I-VII.
+- Editing the Car 03 social-stealth vertical slice.
+- Applying the cyberpunk theme or horizontal-platformer structure to other cars.
+- Reintroducing `The Proctor`, generic combat progression, or a new story canon
+  inside this implementation task.
+
+---
+
+## Historical appendix: completed Section III handoff
+
+The remainder of this file is retained only as historical design context. It is
+not a second `READY` task and must not be reimplemented.
 
 Latest handoff (2026-08-03): Prologue Phases II–VI are frozen after continuous
 browser acceptance. The later III/IV undercarriage-view teaching wave is also

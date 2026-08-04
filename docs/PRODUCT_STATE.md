@@ -1,6 +1,6 @@
 # Infinity Train product state
 
-Last reviewed: 2026-07-28
+Last reviewed: 2026-08-03
 
 ## North star
 
@@ -55,7 +55,20 @@ Chapter One needs a product-approved vertical slice. Its mechanic must express
 relationship with the train, and avoid becoming either another timetable-order
 puzzle or a return to generic combat-only progression.
 
-**Resolved 2026-07-29.** Chapter One's central interaction is decided: "The
+**Accepted 2026-08-03.** Chapter One is now the teammate-authored cyberpunk
+parkour car. The player crosses a neon industrial exterior by dragging ladders
+and movable blocks horizontally to construct routes, then timing jumps onto
+autonomous flying-car platforms to reach a goal balcony. The cyberpunk theme is
+intentional and approved for this car. This is an explicit exception to the
+project-wide rule against making every car the same left-to-right 2D level; it
+does not set the visual style, camera, or topology for later cars.
+
+This decision supersedes both the AI-apocalypse exterior requirement in the
+paragraph above and the earlier `The Proctor` Chapter One design below. The
+existing Prologue remains frozen, and the isolated present-city Car 03 remains
+separate. The executable scope and QA contract are in `docs/NEXT_TASK.md`.
+
+**Superseded 2026-08-03.** Chapter One's previously accepted interaction was "The
 Proctor". The AI runs a safety test on the *train*, and the player is the
 proctor — the five Prologue device verbs become diagnostic queries instead of
 commands, and the player stamps PASS or FAIL at a console. The train is failing,
@@ -73,9 +86,9 @@ in the game. Two independent external reviews converged on that flaw. The
 replacement makes the twist an *application* of the stamping action the player has
 already performed a dozen times.
 
-The inherited post-Prologue combat area remains prototype material. Chapter One
-implementation has not started and is not scheduled until the Phase 1 Prologue
-polish sequence (tasks 2 and 3) completes.
+The inherited post-Prologue combat area remains prototype material and is not
+authoritative for the approved cyberpunk parkour car. Chapter One implementation
+is now scheduled by the current `READY` handoff in `docs/NEXT_TASK.md`.
 
 ## Parallel workstream: Phase 1 depth and presentation
 
@@ -219,9 +232,9 @@ re-punched VENT is not blocked by a BRAKE that already succeeded and is no longe
 on the drum; the drum uses no Phaser timers and is torn down on both stage
 advance and QA warp.
 
-The task file `docs/NEXT_TASK.md` stays `READY` and is now the playtest and
-review contract for code that exists. Chapter One implementation remains
-unscheduled until this pilot is playtested.
+This Section III task was the playtest and review contract for the pressure
+pilot at the time. That work is now frozen; the current `docs/NEXT_TASK.md`
+instead schedules the approved Chapter One cyberpunk parkour vertical slice.
 
 **Playtest refinement accepted 2026-07-30.** Section III now has a dedicated
 RESET handle and a clearer left-to-right control language:
