@@ -1132,13 +1132,13 @@ export default class GameScene extends Phaser.Scene {
     const camera = this.cameras.main;
     const moving = Math.abs(this.player.body.velocity.x) > 28;
     const direction = moving ? Math.sign(this.player.body.velocity.x) : this.player.facing;
-    const targetX = -direction * (moving ? 112 : 58);
+    let targetX = -direction * (moving ? 112 : 58);
     const stage = this.getTutorialStage();
     // The look-down resolution lives in a pure, test-locked module
     // (src/tutorial/underfloorView.js): III teaches via `underfloorView`
     // without relocating its hand-placed air circuit; IV/V/VI use the deep
     // `underfloor` machinery band.
-    const lookingDown = resolveUnderfloorLookDown({
+    let lookingDown = resolveUnderfloorLookDown({
       activeWorldIndex: this.activeWorldIndex,
       cameraLocked: this.tutorialCameraLocked,
       cinematic: this.tutorialCameraCinematic,
@@ -1149,7 +1149,29 @@ export default class GameScene extends Phaser.Scene {
       lookDownHeld: input.lookDown,
       forceLookDown: this.tutorialForceLookDown,
     });
-    const targetY = lookingDown ? -165 : 150;
+    // VISIBLE SYSTEM ARC CORRECTION §1.6: Phase VI's first observation loop
+    // never waits for the player to discover S. While the echo rides loop 0
+    // the camera tilts down on its own and tracks the past self's trolley
+    // through one full pass, then hands the follow back to the player (and
+    // the freshly unlocked engage handle) as soon as loop 1 begins.
+    const echoSnap = stage?.echoLoad ? this.tutorialPuzzle?.echoReplay?.snapshot() : null;
+    const echoObservation = Boolean(
+      stage?.echoLoad && echoSnap?.entered && echoSnap.observationLoop && !echoSnap.stageComplete,
+    );
+    if (echoObservation) {
+      const rail = stage.echoLoad.echoRail;
+      const echoX = rail.x0 + echoSnap.echoTrolleyX * (rail.x1 - rail.x0);
+      lookingDown = true;
+      targetX = Phaser.Math.Clamp((echoX - this.player.x) * 0.85, -300, 300);
+    }
+    // Look-down depth: III's hand-placed air run sits just below the floor
+    // (accepted -165 framing), but IV/V/VI's machinery band runs 505-865 —
+    // the equalizer beam, the wheelsets, the V service line and the VI
+    // engage handle all live BELOW the -165 fold in a real (shorter than
+    // 600) viewport. The deep band gets a deep look (VISIBLE SYSTEM ARC
+    // CORRECTION §1.4: the visible safe area is measured, never assumed).
+    const deepBand = Boolean(stage?.underfloor);
+    const targetY = lookingDown ? (deepBand ? -300 : -165) : 150;
     const amount = Phaser.Math.Clamp(delta / (lookingDown ? 260 : 420), 0, 1);
     camera.setFollowOffset(
       Phaser.Math.Linear(camera.followOffset.x, targetX, amount),
@@ -1159,24 +1181,26 @@ export default class GameScene extends Phaser.Scene {
   }
 
   // -------------------------------------------------- [S] look-down hint --
-  // Screen-anchored teaching prompt (UNDERCARRIAGE VIEW TEACHING wave). The
+  // Screen-anchored teaching prompt (VISIBLE SYSTEM ARC CORRECTION §1). The
   // pure state machine in src/tutorial/underfloorView.js decides visibility;
-  // this layer only owns the pixels. III gets one strong prompt, IV a weak
-  // dwell nudge, V/VI none. No tutorial text panels — a keycap and a chevron.
+  // this layer only owns the pixels. III/IV/V all get the same strong prompt:
+  // >=20px legend on a high-contrast dark plate, breathing alpha in the
+  // 0.85-1 band with a slow sinking bob. VI gets none — its first loop is
+  // camera-led. No tutorial text panels — a keycap line and a chevron.
   buildUnderfloorHint() {
     // Same recipe as the world [E] prompt — white legend on the game's
     // standard chip colour — because that object stays legible over this
     // exact dark, vignetted floor band where a drawn keycap disappeared.
-    // Anchored 100px above the game-height bottom rather than at the edge:
-    // short viewports clip the canvas bottom (headless QA showed 600 -> 513),
-    // and this keeps clear of the player and the [E] prompt regardless.
+    // The Y anchor is resolved against the REAL camera viewport every frame
+    // (applyUnderfloorHintStyle), never against an assumed canvas bottom:
+    // headless captures proved the viewport can be shorter than GAME_H.
     this.underfloorHint = this.add
-      .text(GAME_W / 2, GAME_H - 100, '[S]  ▼', {
+      .text(GAME_W / 2, GAME_H - 100, '[HOLD S]  INSPECT UNDERCARRIAGE  ▼', {
         fontFamily: 'ui-monospace, Menlo, monospace',
-        fontSize: '13px',
-        color: '#e8f2f2',
-        backgroundColor: '#1d2333',
-        padding: { x: 7, y: 4 },
+        fontSize: '20px',
+        color: '#f2f7f7',
+        backgroundColor: '#10151f',
+        padding: { x: 12, y: 7 },
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
@@ -1186,24 +1210,35 @@ export default class GameScene extends Phaser.Scene {
     this._underfloorHintShown = { visible: false, style: null };
   }
 
+  // Visible safe area: a fixed margin above the REAL viewport bottom. The
+  // camera height is the source of truth (viewport size can differ from
+  // GAME_H in embedded/headless runs); 108px keeps clear of the player, the
+  // [E] prompt and any clipped edge.
+  underfloorHintSafeY() {
+    return (this.cameras.main?.height ?? GAME_H) - 108;
+  }
+
   applyUnderfloorHintStyle(style) {
     const hint = this.underfloorHint;
     this.tweens.killTweensOf(hint);
-    const [lo, hi] = style === 'weak' ? [0.4, 0.8] : [0.55, 1];
-    hint.setAlpha(lo);
-    // Breathing alpha plus the 5px bob (700–900ms band per the wave brief).
+    const baseY = this.underfloorHintSafeY();
+    hint.setY(baseY);
+    // Strong only (the weak tier is abolished): a confident 0.85 -> 1 breath.
+    hint.setAlpha(0.85);
     this.tweens.add({
       targets: hint,
-      alpha: hi,
-      duration: 800,
+      alpha: 1,
+      duration: 780,
       yoyo: true,
       repeat: -1,
       ease: 'Sine.easeInOut',
     });
+    // Slow sinking bob: the chevron presses DOWN toward the underfloor it
+    // names, so the motion itself teaches the direction of the verb.
     this.tweens.add({
       targets: hint,
-      y: GAME_H - 95,
-      duration: 800,
+      y: baseY + 7,
+      duration: 780,
       yoyo: true,
       repeat: -1,
       ease: 'Sine.easeInOut',
@@ -1748,7 +1783,15 @@ export default class GameScene extends Phaser.Scene {
       ) return;
       const dx = Math.abs(it.sprite.x - p.x);
       const dy = Math.abs(it.sprite.y - p.y);
-      if (dx < bestDist && dy < 100) {
+      // VISIBLE SYSTEM ARC CORRECTION: the underfloor device families are
+      // mounted ON the machinery below the floor (V's service line, VI's
+      // engage handle), hundreds of pixels under the walkway. Their pick
+      // keeps the same 62px x-radius but measures depth against the deep
+      // band instead of the floor-line band.
+      const dyMax = ['weight-transfer', 'bogie-service', 'echo-load'].includes(it.def.kind)
+        ? 430
+        : 100;
+      if (dx < bestDist && dy < dyMax) {
         bestDist = dx;
         best = { type: 'interactable', item: it, x: it.sprite.x, y: it.sprite.y };
       }
