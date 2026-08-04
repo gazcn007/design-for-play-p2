@@ -19,6 +19,19 @@ Original prompt: 你把管线搭一下但是跟玩法有关的先不用管 因�
 - Optional: add a CI job that runs `npm ci`, `npm run assets:check`, and `npm run build`.
 - Optional: add a dedicated automated traversal test once the team settles the final gameplay mechanics.
 
+## Phase II playable-QA input repair
+
+- 2026-08-01: Fixed the exact `?qa=phase2&state=entry` route handed to the user. It had been treated like the six screenshot fixtures, so the world prompt displayed `[E] RESET LATCH` while `operateContactInterlock()` rejected every press behind `contactQaFreeze`.
+- `entry` is now explicitly the playable Phase II shortcut; only `power-fail`, `latch-closed`, `signal-mid`, `energized`, `complete`, and `reset-replay` remain frozen for deterministic screenshots. Added a regression assertion for that contract.
+- Browser verification on the current localhost page: focused the canvas, pressed E once, observed the latch prompt clear and the underfloor signal illuminate/finish its 1.2-second propagation. Browser console remained clean.
+- Full verification passes: 116/116 Node tests, 10 panoramas / 30 generated textures, production build, and whitespace check. The bundled game client was attempted again but its isolated runtime still cannot resolve `playwright`; the in-app browser supplied the real keyboard and visual check.
+
+## Phase II relay-cabinet insert design
+
+- 2026-08-01: Locked a new Phase II middle beat, `THE MISSING CONTACT`, without changing Phase III–VI: the latch signal stops at a real underfloor relay cabinet; the player opens a diegetic close-up, patches the relay coil, watches the armature switch from NC to NO, patches the output, tests it, then returns to the world as the signal resumes toward the contactor.
+- The insert rejects an automatic modal, generic password, color matching, Simon Says, timers and reset-on-error. It uses local recoverable relay behavior and makes the first connection physically reveal the second.
+- Wrote the Kimi multi-Agent implementation contract in `docs/PHASE_II_RELAY_CABINET_KIMI_WORK_PACKAGE.md`, including research basis, final art direction, pure logic contract, file ownership, six execution waves, browser QA, and a start-without-reconfirmation prompt. Existing Phase II latch/contactor art remains the baseline; the old x≈1200 passive break and single uninterrupted propagation are the only superseded portions.
+
 ## Tutorial-car vertical slice
 
 - 2026-07-28: Began the first complete art work package for `CAR 01 // NORMAL SERVICE` while keeping gameplay rules unchanged.
@@ -183,3 +196,90 @@ Original prompt: 你把管线搭一下但是跟玩法有关的先不用管 因�
 - 2026-07-29: Fixed `PAST HOLDS THE VALVE` after playtesting exposed an impossible second step. The stage definition, physical interactable list, and solution now agree on `BRAKE → VENT → COUPLE`, so the center control is a readable `BLEED VALVE` instead of an unusable axle motor.
 - Echo visuals now instantiate for the new `echoGates` mechanic and begin at `echoStartX`; previously the new mechanic still depended on the removed `echoAssist` creation gate, so PAST never appeared or advanced after the first control.
 - Retimed the deterministic section-VI QA route to operate only after PAST reaches each obstacle. Browser QA confirmed the visible echo stops at the charged pipe after BRAKE, requests VENT, then completes all three gates, reaches the valve, and transitions to the Chapter One card with no console warnings or errors. Observed completion-route frame rate was 112 FPS.
+
+## Section III pilot — the Living Timetable (rotating drum)
+
+- 2026-07-30: Built the drum pilot for section III only. Direction A is the spine; the single slice of direction B is VENT's held valve. Sections I, II, IV, V, and VI are untouched — the drum is gated on a `stage.drum` field, and deleting that one field from `junction-3` restores today's ordered-queue stage. New file `src/tutorial/drum.js`; edits in `src/level.js` and `src/tutorial/TimetablePuzzle.js`. Nothing committed or pushed.
+- Six slots at 1.1 s, 6.6 s per revolution. The player punches command **and** slot, then has to be at the machine when the pointer arrives: BRAKE fires unattended as the free teaching slot, VENT and DOOR require presence within 70 px, and VENT additionally requires E held 0.4 s. Failure chars that one card; every other slot keeps its result and only failed slots are re-punched.
+- Shipped layout after re-deriving the arithmetic against `MOVE.speedWalk` 200: slot dial 1668, RUN 1770, BRAKE 1880, valve 2040, door 2260. The first-draft 2080/2320 was discarded because it left a walking player 0.08 s at the door once the reaction grace was charged. Sparse route (slots 0/2/4) now clears with 0.13 s at the valve and 0.28 s at the door; adjacent slots still fail even at run speed, so tension stays something the player buys.
+- Three real defects found by auditing the built code, all fixed and all now regression items in the QA route:
+  - Completion could **soft-lock**. A re-punch leaves the charred card in its original slot while the retry lands elsewhere, so one command owns two cards; judging completion by the first card bearing that command kept reading the charred one, and the stage could never close even with all three commands fired. Verified the exact scenario now completes, and that a genuinely unfinished command still blocks.
+  - A frame hitch or backgrounded tab **skipped slots silently** — never fired, never charred, card ejecting unmarked. The sweep now advances one slot per step; simulated a 3 s hitch and a 20 s background jump and all six slots are entered in both.
+  - The VENT hold had **no reaction window**, so a player standing correctly at the valve who pressed E a frame late charred with nothing on screen to explain it. Added a 0.32 s grace charged against the slot, and the valve prompt reads `[HOLD E]` during a run so the hold teaches itself.
+- Also verified rather than assumed: `run()` returns before the legacy path freezes the player, so the body stays mobile during a revolution; device actions are absolute assignments with absolute tween targets, so a re-run cannot un-clamp a brake or re-close a door; causal order is checked against persistent machine state rather than the slot list, so a re-punched VENT is not blocked by a BRAKE that already succeeded and has left the drum; punch and dial both refuse input while the drum turns; the drum uses no Phaser timers and is torn down on both stage advance and QA warp; the 118 px of door-to-boundary clearance keeps the incomplete-stage guard from teleporting a player mid-hold.
+- `npm run build` clean. **No browser playtest yet** — every claim about pacing above is arithmetic and code reading, not observation. The walk-only completion time, departure FPS, and the rollback drill are still open and are the first items of the next session.
+- External reviews were used for where they made me look, not for their conclusions. The A+E (search beam) ranking was rejected because it leaves the player spectating during execution, which is the one thing this pilot exists to test; A+C was rejected for position rather than quality. A critique claiming the 0.4 s hold was unsatisfiable was wrong — the hold accumulates after slot entry — but checking it is what surfaced the missing reaction window.
+
+## Section III reset and control-layout clarity pass
+
+- 2026-07-30: Added the user-requested dedicated RESET handle to the rotating-drum section. RESET is available both while editing and during a live revolution; it stops the real-clock scheduler, clears all six cards, restores the pointer to slot 1, resets the local machine state, and preserves player position plus completed earlier rooms.
+- Reorganized the section into a readable left-to-right line: `SLOT +1 → RESET → RUN → BRAKE → VENT → DOOR`. SLOT and RESET now have permanent labels and distinct brass/red treatments instead of relying on an unexplained proximity prompt.
+- Updated the safe sparse-route arithmetic for the new positions. The walk-only route retains 0.305 s of conservative valve slack and 0.38 s at the door, while adjacent VENT/DOOR slots remain unsatisfiable even at run speed once the required hold is included.
+- Extended `render_game_to_text()` with drum cursor, running state, active slot, and per-slot command/status diagnostics. Added a deterministic `?qa=timetable-3-reset` route that resets a partly executed live drum.
+- Browser QA inspected the active control layout and verified the hard reset from `BRAKE done + VENT pending` to six empty slots, cursor 0, stopped scheduler, programming phase, unfrozen player, and no console warnings or errors. Asset verification, production build, syntax checks, and whitespace validation pass.
+
+## Timetable readability and separation pass
+
+- 2026-07-30: Enlarged every visible TIMETABLE face from 138 x 78 to 202 x 100, strengthened its brass outline, title, schedule type, status lamp, paper strip, and moving slot marker.
+- Moved every command label plus section III's SLOT, RESET, and RUN labels into a dedicated lower control band. The enlarged rack no longer covers any interactive label or handle; planning controls use compact single-line labels, while the three machine controls remain distinct two-line blocks.
+- Raised all section identity plaques above the larger instrument face so the readability fix does not trade control overlap for chapter-title overlap.
+- Browser QA visually inspected sections II, III, and IV. Their timetable faces are legible at gameplay scale, section III reads left-to-right as `SLOT +1 → RESET → RUN → BRAKE → VENT → DOOR`, and contextual prompts remain above the active machine rather than behind the rack.
+
+## Section III duplicate-card safeguard
+
+- 2026-07-30: Fixed the playtest state where five repeated BRAKE cards could all resolve with checkmarks while VENT and DOOR were absent, leaving the partition correctly closed but the timetable misleadingly successful.
+- A command now permits only one pending or completed card. Repeating it gives a local machine-specific refusal; only a charred card can be retried in another slot. RUN preflights the three required machine cards and refuses an incomplete drum instead of spending a full revolution on a plan that cannot open the partition.
+- Replaced the drum's abstract command glyphs with explicit `B`, `V`, and `D` initials. Browser QA confirmed the duplicate route retains exactly one pending BRAKE card, stays in programming mode, and reports no console errors; the safe sparse programming route renders as `B · V · D ·`.
+
+## Section III projection-and-controls visual repair
+
+- 2026-07-30: Replaced Section III's oversized enamel TIMETABLE board with a short, translucent signal projection in the upper window band. It shows the live `B / V / D` sequence and pointer without covering the carriage, player, or controls.
+- Built a physical low-pixel code console beneath it: three separately etched `BRAKE`, `VENT`, and `DOOR` keycaps form the input vocabulary; `RESET` and `RUN` remain visually separate operating handles. The three real train machines retain their own captions on the right.
+- This was a presentation-only change: the existing drum state machine, causal order, timing, and completion rules remain untouched. Browser QA at `?qa=timetable-3-layout` and `?qa=timetable-3-sparse` confirmed the projection is clear, the completed `B V D` strip updates, and no console warnings/errors appear. `assets:check`, syntax check, and direct Vite production build pass.
+
+## Section III air-lock independent verification
+
+- 2026-08-01: Re-ran `tmp/section3.mjs` against the real `src/tutorial/airLock.js` API: all 36 assertions pass, including the intended BRAKE / VENT / LATCH solution, three distinct failure classes, in-place retry, ten clean reset/replay cycles, diagnostics, and bad-delta handling.
+- Re-ran syntax checks on the air-lock integration files, verified all 10 panoramas and 30 generated textures, and completed a direct Vite production build successfully. The only build output is the existing large-chunk advisory.
+- A fresh automated visual playthrough could not be performed because browser control rejected the localhost QA page under its URL policy. Visual clarity, live key input, prompt occlusion, and state-to-animation agreement therefore remain explicitly unverified in this pass and require a human playthrough at `?qa=timetable-3-layout`.
+- Sections IV-VI remain unimplemented; the prior Claude/Kimi run stopped after two consecutive 300-second Kimi MCP timeouts.
+
+## Section III boot-crash repair
+
+- 2026-08-01: Fixed the QA page freezing on `loading the first memory`. The AIR LOCK redesign intentionally removed the legacy `stage.commands` queue, but the shared visual builder still called `stage.commands.map(...)` before GameScene could finish creating. Command-label construction now treats a missing queue as intentional; AIR LOCK continues to use its physical machines and contextual prompts.
+- Reloaded `?qa=timetable-3-layout` in the browser and visually confirmed the AIR LOCK room renders instead of leaving the BootScene loading card on screen. Syntax validation, all 10 panorama/30 texture checks, and the production build pass.
+
+## Phase II–VI Design Lock and Kimi execution start
+
+- 2026-08-01: The user approved the Phase II–VI direction as `DESIGN LOCK`. The locked progression is door/traction interlock → local pneumatic door circuit → spatial weight transfer → bogie diagnosis → replay of the player's real Phase IV trolley trajectory. Work remains local only; no commit or push.
+- Folded four final product constraints into `docs/PROLOGUE_II_VI_KIMI_CLUSTER_EXECUTION_PLAN.md`: the IV→VI trace contract is frozen before Phase IV implementation; Phase VI has a canonical fallback when no valid player recording exists; Phase III uses an open threshold plus hysteresis rather than absolute zero; and the II/III cross-stage blind comparison happens before IV/V production.
+- Kimi Wave 0 completed a read-only repository map in `docs/WAVE_0_REPOSITORY_MAP.md`. Chief verification added one missed blocker: `createAirLock(stage.airLock)` currently discards the stage config, while `AIR_LOCK_TUNING` independently controls runtime logic, leaving two apparent sources of truth.
+- Kimi Wave 2A implemented the frozen IV→VI data contract in `src/tutorial/phases/traceContract.js` with validation, normalization, canonical fallback, summaries, and immutable copies. Chief review found that `Number(Symbol())` violated the promised no-throw boundary; Kimi repaired it and added Symbol plus throwing-coercion regressions. Final result: 30 tests pass, asset verification passes, and the production build passes.
+- Kimi Wave 2B implemented the pure Phase II contact-interlock state machine in `src/tutorial/phases/contactInterlock.js`. It models a locally bouncing POWER contactor, a visible 550 ms copper-trace propagation, successful traction only after the latch circuit is energized, exact reset/replay, one-shot transition events, and safe teardown. Chief review found a successful retry could retain the prior `signal-in-transit` fault; Kimi repaired it and added the exact failure→recovery event-order regression. Final result: 32 tests pass, asset verification passes, and the production build passes.
+- Neither module is wired into the player-visible Phaser scene yet. The next bounded task is the Phase II art module followed by a single integration-owner pass that removes the old `guideSequence: ['brake', 'power']` path instead of running two systems in parallel.
+
+## Phase II contact-interlock visible integration and browser QA
+
+- 2026-08-01: Independently verified the completed multi-agent Phase II integration. The old ordering/timetable interaction is absent from the live room; the player now resets a door-post latch, follows a spatial copper signal run, and closes the remote traction contactor. The old pneumatic machinery group is hidden in this section.
+- Fixed the development QA route so each fixture frames the device that proves its state. Previously every state spawned and framed the latch, leaving the remote contactor and its transient failure flash outside the viewport; `power-fail`, `energized`, and `complete` now frame the contactor, while `signal-mid` frames the transmission path.
+- In-app browser QA captured and visually compared entry, open-circuit failure, mid-signal, and complete states. The failure red flash is now visible, the teal signal front reads along the horizontal wire, and the completed contactor state is distinct from the dormant room. No gameplay rules or tuning changed in this pass.
+- Full verification remains green: 114/114 tutorial tests, all 10 panoramas and 30 textures, production build, and whitespace validation. The standalone skill-supplied Playwright client remains unusable in this environment because its bundled script cannot resolve Playwright; the connected in-app browser supplied the real rendered-frame QA instead.
+
+## Phase II underfloor visual-teaching revision
+
+- 2026-08-01: Player feedback correctly rejected the window-band copper trace as non-intuitive: it read as a debug/UI line rather than train hardware. Routed the entire latch-to-contactor conductor into a steel cable trough at y=556 beneath the carriage floor, with real vertical drops through the floor at both devices, ceramic supports, inspection-slot framing, and the same fault/signal/completion states.
+- Slowed the room-specific propagation from 550ms to 1200ms so a first-time player can visually follow `door latch → underfloor trough → remote contactor`. The pure reusable interlock keeps its 550ms default; the longer duration is a Phase II scene-tuning value, preserving the module contract and its existing tests.
+- Browser inspection confirmed that the dormant trough is readable beneath the floor without obscuring the protagonist, the entry prompt remains localized beside the latch, and the teal propagation front travels through the lower mechanical layer instead of across the windows. The dedicated underfloor-housing regression brings the suite to 115/115; asset verification, production build, and whitespace validation pass.
+
+## Phase II relay-cabinet visual correction + micro polish — FINAL PASS
+
+- 2026-08-02: Visual Correction Wave closed by the chief: Agent A enlarged terminal labels 9px→14px with engraved chips, added tween-free lead sway/hover brighten/grab feedback, a 12x12 moving contact with visible 16px/12px gaps for NO-vs-NC mechanical reading, and a cast-iron operator console grouping TEST/RESET; Agent B proved NC-flash/dead-wire/armature-fall feedback already existed and added the single dropout hint line (`CONTACT DROPPED — TRACE THE LIVE ARM`) through logic-layer `dropoutHint`; the integration owner hid MEMORY/WITNESSES inside the Phase II room (HudScene) and landed the TEST-lever dropout springback plus hint rendering. 315/315 tests, build, diff clean.
+- First-time UX reviewer (blind playtest) confirmed the dropout screenshot is a same-camera failure state, not a camera jump; its zero-feedback claims were traced to its own contaminated session (player wandered to x=3186), and a clean-session chief rerun passed the full chain twice. Human playthrough then passed Phase II for real.
+- Micro polish pass (single-threaded, no logic changes): point-and-click cursor states (game baseline → grab over lead tips → grabbing while dragging → baseline), hover lug swell, glowing drag origin, magnetic snap with widened 34px landing radius and 45% tip ease, bronze/cyan pulsing snap ring on legal terminals, restrained red break mark on the dead A2 screw, one-shot attract sway on first open, and a decorative patina layer (stud washers, brass busbars, wire channel, engraved `RELAY 110V DC` spec plate, low-contrast etching, rivets, wear). Four-state screenshots (rest / hover lead / dragging / hover terminal) and a full wiring run verified in a real browser; 315/315 tests, production build, and `git diff --check` all pass.
+- **Phase II is marked FINAL PASS. No further Phase II audit waves.** Next: Phase III (AIR LOCK pneumatic circuit) per `docs/III_VI_IMPLEMENTATION_SPEC.md` Part 1 and the new Phase III Kimi work package.
+
+## Car 03 Qwen bounded-repair Codex review
+
+- 2026-08-03: Independently re-ran the bounded Car 03 gate: 92/92 tests across 26 suites, 10 panoramas / 30 textures, the main Vite build, isolated Car 03 build, and `git diff --check` all pass.
+- Headed Playwright with real keyboard input verified natural entry movement (x=100 to approximately x=646) and four isolated QA-start scenarios: the active scan cone/reticle remains aligned with world-space drone/player after camera scroll; valid final alignment without E crosses the end but does not complete; one E establishes the duo and permits completion; R clears establishment/completion and restores the entry state.
+- These four final-state scenarios start from QA fixtures. The complete natural entry-to-final playthrough remains `NOT RUN`, so this review accepts Qwen's two bounded repairs but does not declare the whole Car 03 integrated, published, or finally accepted. The only browser console item was the page's missing favicon 404; no game-script exception appeared.

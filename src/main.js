@@ -89,6 +89,120 @@ const renderGameToText = () => {
                   solutionLength: scene.getTutorialStage()?.solution?.length ?? 0,
                   executionStep: scene.tutorialPuzzle.executionStep,
                   activeCommand: scene.tutorialPuzzle.activeCommand,
+                  drum: scene.getTutorialStage()?.drum && scene.tutorialPuzzle.drum
+                    ? {
+                        key: scene.tutorialPuzzle.drumKey ?? 0,
+                        running: scene.tutorialPuzzle.drum.running,
+                        activeSlot: scene.tutorialPuzzle.drum.activeSlot,
+                        waiting: scene.tutorialPuzzle.drum.waiting,
+                        slots: scene.tutorialPuzzle.drum.slots.map((slot) => slot
+                          ? { command: slot.command, status: slot.status }
+                          : null),
+                      }
+                    : null,
+                  // Section III. Built from the local-air-circuit snapshot so
+                  // this text cannot drift from what the gauge is showing.
+                  airCircuit: scene.getTutorialStage()?.airCircuit && scene.tutorialPuzzle.airCircuit
+                    ? (() => {
+                        const snap = scene.tutorialPuzzle.airCircuit.snapshot();
+                        return {
+                          pressure: Math.round(snap.door.pressure),
+                          flow: snap.door.flow,
+                          venting: snap.door.venting,
+                          isolateClosed: snap.isolateClosed,
+                          doorLatchReleased: snap.doorLatchReleased,
+                          doorState: snap.doorState,
+                          stageComplete: snap.stageComplete,
+                          stalledOnSupply: snap.stalledOnSupply,
+                        };
+                      })()
+                    : null,
+                  // Phase IV. Built from the weight-transfer snapshot so this
+                  // text cannot drift from what the bags, tilt and sparks are
+                  // showing.
+                  weightTransfer: scene.getTutorialStage()?.weightTransfer && scene.tutorialPuzzle.weightTransfer
+                    ? (() => {
+                        const snap = scene.tutorialPuzzle.weightTransfer.snapshot();
+                        return {
+                          suspensionPressure: Math.round(snap.suspension.pressure),
+                          suspensionFlow: snap.suspension.flow,
+                          suspensionHealth: Number(snap.suspensionHealth.toFixed(3)),
+                          trolleyX: Number(snap.trolleyX.toFixed(3)),
+                          grabbed: snap.grabbed,
+                          energized: snap.motor.energized,
+                          wheelState: snap.motor.wheelState,
+                          current: Number(snap.motor.current.toFixed(3)),
+                          driveLoad: Number(snap.motor.axleLoad[snap.motor.driveBogie].toFixed(3)),
+                          carDisplacement: Number(snap.motor.carDisplacement.toFixed(3)),
+                          stageComplete: snap.stageComplete,
+                          trace: snap.trace,
+                        };
+                      })()
+                    : null,
+                  // Phase V (READ THE BOGIE). Built from the bogie-diagnosis
+                  // snapshot so this text cannot drift from what the shoes,
+                  // spokes, pin and gauge are showing.
+                  bogieDiagnosis: scene.getTutorialStage()?.bogieService && scene.tutorialPuzzle.bogieDiagnosis
+                    ? (() => {
+                        const snap = scene.tutorialPuzzle.bogieDiagnosis.snapshot();
+                        return {
+                          brakePressure: Math.round(snap.brake.pressure),
+                          brakeFlow: snap.brake.flow,
+                          brakeIsolated: snap.brake.isolated,
+                          frontWheelTurning: snap.front.wheelTurning,
+                          frontBrakeReleased: snap.front.brakeReleased,
+                          rearWheelTurning: snap.rear.wheelTurning,
+                          rearBrakeReleased: snap.rear.brakeReleased,
+                          rearServiceLockEngaged: snap.rear.serviceLockEngaged,
+                          rearRepaired: snap.rear.repaired,
+                          faultyBogie: snap.faultyBogie,
+                          motorEnergized: snap.motor.energized,
+                          motorWheelState: snap.motor.wheelState,
+                          stageComplete: snap.stageComplete,
+                        };
+                      })()
+                    : null,
+                  // Section II. Every interlock snapshot field, straight from
+                  // the live state machine, plus the most recent art event.
+                  // Progress fields are rounded to 3 decimals for stable diffs.
+                  contactInterlock: scene.timetablePuzzle?.contactLock
+                    ? (() => {
+                        const snap = scene.timetablePuzzle.contactLock.snapshot();
+                        return {
+                          entered: snap.entered,
+                          destroyed: snap.destroyed,
+                          latchClosed: snap.latchClosed,
+                          preRelayProgress: Number(snap.preRelayProgress.toFixed(3)),
+                          relayWaiting: snap.relayWaiting,
+                          relayBridged: snap.relayBridged,
+                          postRelayProgress: Number(snap.postRelayProgress.toFixed(3)),
+                          signalProgress: Number(snap.signalProgress.toFixed(3)),
+                          circuitEnergized: snap.circuitEnergized,
+                          contactorClosed: snap.contactorClosed,
+                          powerDelivered: snap.powerDelivered,
+                          complete: snap.complete,
+                          lastFault: snap.lastFault,
+                          isComplete: scene.timetablePuzzle.contactLock.isComplete(),
+                          lastEvent: scene.timetablePuzzle.contactArt?.getState().lastEvent ?? null,
+                          qaFrozen: Boolean(scene.timetablePuzzle.contactQaFreeze),
+                          prompts: scene.timetablePuzzle.contactArt?.getState().prompts ?? null,
+                        };
+                      })()
+                    : null,
+                  // Section II insertion (THE MISSING CONTACT): the relay
+                  // cabinet's full wiring snapshot, the most recent close-up
+                  // art event, and whether the close-up currently owns the
+                  // screen.
+                  relayCabinet: scene.timetablePuzzle?.relay
+                    ? (() => {
+                        const snap = scene.timetablePuzzle.relay.snapshot();
+                        return {
+                          ...snap,
+                          lastEvent: scene.timetablePuzzle.relayArt?.getState().lastEvent ?? null,
+                          closeupActive: Boolean(scene.relayCloseupActive),
+                        };
+                      })()
+                    : null,
                   echoRecorded: scene.tutorialPuzzle.echoRecorded,
                   echoSyncIndex: scene.tutorialPuzzle.echoSyncIndex,
                   echoWindowRemainingMs: Math.max(
@@ -97,22 +211,32 @@ const renderGameToText = () => {
                   ),
                   lookingDown: Boolean(scene.tutorialLookingDown),
                   pressure: Math.round(scene.tutorialPuzzle.pressure ?? 0),
-                  pressureBand: scene.getTutorialStage()?.pressureHold
-                    ? [
-                        scene.getTutorialStage().pressureHold.bandLow,
-                        scene.getTutorialStage().pressureHold.bandHigh,
-                      ]
-                    : null,
                   pressureVenting: Boolean(scene.tutorialPuzzle.pressureVenting),
                   pressureBraked: Boolean(scene.tutorialPuzzle.pressureBraked),
                   pressureSettled: Boolean(scene.tutorialPuzzle.pressureSettled),
-                  echoGateIndex: scene.tutorialPuzzle.echoGateIndex ?? 0,
-                  echoGatesCleared: scene.tutorialPuzzle.echoGatesCleared ?? [],
-                  echoGateNeeded:
-                    scene.getTutorialStage()?.echoGates?.[
-                      scene.tutorialPuzzle.echoGateIndex ?? 0
-                    ]?.command ?? null,
-                  echoAtValve: Boolean(scene.tutorialPuzzle.echoAtValve),
+                  // Phase VI (PAST RIDES THE LOAD): the replay snapshot, so QA
+                  // text can never drift from what the ghost, the stripe and
+                  // the lamps are showing.
+                  echoReplay: scene.getTutorialStage()?.echoLoad && scene.tutorialPuzzle.echoReplay
+                    ? (() => {
+                        const snap = scene.tutorialPuzzle.echoReplay.snapshot();
+                        return {
+                          traceSource: snap.traceSource,
+                          loopIndex: snap.loopIndex,
+                          observationLoop: snap.observationLoop,
+                          echoTrolleyX: snap.echoTrolleyX,
+                          windowActive: snap.windowActive,
+                          attempt: snap.attempt,
+                          biteHeldMs: snap.biteHeldMs,
+                          departing: snap.departing,
+                          conditions: snap.conditions,
+                          motorEnergized: snap.motor.energized,
+                          motorWheelState: snap.motor.wheelState,
+                          driveLoad: Number(snap.motor.axleLoad[snap.motor.driveBogie].toFixed(3)),
+                          stageComplete: snap.stageComplete,
+                        };
+                      })()
+                    : null,
                 }
               : null,
             echoPuzzle: !scene.timetablePuzzle && scene.tutorialPuzzle
