@@ -3,6 +3,7 @@ import { GAME_W, GAME_H, GRAVITY } from './constants.js';
 import BootScene from './scenes/BootScene.js';
 import GameScene from './scenes/GameScene.js';
 import HudScene from './scenes/HudScene.js';
+import CyberpunkParkourScene from './cars/cyberpunkParkour/CyberpunkParkourScene.js';
 
 const config = {
   type: Phaser.AUTO,
@@ -26,7 +27,7 @@ const config = {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  scene: [BootScene, GameScene, HudScene],
+  scene: [BootScene, GameScene, HudScene, CyberpunkParkourScene],
 };
 
 const game = new Phaser.Game(config);
@@ -47,6 +48,18 @@ window.game = game;
 // Read-only diagnostics for automated smoke tests and content-pipeline QA.
 // This does not advance or mutate gameplay state.
 const renderGameToText = () => {
+  const cyberpunkScene = game.scene.getScene('CyberpunkParkour');
+  if (cyberpunkScene?.sys?.isActive()) {
+    return JSON.stringify({
+      coordinateSystem: 'origin top-left; +x right; +y down; world units are pixels',
+      scene: 'CyberpunkParkour',
+      parkour: cyberpunkScene.getTextState(),
+      performance: {
+        fps: Math.round(game.loop.actualFps || 0),
+        timeScale: cyberpunkScene.time?.timeScale ?? 1,
+      },
+    });
+  }
   const scene = game.scene.getScene('Game');
   const player = scene?.player;
   return JSON.stringify({

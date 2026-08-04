@@ -43,6 +43,9 @@ export default class BootScene extends Phaser.Scene {
   create() {
     buildTextures(this);
     buildAnimations(this);
-    this.scene.start('Game');
+    const params = new URLSearchParams(window.location.search);
+    const chapterPreview = params.get('chapter') === 'cyberpunk'
+      || params.get('qa')?.startsWith('parkour-');
+    this.scene.start(chapterPreview ? 'CyberpunkParkour' : 'Game');
   }
 }

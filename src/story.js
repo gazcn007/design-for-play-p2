@@ -12,9 +12,9 @@ export const STORY_WORLDS = [
   },
   {
     startX: 4800,
-    texture: 'backdrop-02',
+    texture: 'backdrop-cyberpunk',
     title: 'THE SAFETY TEST',
-    subtitle: 'the system has prepared a disaster for you to survive',
+    subtitle: 'move the city until it becomes a route',
   },
   {
     startX: 5267,

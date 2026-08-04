@@ -38,7 +38,7 @@ export default class GameScene extends Phaser.Scene {
     super('Game');
   }
 
-  create() {
+  create(data = {}) {
     this.finished = false;
     this.activeInteractable = null;
     this.activeNPC = null;
@@ -49,7 +49,12 @@ export default class GameScene extends Phaser.Scene {
     this.activeWorldIndex = -1;
     this.requestedWorldIndex = -1;
     this.previewWorldIndex = resolvePreviewWorldIndex(STORY_WORLDS);
-    this.initialWorldIndex = this.previewWorldIndex ?? 0;
+    const requestedStartWorld = Number.isInteger(data.startWorldIndex)
+      && data.startWorldIndex >= 0
+      && data.startWorldIndex < STORY_WORLDS.length
+      ? data.startWorldIndex
+      : null;
+    this.initialWorldIndex = requestedStartWorld ?? this.previewWorldIndex ?? 0;
     this.worldAssetLoader = new WorldAssetLoader(this);
     this.backdropChunks = [];
     this.checkpointTaken = false;
@@ -142,8 +147,17 @@ export default class GameScene extends Phaser.Scene {
 
     this.solids.refresh();
 
-    this.player = new Player(this, LEVEL.spawn.x, LEVEL.spawn.y, LEVEL.spawn.lane);
-    this.checkpoint = { ...LEVEL.spawn };
+    const sceneSpawn = requestedStartWorld === null
+      ? LEVEL.spawn
+      : {
+          x: Number.isFinite(data.spawnX)
+            ? data.spawnX
+            : STORY_WORLDS[requestedStartWorld].startX + 24,
+          y: Number.isFinite(data.spawnY) ? data.spawnY : LEVEL.spawn.y,
+          lane: data.spawnLane ?? LEVEL.spawn.lane,
+        };
+    this.player = new Player(this, sceneSpawn.x, sceneSpawn.y, sceneSpawn.lane);
+    this.checkpoint = { ...sceneSpawn };
 
     // A single collider for every solid in the level; the process callback is
     // what enforces lane separation, so the player simply cannot touch
@@ -1360,35 +1374,19 @@ export default class GameScene extends Phaser.Scene {
     // Change scenery only after the HUD has faded fully to black.
     this.time.delayedCall(3500, () => {
       this.registry.set('tutorialPowerRestored', true);
-      this.switchWorld(1, false);
-      // The inherited second-world floor begins 120px after its backdrop
-      // threshold; land beyond that gap so the cinematic cannot respawn the
-      // player back into the prologue while the screen is black.
-      this.player.body.reset((STORY_WORLDS[1]?.startX ?? 4800) + 155, 400);
-      // The landing strip sits inside a world-1 enemy patrol (4940–5220) whose
-      // contact reach covers EVERY standable pixel of it — there is no safe
-      // landing x. Arrival protection therefore holds until the player takes
-      // control (first movement input, cleared in update()) with a 10s safety
-      // cap, instead of letting the patrol farm a helpless arrival.
-      this.player.invulnUntil = Number.POSITIVE_INFINITY;
-      this.prologueArrivalGrace = true;
+      // Stream the approved Chapter One panorama behind the opaque chapter
+      // card. The dedicated scene starts only after the card has cleared, so
+      // the frozen Prologue never shares collision or camera state with the
+      // parkour car.
+      this.worldAssetLoader.load('backdrop-cyberpunk').catch((error) => console.error(error));
       this.departureStreaks.forEach((streak) => streak.setVisible(false));
       this.departureScroll = 0;
     });
 
     this.time.delayedCall(7000, () => {
       this.prologueTransitionActive = false;
-      this.player.frozen = false;
-      this.tutorialExitBlockedNotified = false;
-      // Safety cap on the arrival grace: an idle player loses protection 10s
-      // after the hand-off rather than standing invulnerable forever.
-      this.time.delayedCall(10000, () => {
-        if (this.prologueArrivalGrace) {
-          this.prologueArrivalGrace = false;
-          this.player.invulnUntil = this.time.now;
-        }
-      });
       onComplete();
+      this.scene.start('CyberpunkParkour');
     });
   }
 
