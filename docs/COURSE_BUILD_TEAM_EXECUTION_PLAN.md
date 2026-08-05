@@ -167,9 +167,9 @@ Carl's acceptance route:
 
 ### Kimi — Primary Engineering Partner
 
-#### Wave A: Chapter 1 bounded feedback pass
+#### Wave A: Chapter 1 Phase V–VI bounded feedback pass
 
-Kimi may improve the final mechanical puzzle's readability without changing its answer, layout logic, or frozen earlier-room behavior.
+Kimi begins the Night Service audit at Phase V and continues through Phase VI. Phases I–IV remain frozen. Kimi may improve the two rooms' mechanical readability without changing their answers, pure state-machine rules, or frozen earlier-room behavior. The exact scope and acceptance route live in `docs/NIGHT_SERVICE_PHASE_V_VI_KIMI_AUDIT_WORK_PACKAGE.md`.
 
 Required feedback:
 
@@ -178,6 +178,9 @@ Required feedback:
 - signal travels along a visible cable, rod, pipe, or mechanical path;
 - wrong input produces a local physical attempt and explains why it fails;
 - success produces a complete chain reaction before the door opens.
+- every player-facing prompt is English;
+- Phase V and VI use a persistent undercarriage view: one `S`/Down press looks down, releasing the key does not return the camera, and a second press returns to the cab;
+- Phase VI's automatic observation pass hands control back while the camera remains down.
 
 Owned files for this wave must be explicitly listed in Kimi's work package. Existing unrelated Prologue changes remain protected.
 
