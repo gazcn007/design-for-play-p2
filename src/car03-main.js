@@ -1,10 +1,12 @@
-// Car 03 // independent entry point.
-// Builds a Phaser game whose only scene is PresentCityScene. Does not
-// touch src/main.js, src/scenes/*, or any Car 01 / Car 02 code.
+// Chapter 3 // ECHO CITY — independent entry point.
+// Builds a Phaser game whose only scene is EchoCityScene. Does not touch
+// src/main.js, src/scenes/*, or any other chapter's code. The preserved
+// MOVE AS ONE V2 scene (PresentCityScene) stays in the repository as
+// reusable engineering evidence but is no longer the chapter entry.
 
 import Phaser from 'phaser';
 import { GAME_W, GAME_H, GRAVITY } from './constants.js';
-import PresentCityScene from './cars/presentCity/PresentCityScene.js';
+import EchoCityScene from './cars/presentCity/EchoCityIsoScene.js';
 
 const config = {
   type: Phaser.AUTO,
@@ -31,18 +33,18 @@ const config = {
     mode: Phaser.Scale.NONE,
     autoCenter: Phaser.Scale.NO_CENTER,
   },
-  scene: [PresentCityScene],
+  scene: [EchoCityScene],
 };
 
 const game = new Phaser.Game(config);
 
 game.canvas.setAttribute('tabindex', '0');
 game.canvas.setAttribute('role', 'application');
-game.canvas.setAttribute('aria-label', 'CAR 03 game canvas');
+game.canvas.setAttribute('aria-label', 'CHAPTER 3 ECHO CITY game canvas');
 game.canvas.addEventListener('pointerdown', () => game.canvas.focus());
 
 window.game = game;
 window.__CAR03__ = { game };
 
-// The PresentCityScene hooks `window.render_game_to_text` itself.
+// The EchoCityScene hooks `window.render_game_to_text` itself.
 export default game;

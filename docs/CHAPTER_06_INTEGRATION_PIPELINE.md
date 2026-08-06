@@ -4,6 +4,8 @@ Status: `CONTRACT LOCKED — CHAPTERS MAY CONNECT IN ANY ORDER`
 Owner: Codex
 Runtime module: `src/chapters/allWorlds/chapterOutputRegistry.js`
 
+The accepted visual, camera, and model contract is `docs/CHAPTER_06_ART_CAMERA_MODEL_SPEC.md`; its shared runtime/production manifest is `src/chapters/allWorlds/finaleArtDirection.js`.
+
 ## Purpose
 
 Chapter 6 can be built before Chapters 1–5 are finished. It does not import their scenes, models, or art. Each earlier chapter owns one named output slot and replaces its placeholder only after its ending is playable.

@@ -26,6 +26,44 @@ export function canLookDownUnderfloor(stage, playerX) {
   return stageHasUnderfloorView(stage) && playerX > stage.startX + 90;
 }
 
+// V and VI turn the undercarriage into the room's primary play surface. A
+// hold gesture makes that surface vanish as soon as the player releases the
+// key, so these two rooms use a persistent toggle instead: one press looks
+// down, the next press returns to the cab. Earlier teaching rooms retain the
+// lighter hold gesture.
+export function stageUsesPersistentUnderfloorView(stage) {
+  return stage?.id === 'junction-5' || stage?.id === 'junction-6';
+}
+
+export function createPersistentUnderfloorState() {
+  return { activeStageId: null, latched: false };
+}
+
+export function updatePersistentUnderfloorState(state, {
+  stage,
+  playerX,
+  grounded,
+  lookDownPressed,
+  autoLookDown = false,
+}) {
+  const stageId = stage?.id ?? null;
+  if (state.activeStageId !== stageId) {
+    state.activeStageId = stageId;
+    state.latched = false;
+  }
+  if (!stageUsesPersistentUnderfloorView(stage)) {
+    state.latched = false;
+    return false;
+  }
+  // VI's mandatory first observation pass hands control back without
+  // snapping upright. It may begin before the player reaches the manual
+  // look-down zone, so it is allowed to arm the latch independently.
+  if (autoLookDown) state.latched = true;
+  if (!canLookDownUnderfloor(stage, playerX) || !grounded) return false;
+  if (lookDownPressed && !autoLookDown) state.latched = !state.latched;
+  return state.latched;
+}
+
 // Full look-down resolution, mirroring the guard order in
 // GameScene.updateTutorialCamera: world/camera-mode guards first, then the
 // zone check, then the held key (or QA force), then grounded.
@@ -54,20 +92,20 @@ export function gateTutorialLaneInput({ activeWorldIndex, laneBack, laneFront })
 }
 
 // ---------------------------------------------------------------- hint ---
-// [HOLD S] prompt, screen-anchored (VISIBLE SYSTEM ARC CORRECTION §1). The
+// [HOLD S] / [S] prompt, screen-anchored (VISIBLE SYSTEM ARC CORRECTION §1). The
 // weak/dwell model is abolished: III, IV and V ALL show the same strong
 // prompt the moment the player steps into the underfloor readable zone —
 // a first-time player cannot be expected to remember a verb taught two rooms
-// ago, and a 2800ms dwell only read as "the game has nothing to say". VI
-// carries no prompt at all: its first observation loop drives the camera for
-// the player (GameScene auto follow of the echo trolley).
+// ago, and a 2800ms dwell only read as "the game has nothing to say". V and
+// VI are different: their undercarriage view is persistent, so they always
+// expose the inverse action as well (INSPECT while upright, RETURN while
+// down). VI's first observation loop still drives the camera automatically.
 //
-// Retirement is earned, not timed: the prompt for a stage only leaves once
-// the player has genuinely held S and kept the camera visibly tilted down
-// for UNDERFLOOR_HINT_LOOK_MS in that stage. Each stage retires its own
-// prompt (the correction's "本阶段提示才永久退场"), so IV and V re-teach the
-// verb even after III taught it. The prompt never appears during cinematics,
-// the relay close-up, or after the stage is complete.
+// In III/IV retirement is earned, not timed: the prompt only leaves once the
+// player has genuinely held S and kept the camera visibly tilted down for
+// UNDERFLOOR_HINT_LOOK_MS. V/VI keep their toggle prompt visible so the
+// inverse action is never hidden. No prompt appears during cinematics, the
+// relay close-up, or after the stage is complete.
 
 export const UNDERFLOOR_HINT_LOOK_MS = 300;
 
@@ -77,7 +115,8 @@ export function createUnderfloorHintState() {
 
 // One call per frame. Mutates `state` (look-down accumulation, per-stage
 // retirement) and returns what the scene should show:
-// { visible, style: 'strong'|null }. 'weak' no longer exists.
+// { visible, style: 'strong'|null, action: 'inspect'|'return'|null }.
+// 'weak' no longer exists.
 export function updateUnderfloorHint(state, {
   stage,
   playerX,
@@ -87,12 +126,22 @@ export function updateUnderfloorHint(state, {
   stageComplete,
   deltaMs,
 }) {
-  const hidden = { visible: false, style: null };
+  const hidden = { visible: false, style: null, action: null };
   if (!stage || cinematic || relayCloseup || stageComplete) return hidden;
 
-  // VI (echoLoad) and every non-underfloor stage: no prompt. VI's first loop
-  // is camera-led, so teaching the key there would be redundant noise.
-  if (!stageHasUnderfloorView(stage) || stage.echoLoad) return hidden;
+  if (!stageHasUnderfloorView(stage)) return hidden;
+
+  // V/VI use a toggle, so the inverse action must remain discoverable. This
+  // also makes VI's automatic look-down handoff explicit instead of leaving
+  // the player apparently trapped below the floor.
+  if (stageUsesPersistentUnderfloorView(stage)) {
+    if (playerX <= stage.startX + 90) return hidden;
+    return {
+      visible: true,
+      style: 'strong',
+      action: lookingDown ? 'return' : 'inspect',
+    };
+  }
 
   const stageId = stage.id ?? String(stage.startX);
   if (state.activeStageId !== stageId) {
@@ -118,5 +167,7 @@ export function updateUnderfloorHint(state, {
     state.lookMs = 0;
   }
 
-  return playerX > stage.startX + 90 ? { visible: true, style: 'strong' } : hidden;
+  return playerX > stage.startX + 90
+    ? { visible: true, style: 'strong', action: 'inspect' }
+    : hidden;
 }

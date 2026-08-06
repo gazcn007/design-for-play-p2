@@ -1,0 +1,50 @@
+{
+  "chapter": "03 / ECHO CITY",
+  "runtime": "real-time Three.js GLB preview",
+  "generated": "2026-08-06",
+  "models": {
+    "pipeline": "Hunyuan source -> Blender silhouette-protected decimation and embedded runtime PBR repack; landmark files additionally use glTF-Transform Meshopt and WebP",
+    "files": [
+      "models/clock_tower_web.glb",
+      "models/municipal_tram_web.glb",
+      "models/reunion_fountain_web.glb",
+      "models/produce_market_stall_web.glb",
+      "models/old_municipal_archive_web.glb",
+      "models/transit_ministry_web.glb",
+      "models/scanner_tower_web.glb",
+      "models/ch03_queue_dispenser.glb",
+      "models/ch03_produce_scale.glb",
+      "models/ch03_porter_handcart.glb",
+      "models/ch03_receipt_spike.glb",
+      "models/ch03_queue_stanchion.glb",
+      "models/ch03_clerk_stamp_machine.glb",
+      "models/ch03_crosswalk_signal.glb",
+      "models/ch03_fountain_bench.glb",
+      "models/ch03_pa_speaker.glb",
+      "models/ch03_night_ticket_reader.glb"
+    ]
+  },
+  "narrativeProps": {
+    "source": "Tencent Hunyuan 3D 3.0 Normal + PBR, generated from the approved isolated Chapter 3 prop references",
+    "optimization": "500k source triangles per asset reduced to 7k-14k; three 4096px source maps repacked as three embedded 1024px maps",
+    "runtimeTotal": "approximately 8.2 MB for ten GLBs",
+    "placement": "arrival: queue dispenser and night reader; market: produce scale, handcart and receipt device; transit/scanner: stanchion, clerk stamp, crosswalk signal and PA speaker; fountain: reunion bench"
+  },
+  "ground": {
+    "worn-limestone-source.png": {
+      "role": "project-generated seamless albedo source derived from the approved v6 material language only",
+      "generator": "OpenAI image generation built-in tool",
+      "prompt_scope": "orthographic top-down worn civic limestone; no scene layout, objects or baked lighting"
+    },
+    "worn-limestone-albedo.webp": "1024px runtime albedo",
+    "worn-limestone-height.webp": "1024px bump source",
+    "worn-limestone-roughness.webp": "1024px roughness source",
+    "worn-limestone-dark-albedo.webp": "1024px dark civic-cobble variant used for broad walkable courts",
+    "dark-city-cobbles.webp": {
+      "role": "dark non-walkable street base",
+      "source": "Quaternius Downtown City MegaKit Standard / T_Concrete_Asphalt_BaseColor.png",
+      "license": "CC0"
+    }
+  },
+  "interaction": "Pale courts and graph ribbons are real raycast surfaces. A grid A* route keeps click movement inside the same 3D walkable contract and avoids hero props."
+}

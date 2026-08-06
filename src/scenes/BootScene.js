@@ -3,6 +3,8 @@ import { GAME_W, GAME_H } from '../constants.js';
 import { buildAnimations, buildTextures } from '../textures.js';
 import { STORY_WORLDS } from '../story.js';
 import { queueWorldAsset, resolvePreviewWorldIndex } from '../worlds/worldAssets.js';
+import mechanicalTableBaseUrl from '../assets/tutorial/mechanical-table/base-plate.png?url';
+import mechanicalPipeUrl from '../assets/tutorial/mechanical-table/vendor/pipe-tileset-cc0.png?url';
 
 export default class BootScene extends Phaser.Scene {
   constructor() {
@@ -38,6 +40,11 @@ export default class BootScene extends Phaser.Scene {
     const previewIndex = resolvePreviewWorldIndex(STORY_WORLDS);
     const initialWorld = STORY_WORLDS[previewIndex ?? 0];
     queueWorldAsset(this.load, initialWorld.texture);
+    this.load.image('mechanical-table-base', mechanicalTableBaseUrl);
+    this.load.spritesheet('mechanical-pipe-parts', mechanicalPipeUrl, {
+      frameWidth: 16,
+      frameHeight: 16,
+    });
   }
 
   create() {

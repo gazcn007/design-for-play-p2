@@ -117,6 +117,90 @@ const renderGameToText = () => {
                         };
                       })()
                     : null,
+                  firstWeight: scene.getTutorialStage()?.firstWeight && scene.tutorialPuzzle.firstWeight
+                    ? (() => {
+                        const snap = scene.tutorialPuzzle.firstWeight.snapshot();
+                        return {
+                          caseFalling: snap.caseFalling,
+                          caseDetent: snap.caseDetent,
+                          grabbed: snap.grabbed,
+                          firstBalanced: snap.firstBalanced,
+                          tagPunched: snap.tagPunched,
+                          playerWeightRevealed: snap.playerWeightRevealed,
+                          tilt: Number(snap.tilt.toFixed(3)),
+                          level: snap.level,
+                          atExit: snap.atExit,
+                          finalBalanceProgress: Number(snap.finalBalanceProgress.toFixed(2)),
+                          stageComplete: snap.stageComplete,
+                          qaFrozen: scene.timetablePuzzle?.firstWeightQaFreeze ?? false,
+                        };
+                      })()
+                    : null,
+                  twoTrueThings: scene.getTutorialStage()?.twoTrueThings && scene.tutorialPuzzle.twoTrueThings
+                    ? (() => {
+                        const snap = scene.tutorialPuzzle.twoTrueThings.snapshot();
+                        return {
+                          casesFallen: snap.casesFallen,
+                          tags: snap.tags,
+                          amberConnected: snap.amberConnected,
+                          cyanConnected: snap.cyanConnected,
+                          cradleSupport: snap.cradleSupport,
+                          cases: snap.cases,
+                          grabbedCase: snap.grabbedCase,
+                          separated: snap.separated,
+                          level: snap.level,
+                          settleProgress: Number(snap.settleProgress.toFixed(2)),
+                          stageComplete: snap.stageComplete,
+                          qaFrozen: scene.timetablePuzzle?.twoTrueThingsQaFreeze ?? false,
+                        };
+                      })()
+                    : null,
+                  trainRemembers: scene.getTutorialStage()?.trainRemembers && scene.tutorialPuzzle.trainRemembers
+                    ? (() => {
+                        const snap = scene.tutorialPuzzle.trainRemembers.snapshot();
+                        return {
+                          phase: snap.phase,
+                          traceSource: snap.traceSource,
+                          poseIndex: snap.poseIndex,
+                          echoX: Number(snap.echoX.toFixed(3)),
+                          presentX: Number(snap.presentX.toFixed(3)),
+                          grabbed: snap.grabbed,
+                          balanceError: Number(snap.balanceError.toFixed(3)),
+                          balanced: snap.balanced,
+                          poseHoldProgress: Number(snap.poseHoldProgress.toFixed(2)),
+                          redactionProgress: Number(snap.redactionProgress.toFixed(2)),
+                          catchReady: snap.catchReady,
+                          caught: snap.caught,
+                          trainHelping: snap.trainHelping,
+                          trainHelpProgress: Number(snap.trainHelpProgress.toFixed(2)),
+                          stageComplete: snap.stageComplete,
+                          qaFrozen: scene.timetablePuzzle?.trainRemembersQaFreeze ?? false,
+                        };
+                      })()
+                    : null,
+                  mechanicalTable: scene.getTutorialStage()?.mechanicalTable && scene.tutorialPuzzle.mechanicalTable
+                    ? (() => {
+                        const snap = scene.tutorialPuzzle.mechanicalTable.snapshot();
+                        return {
+                          ...snap,
+                          pressure: Number(snap.pressure.toFixed(2)),
+                          bearing: snap.bearing ? {
+                            ...snap.bearing,
+                            progress: Number(snap.bearing.progress.toFixed(3)),
+                          } : null,
+                          ghost: snap.ghost ? {
+                            ...snap.ghost,
+                            progress: Number(snap.ghost.progress.toFixed(3)),
+                          } : null,
+                          panel: {
+                            open: scene.timetablePuzzle?.mechanicalPanelMode === `table-${snap.phase}`,
+                            hover: scene.timetablePuzzle?._mechanicalHoverId ?? null,
+                            pressed: scene.timetablePuzzle?._mechanicalPressedId ?? null,
+                            hitIds: scene.timetablePuzzle?.mechanicalPanel?.hits?.map((hit) => hit.id) ?? [],
+                          },
+                        };
+                      })()
+                    : null,
                   // Phase IV. Built from the weight-transfer snapshot so this
                   // text cannot drift from what the bags, tilt and sparks are
                   // showing.
@@ -129,6 +213,8 @@ const renderGameToText = () => {
                           suspensionHealth: Number(snap.suspensionHealth.toFixed(3)),
                           trolleyX: Number(snap.trolleyX.toFixed(3)),
                           grabbed: snap.grabbed,
+                          readyForTest: snap.readyForTest,
+                          testAttempt: snap.testAttempt,
                           energized: snap.motor.energized,
                           wheelState: snap.motor.wheelState,
                           current: Number(snap.motor.current.toFixed(3)),
@@ -155,10 +241,30 @@ const renderGameToText = () => {
                           rearBrakeReleased: snap.rear.brakeReleased,
                           rearServiceLockEngaged: snap.rear.serviceLockEngaged,
                           rearRepaired: snap.rear.repaired,
+                          faultLocalized: snap.faultLocalized,
                           faultyBogie: snap.faultyBogie,
+                          selectedBogie: snap.selectedBogie,
+                          observations: snap.observations,
                           motorEnergized: snap.motor.energized,
                           motorWheelState: snap.motor.wheelState,
                           stageComplete: snap.stageComplete,
+                          mechanicalPanel: {
+                            open: scene.timetablePuzzle?.mechanicalPanelMode === 'bogie',
+                            hover: scene.timetablePuzzle?._mechanicalHoverId ?? null,
+                            pressed: scene.timetablePuzzle?._mechanicalPressedId ?? null,
+                            ventHeld: Boolean(scene.timetablePuzzle?._mechanicalVentHeld),
+                            bounce: scene.timetablePuzzle?._mechanicalBounce?.id ?? null,
+                            pointerDownCount: scene.timetablePuzzle?._mechanicalPointerDownCount ?? 0,
+                            lastPointerDown: scene.timetablePuzzle?._mechanicalLastPointerDown ?? null,
+                            hitIds: scene.timetablePuzzle?.mechanicalPanel?.hits?.map((hit) => hit.id) ?? [],
+                            hits: scene.timetablePuzzle?.mechanicalPanel?.hits?.map((hit) => ({
+                              id: hit.id,
+                              x: Math.round(hit.x),
+                              y: Math.round(hit.y),
+                              w: Math.round(hit.w),
+                              h: Math.round(hit.h),
+                            })) ?? [],
+                          },
                         };
                       })()
                     : null,
@@ -227,6 +333,8 @@ const renderGameToText = () => {
                           echoTrolleyX: snap.echoTrolleyX,
                           windowActive: snap.windowActive,
                           attempt: snap.attempt,
+                          loadRoute: snap.loadRoute,
+                          requiredRoute: snap.requiredRoute,
                           biteHeldMs: snap.biteHeldMs,
                           departing: snap.departing,
                           conditions: snap.conditions,
@@ -234,6 +342,15 @@ const renderGameToText = () => {
                           motorWheelState: snap.motor.wheelState,
                           driveLoad: Number(snap.motor.axleLoad[snap.motor.driveBogie].toFixed(3)),
                           stageComplete: snap.stageComplete,
+                          mechanicalPanel: {
+                            open: scene.timetablePuzzle?.mechanicalPanelMode === 'echo',
+                            hover: scene.timetablePuzzle?._mechanicalHoverId ?? null,
+                            pressed: scene.timetablePuzzle?._mechanicalPressedId ?? null,
+                            pointerDownCount: scene.timetablePuzzle?._mechanicalPointerDownCount ?? 0,
+                            lastPointerDown: scene.timetablePuzzle?._mechanicalLastPointerDown ?? null,
+                            hitIds: scene.timetablePuzzle?.mechanicalPanel?.hits?.map((hit) => hit.id) ?? [],
+                            hits: scene.timetablePuzzle?.mechanicalPanel?.hits?.map((hit) => ({ ...hit })) ?? [],
+                          },
                         };
                       })()
                     : null,

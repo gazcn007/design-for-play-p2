@@ -23,12 +23,28 @@ function step(phase, seconds, dtMs = 50) {
   for (let i = 0; i < iterations; i += 1) phase.update(dtMs, LOAD);
 }
 
-test('one TEST, one contradiction: the healthy bogie turns, the faulty one does not — with every upstream signal normal', () => {
+function localizeFault(phase) {
+  // Real test-stand grammar: prove A, return the knife switch to OFF, select
+  // B, then apply the same test and inspect the non-travelling actuator.
+  phase.interact('test');
+  step(phase, 1.5);
+  phase.interact('test');
+  phase.interact('select-rear');
+  phase.interact('test');
+  step(phase, 1.5);
+  assert.equal(phase.interact('inspect-actuator'), true);
+  assert.equal(phase.snapshot().faultLocalized, true);
+  phase.interact('test');
+  phase.drainEvents();
+}
+
+test('the A/B selector builds one comparable observation at a time', () => {
   const { phase } = rig();
   phase.enter();
+  assert.equal(phase.snapshot().selectedBogie, 'front');
   phase.interact('test');
   step(phase, 2);
-  const snap = phase.snapshot();
+  let snap = phase.snapshot();
   // Upstream evidence is genuinely normal on BOTH sides.
   assert.equal(snap.motor.energized, true);
   assert.equal(snap.motor.wheelState, 'biting'); // Phase IV load persists
@@ -42,15 +58,55 @@ test('one TEST, one contradiction: the healthy bogie turns, the faulty one does 
   assert.equal(snap.rear.brakeReleased, false); // seized piston stays clamped
   assert.equal(snap.rear.wheelTurning, false);
   assert.equal(snap.rear.fault, 'brake-actuator-seized');
+  assert.equal(snap.faultLocalized, false);
+  assert.ok(snap.observations.front);
+  assert.equal(snap.observations.rear, null);
+  assert.equal(phase.interact('inspect-actuator'), false);
+  assert.equal(phase.drainEvents().find((e) => e.type === 'control-bounce').reason, 'compare-both-bogies');
+
+  phase.interact('test');
+  assert.equal(phase.interact('select-rear'), true);
+  phase.interact('test');
+  step(phase, 2);
+  snap = phase.snapshot();
+  assert.ok(snap.observations.front);
+  assert.ok(snap.observations.rear);
+  assert.equal(snap.observations.front.wheelTurning, true);
+  assert.equal(snap.observations.rear.wheelTurning, false);
+  assert.equal(phase.interact('inspect-actuator'), true);
+  assert.equal(phase.snapshot().faultLocalized, true);
   assert.equal(snap.stageComplete, false);
+});
+
+test('the selector is interlocked and the actuator needs both calibrated tests', () => {
+  const { phase } = rig();
+  phase.enter();
+  assert.equal(phase.interact('inspect-actuator'), false);
+  assert.equal(phase.drainEvents().find((e) => e.type === 'control-bounce').reason, 'compare-both-bogies');
+  phase.interact('test');
+  step(phase, 1.5);
+  assert.equal(phase.interact('select-rear'), false);
+  assert.equal(phase.drainEvents().find((e) => e.type === 'control-bounce').reason, 'return-test-off');
+  phase.interact('test');
+  phase.interact('select-rear');
+  phase.interact('test');
+  step(phase, 1.5);
+  assert.equal(phase.interact('inspect-actuator'), true);
+  const localized = phase.drainEvents().find((e) => e.type === 'fault-localized');
+  assert.deepEqual(localized.evidence, ['current-arrives', 'line-pressurized', 'piston-stationary']);
 });
 
 test('repair refuses without the full Gate 0 chain, naming each missing condition', () => {
   const { phase } = rig();
   phase.enter();
 
-  phase.interact('repair'); // nothing done at all
+  phase.interact('repair');
   let bounce = phase.drainEvents().find((e) => e.type === 'control-bounce');
+  assert.equal(bounce.reason, 'fault-not-localized');
+  localizeFault(phase);
+
+  phase.interact('repair'); // nothing done at all
+  bounce = phase.drainEvents().find((e) => e.type === 'control-bounce');
   assert.equal(bounce.reason, 'not-isolated');
 
   phase.interact('brake-isolate');
@@ -84,11 +140,8 @@ test('the service pin refuses to seat against a live or charged line', () => {
 test('the full chain completes: isolate -> vent -> pin -> repair -> unpin -> restore -> TEST turns both bogies', () => {
   const { phase } = rig();
   phase.enter();
-  phase.interact('test');
-  step(phase, 1.5);
+  localizeFault(phase);
   assert.equal(phase.snapshot().rear.wheelTurning, false);
-
-  phase.interact('test'); // TEST off for the repair
   phase.interact('brake-isolate');
   phase.setVentHeld(true);
   step(phase, 2.5);
@@ -139,6 +192,7 @@ test('the healthy side keeps working while the faulty branch is stripped', () =>
 test('repairing without restoring the supply cannot complete (fail-safe stays clamped)', () => {
   const { phase } = rig();
   phase.enter();
+  localizeFault(phase);
   phase.interact('brake-isolate');
   phase.setVentHeld(true);
   step(phase, 2.5);
@@ -158,6 +212,7 @@ test('repairing without restoring the supply cannot complete (fail-safe stays cl
 test('stage-complete is one-shot and reset restores the contradiction', () => {
   const { phase } = rig();
   phase.enter();
+  localizeFault(phase);
   phase.interact('brake-isolate');
   phase.setVentHeld(true);
   step(phase, 2.5);

@@ -129,6 +129,36 @@ test('a failed TEST never resets the trolley (lock §4)', () => {
   assert.equal(phase.snapshot().motor.wheelState, 'spinning');
 });
 
+test('an early live TEST cannot silently pass when D moves the counterweight into position', () => {
+  const { phase } = rig();
+  phase.enter();
+  phase.interact('level-drain');
+  phase.interact('level-supply');
+  step(phase, 8);
+
+  // This is the human-reported failure mode: TEST first, then hold D while
+  // carrying the trolley.  The old implementation crossed a hidden load
+  // threshold and completed without another decision.
+  phase.interact('test');
+  assert.equal(phase.snapshot().testAttempt, 'stale');
+  pushTrolleyHome(phase);
+  step(phase, 6);
+  let snap = phase.snapshot();
+  assert.equal(snap.readyForTest, true);
+  assert.equal(snap.motor.wheelState, 'spinning');
+  assert.equal(snap.stageComplete, false);
+  assert.ok(phase.drainEvents().some((event) => event.type === 'test-reset-required'));
+
+  // Return the real handle to OFF, then deliberately TEST the now-ready rig.
+  phase.interact('test');
+  assert.equal(phase.snapshot().testAttempt, 'idle');
+  phase.interact('test');
+  assert.equal(phase.snapshot().testAttempt, 'armed');
+  step(phase, 6);
+  snap = phase.snapshot();
+  assert.equal(snap.stageComplete, true);
+});
+
 test('hysteresis: pulling the trolley back off the bogie drops the bite only below the floor', () => {
   const { phase } = rig();
   phase.enter();
