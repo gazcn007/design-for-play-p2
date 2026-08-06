@@ -1,13 +1,202 @@
 # Next implementation task
 
-Status: `READY`
+Status: `COMPLETE`
+
+Owner: `Codex`
+
+Task: Prologue Phase V `TWO TRUE THINGS` + Phase VI `THE TRAIN REMEMBERS`
+
+## Product decision (2026-08-06)
+
+George accepted the implemented Phase IV and explicitly rejected the remaining
+Phase V/VI rolling-bearing table. Implement the world-space continuation locked
+in `docs/PROLOGUE_PHASE_V_VI_PLAYABLE_SEQUENCE_LOCK.md`. The old table must not
+remain reachable in V or VI. Preserve Phase IV gameplay exactly; it may only
+export its already-performed case movement for VI to replay.
+
+## Player outcome
+
+V asks the player to use the persistent witness punch, amber relationship and
+cyan force line to unfold and support a second cradle so two contradictory but
+authentic memories can both remain. VI replays the large Phase IV case movement
+as an amber partner action; the player counterbalances it with the present case,
+then abandons perfect balance to catch a falling record and watches the train
+perform the missing counter-movement itself.
+
+## In scope
+
+- Replace only the Phase V/VI runtime routes with the approved world-space acts.
+- Add one pure deterministic module and one world-art layer per phase.
+- Reuse the Phase IV grip/release case verb, Phase I punch, Phase II amber line,
+  Phase III cyan line and the same cradle/equalizer silhouette.
+- Keep `?qa=phase5&state=entry` and `?qa=phase6&state=entry` playable and expose
+  both new snapshots through `window.render_game_to_text()`.
+- Keep all wrong placements recoverable in place with persistent progress.
+- Add focused tests for V's independent support relationships and VI's two
+  counterbalance poses, redaction, catch and autonomous train response.
+
+## Acceptance criteria
+
+1. V exposes two distinct memories before asking the player to preserve both.
+2. Amber-only, cyan-only and unsupported-case states each produce different
+   physical outcomes without clearing tags or connections.
+3. V completes only when both tags are punched, both old relationships support
+   the second cradle and the cases occupy separate supports for 600ms.
+4. VI teaches two readable opposite-side poses before its story twist.
+5. Catching the redacted case, not maintaining perfect balance, triggers the
+   train's autonomous counter-movement and completion.
+6. No modal panel, new button vocabulary, timer bar, death, reset or red warning
+   is introduced.
+7. Phase IV, Chapters 3-6 and unrelated dirty work remain intact.
+
+## Completed QA route
+
+1. Phase V was inspected at entry, amber-only, both-supports and solved states.
+2. Phase VI was inspected at entry, both counterbalance poses, the visible
+   redaction/fall beat, catch and autonomous-train completion.
+3. Both phases expose live snapshots through `render_game_to_text()`.
+4. Focused tests, the complete tutorial suite, production build, console and
+   whitespace checks pass.
+
+---
+
+## Superseded task: Prologue IV-VI unified rolling-bearing table replacement
+
+Status: `SUPERSEDED FOR PHASE IV / DEFERRED FOR V-VI`
 
 Owner: `penguin`
 
 Base: `georgezboa/design-for-play-p2`, branch
 `codex/playable-train-prologue`, at or after commit `19cf96b`
 
-Task: Chapter One cyberpunk parkour vertical slice
+## Parallel READY task — Chapter 3 visual rebuild
+
+Status: `READY`
+
+Owner: `Codex`
+
+Product decision (2026-08-05): George explicitly rejected the current Chapter 3
+greybox art and selected the warm, sun-bleached painterly civic-square concept
+generated during the visual review. Rebuild only the visible `ECHO CITY` layer:
+real CC0 3D environment and character sources, coherent hand-painted materials,
+directional late-afternoon lighting, readable architectural depth, and restrained
+diegetic interaction feedback. Preserve the accepted isometric model, waypoint
+graph, seven camera beats, puzzle rules, events, reset, and completion behavior.
+The selected concept is a visual target, not a runtime background to paste over
+the game. Other chapters and shared gameplay files remain protected.
+
+## Product decision (2026-08-05)
+
+The user explicitly rejects the existing Phase IV weight-transfer floor rig,
+Phase V bogie-service panel, and Phase VI traction synchronizer as three
+separate interaction languages. This is a core-mechanics replacement, not an
+art polish pass.
+
+Phases IV-VI now use one diegetic, point-and-click **rolling-bearing service
+table**. The table has five persistent physical verbs:
+
+1. charge the hydraulic/steam reservoir;
+2. place a sliding counterweight in a visible detent;
+3. route a plug/fork to one of two visible output paths;
+4. bridge a visible broken contact when present;
+5. release one brass bearing and watch its complete physical journey.
+
+The visual target is the selected 1960s cast-iron night-train service box, not
+a modern control console. The generated empty base plate and CC0 pipe/industrial
+parts are production assets, while commercial reference games contribute only
+interaction grammar.
+
+The three rooms share the same board and input language but ask different
+questions:
+
+- **IV / LOAD THE RAIL** teaches power plus weight. A bearing only reaches the
+  output when the reservoir is charged and the counterweight is in the correct
+  visible detent. Wrong attempts stall or return on the table; no progress is
+  cleared.
+- **V / FIND THE BREAK** adds two routes. A reference run on A works, the same
+  run on B stops at a visibly open contact, and the player bridges that contact
+  before proving B. This is diagnosis by comparing two physical outcomes, not
+  a memorized service sequence.
+- **VI / MEET THE PAST** preserves the authored-replay rule. A remembered
+  bearing loops on the upper rail. The player configures the now-familiar
+  pressure, weight, and route, then releases the present bearing so both meet
+  in one visible coupling cradle. Misses recirculate without reset.
+
+Success is never granted by walking, moving a weight, or clicking the final
+setting alone. It occurs only after an explicit RELEASE and the bearing visibly
+reaches the phase's mechanical result.
+
+## Player outcome
+
+A first-time player can explain the shared sentence — "pressure launches it,
+weight changes how it travels, wiring chooses where it goes" — after Phase IV.
+Phase V makes them use that sentence to locate a fault. Phase VI makes them
+apply the same sentence in time with their past action. Each phase is readable
+at a glance but requires at least one observed result and a deliberate second
+plan.
+
+## In scope
+
+- Add one pure phase module with deterministic snapshots/events for IV-VI.
+- Replace the runtime routes of `weightTransfer`, `bogieDiagnosis`, and
+  `echoReplay`; the legacy modules may remain as historical dead code until a
+  separate cleanup, but may not drive gameplay.
+- Add one shared point-and-click art/controller layer using the selected base
+  plate plus credited CC0 art.
+- Replace the three rooms' many world controls with one inspection hatch each.
+- Preserve ordinary E-to-inspect, pointer interaction, ESC/E close, camera/HUD
+  restoration, completed-room persistence, and the protagonist as the only
+  directly controlled human.
+- Keep `?qa=phase4`, `?qa=phase5`, and `?qa=phase6` working with new fixture
+  aliases and expose the complete table snapshot through
+  `window.render_game_to_text()`.
+- Add deterministic tests for every wrong-result recovery and the full IV→V→VI
+  progression.
+
+## Acceptance criteria
+
+1. IV cannot complete merely by moving the counterweight. A visible bearing run
+   is required; underpowered and misweighted runs visibly fail and recover.
+2. V requires a successful A reference, a failed B comparison, a visible bridge,
+   and a successful B proof. Blindly clicking the bridge before observing the
+   break does not complete the room.
+3. VI consumes the saved IV trace when available, otherwise a canonical loop,
+   and requires a visible bearing meeting at the coupling cradle.
+4. All three phases use the same hit targets in the same positions and introduce
+   no new control vocabulary after IV.
+5. The visible plate, bearing position, pressure, weight detent, route, bridge,
+   output, failure and completion agree with `render_game_to_text()`.
+6. Wrong actions never clear observations, never close the board, and never
+   require leaving the room or reloading.
+7. Legacy V/VI panels and their abstract ammeters, service-button row and timing
+   strip are unreachable in the normal runtime.
+
+## Required QA route
+
+1. IV: release underpowered; charge, release with wrong weight; correct weight,
+   release, and complete.
+2. V: prove A; select B and observe the open contact; bridge it; prove B and
+   complete.
+3. VI: make one early or late miss; allow the bearing to recirculate; configure
+   route/weight/pressure; meet the past bearing and complete.
+4. Close and reopen each plate mid-solve and verify state persistence.
+5. Run tutorial tests, `npm run assets:check`, `npm run build`,
+   `git diff --check`, browser visual comparison, and text-state comparison.
+
+## File ownership and safety
+
+The current worktree contains unrelated Chapter 3-6 work. Touch only the new
+mechanical-table files, narrow integration points in `BootScene.js`,
+`TimetablePuzzle.js`, `level.js`, `main.js`, tests, this handoff, and
+`progress.md`. Do not commit or push.
+
+---
+
+## Deferred prior READY task: Chapter One cyberpunk parkour vertical slice
+
+The cyberpunk task below remains product-approved but is temporarily displaced
+by the user's explicit IV-VI replacement request. Do not implement it in this
+pass.
 
 ## Product decision
 

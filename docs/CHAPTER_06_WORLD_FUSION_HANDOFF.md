@@ -29,16 +29,25 @@ This establishes player-controlled and automatic world switching in one route wi
 
 ## Validation on 2026-08-04
 
-- `node --test tests/chapter06/worldFusionModel.test.mjs`: 5/5 passing.
+- The original pairwise model remains 5/5 passing.
+- The complete Chapter 6 focused suite is now 21/21 passing, including the five-slot contract, art/camera lock, eight-piece continuous Fusion Spine, camera deadzone/look-ahead/bounds, and reunion framing.
 - `npx vite build --config vite.car06.config.js --outDir /tmp/nightfall-car06-build`: passing.
 - `git diff --check`: passing for this change.
-- Browser composition opened at `http://127.0.0.1:5301/car06.html` with no console errors. The browser surface could display the slice but did not retain simulated held-key input, so full natural-keyboard visual traversal remains a required human QA gate.
+- Browser composition and the complete playable route were inspected at `car06.html`: entry, pylon prompt, Grid to Paper switch, foreground occluder, Brush Anchor, wind bridge, automatic return to Grid, Witness Door, World Loom vista, Mara silhouette, completion, and reset all rendered. Browser automation could only repeat discrete native key presses instead of sustaining a held key, so final human held-key feel remains a QA gate.
+
+## Fusion Spine P0 greybox
+
+- Runtime layout: `src/chapters/allWorlds/fusionSpineLayout.js`.
+- Camera controller: `src/chapters/allWorlds/finaleCameraDirector.js`.
+- The 2880px route uses all eight locked reusable spine slots without gaps.
+- The Scene draws a three-quarter deck, shared under-spine mechanical ribs, a readable safety gate, transition-ready foreground occlusion, a fixed Brush Anchor, chasm/bridge, Witness Door, World Loom scale proxy, and distant Mara scale proxy.
+- The camera follows after player movement with a deadzone, eased look-ahead, hard world bounds, and a non-snapping Butch/Mara two-target mode.
 
 ## Next implementation beats
 
 The five independent chapter input slots and their exact packet contract are now locked in `docs/CHAPTER_06_INTEGRATION_PIPELINE.md`.
 
-1. Replace the graphically simple Grid/Paper blockout with Jason's common painterly treatment while preserving all named state anchors and 960×600 geometry.
+1. Replace the programmatic Fusion Spine surfaces with Jason's common painterly treatment while preserving all named state anchors, module sockets, the 960×600 viewport, and the 2880px world route.
 2. Connect each real chapter packet as it becomes ready; the order no longer matters.
 3. Add a second pairwise beat, ideally **Museum ↔ Train**, with one interpretation changing a moving route.
 4. Add the three-world overlap only after each pairwise carry contract is represented as named serializable state.

@@ -41,6 +41,8 @@
 //   'window-opened' / 'window-closed'
 //   'test-energized'    { inWindow }
 //   'test-released'
+//   'load-route-changed' { route }
+//   'load-misrouted'    the replay load was sent to the reference bogie
 //   'spinning-stale'    window arrived but the attempt was already free-revving
 //   'bite-started'
 //   'bite-broken'       window ended before the hold completed (hold resets)
@@ -94,7 +96,8 @@ export function createEchoReplay(config = {}) {
   let loopIndex = 0;
   let echoTrolleyX = trace.samples[0].normalizedX;
   let windowActive = false;
-  let attempt = 'idle'; // 'idle' | 'armed' | 'stale' | 'biting'
+  let attempt = 'idle'; // 'idle' | 'armed' | 'stale' | 'misrouted' | 'biting'
+  let loadRoute = 'front'; // deliberate wrong-safe default; Phase V taught B/rear is the repaired drive
   let biteHeldMs = 0;
   let departing = false;
   let departureElapsedMs = 0;
@@ -142,6 +145,7 @@ export function createEchoReplay(config = {}) {
     echoTrolleyX = trace.samples[0].normalizedX;
     windowActive = false;
     attempt = 'idle';
+    loadRoute = 'front';
     biteHeldMs = 0;
     departing = false;
     departureElapsedMs = 0;
@@ -154,6 +158,19 @@ export function createEchoReplay(config = {}) {
     if (!entered || stageComplete || departing) {
       events.push({ type: 'control-bounce', command, reason: 'inactive' });
       return false;
+    }
+    if (command === 'route') {
+      if (loopIndex === 0) {
+        events.push({ type: 'control-bounce', command, reason: 'observe-first-loop' });
+        return false;
+      }
+      if (motor.snapshot().energized) {
+        events.push({ type: 'control-bounce', command, reason: 'release-traction-first' });
+        return false;
+      }
+      loadRoute = loadRoute === 'front' ? 'rear' : 'front';
+      events.push({ type: 'load-route-changed', route: loadRoute });
+      return true;
     }
     if (command !== 'test') {
       events.push({ type: 'control-bounce', command, reason: 'unknown-control' });
@@ -168,8 +185,13 @@ export function createEchoReplay(config = {}) {
     const snap = motor.snapshot();
     if (!snap.energized) {
       motor.setEnergized(true);
-      attempt = windowActive ? 'armed' : 'stale';
-      events.push({ type: 'test-energized', inWindow: windowActive });
+      if (loadRoute !== 'rear') {
+        attempt = 'misrouted';
+        events.push({ type: 'load-misrouted', route: loadRoute });
+      } else {
+        attempt = windowActive ? 'armed' : 'stale';
+      }
+      events.push({ type: 'test-energized', inWindow: windowActive, route: loadRoute });
     } else {
       motor.setEnergized(false);
       attempt = 'idle';
@@ -210,7 +232,7 @@ export function createEchoReplay(config = {}) {
     // (the player must see the chance pass by); only the load FED TO THE MOTOR
     // is suppressed — free-revving wheels cannot re-grip when weight arrives.
     const rhythmDrive = driveLoadAt(echoTrolleyX, health);
-    const effectiveDrive = attempt === 'stale'
+    const effectiveDrive = attempt === 'stale' || attempt === 'misrouted' || loadRoute !== 'rear'
       ? driveLoadAt(0, health)
       : rhythmDrive;
     motor.setAxleLoad({ rear: effectiveDrive, front: clamp01(1 - effectiveDrive) });
@@ -284,6 +306,8 @@ export function createEchoReplay(config = {}) {
       settledX: trace.settledX,
       windowActive,
       attempt,
+      loadRoute,
+      requiredRoute: 'rear',
       biteHeldMs: Math.round(biteHeldMs),
       biteHoldMs: tuning.biteHoldMs,
       departing,
@@ -314,6 +338,7 @@ export function createEchoReplay(config = {}) {
     echoTrolleyX = trace.samples[0].normalizedX;
     windowActive = false;
     attempt = 'idle';
+    loadRoute = 'front';
     biteHeldMs = 0;
     departing = false;
     departureElapsedMs = 0;

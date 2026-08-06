@@ -35,10 +35,13 @@
 // The trolley starts at 0, so a natural solve (push it all the way home)
 // collects all four markers without any prompting.
 //
-// TEST: toggles motor energize. Testing under load insufficiency only spins
-// the wheels harder — the trolley is never reset (lock §4). Completion is the
-// motor's own 'car-move-complete': the car creeps to the aligned position and
-// the trace is settled in the same step.
+// TEST follows the interlocked test-handle grammar used by real traction
+// stands: the operator prepares the machine, returns the handle to OFF after
+// an unsuccessful test, then deliberately applies TEST again.  A handle left
+// live while the counterweight is moved cannot silently become a successful
+// test.  That attempt is latched STALE and keeps free-revving until reset.
+// This prevents ordinary D movement from crossing a hidden threshold and
+// completing the room without a final player decision.
 //
 // Events:
 //   'suspension-drain-closed'    leak sealed (hiss stops)
@@ -106,6 +109,8 @@ export function createWeightTransfer({ airNetwork, motor, config = {} } = {}) {
   let markersSeen = new Set();
   let stageComplete = false;
   let settledX = null;
+  let testAttempt = 'idle'; // idle | stale | armed
+  let resetNoticeSent = false;
   let events = [];
 
   function suspension() {
@@ -169,7 +174,15 @@ export function createWeightTransfer({ airNetwork, motor, config = {} } = {}) {
     if (command === 'test') {
       const next = !motor.snapshot().energized;
       motor.setEnergized(next);
-      events.push({ type: next ? 'motor-energized' : 'motor-de-energized' });
+      if (next) {
+        testAttempt = readyForTest() ? 'armed' : 'stale';
+        resetNoticeSent = false;
+        events.push({ type: 'motor-energized', attempt: testAttempt });
+      } else {
+        testAttempt = 'idle';
+        resetNoticeSent = false;
+        events.push({ type: 'motor-de-energized' });
+      }
       return true;
     }
     events.push({ type: 'control-bounce', command });
@@ -220,6 +233,15 @@ export function createWeightTransfer({ airNetwork, motor, config = {} } = {}) {
 
   function suspensionHealth() {
     return clamp01(suspension().pressure / 100);
+  }
+
+  function readyForTest() {
+    const branch = suspension();
+    return !grabbed
+      && !branch.isolated
+      && !branch.venting
+      && branch.pressure >= 90
+      && trolleyX >= tuning.rightExtremeMin;
   }
 
   function buildTrace() {
@@ -283,15 +305,25 @@ export function createWeightTransfer({ airNetwork, motor, config = {} } = {}) {
     clockMs += dt;
     airNetwork.update(dt);
     airNetwork.drainEvents();
-    motor.setLoadInput({ trolleyX, suspensionHealth: suspensionHealth() });
+    // A traction handle applied before the machine was ready remains a stale
+    // free-rev attempt.  Moving the trolley with D or waiting for pressure to
+    // rise cannot turn it into a pass behind the player's back.
+    const effectiveTrolleyX = motor.snapshot().energized && testAttempt === 'stale'
+      ? 0
+      : trolleyX;
+    motor.setLoadInput({ trolleyX: effectiveTrolleyX, suspensionHealth: suspensionHealth() });
     motor.update(dt);
     motor.drainEvents().forEach((evt) => {
       if (evt.type === 'car-move-complete') {
-        complete();
+        if (testAttempt === 'armed') complete();
         return;
       }
       events.push({ type: evt.type });
     });
+    if (testAttempt === 'stale' && readyForTest() && !resetNoticeSent) {
+      resetNoticeSent = true;
+      events.push({ type: 'test-reset-required' });
+    }
   }
 
   function snapshot() {
@@ -309,6 +341,8 @@ export function createWeightTransfer({ airNetwork, motor, config = {} } = {}) {
         flow: branch.flow,
       },
       motor: motorSnap,
+      readyForTest: readyForTest(),
+      testAttempt,
       stageComplete,
       trace: summarizeTrace(buildTrace()),
     };
@@ -331,6 +365,8 @@ export function createWeightTransfer({ airNetwork, motor, config = {} } = {}) {
     markersSeen = new Set();
     stageComplete = false;
     settledX = null;
+    testAttempt = 'idle';
+    resetNoticeSent = false;
     events = [];
     motor.reset();
   }

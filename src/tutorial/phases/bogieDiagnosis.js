@@ -1,8 +1,11 @@
 // Phase V — READ THE BOGIE orchestration — SYSTEM ARC LOCK §5.
 // Pure logic: no Phaser, no DOM, no rendering.
 //
-// Two bogies accept the SAME TEST: the front one is healthy, the rear one is
-// faulty. Both read the SAME shared systems — the contactor/current from the
+// A real test stand does not ask the operator to parse two animated trucks at
+// once.  One A/B selector routes the same calibrated TEST to each bogie in
+// turn.  The player must record A's normal response, return TEST to OFF,
+// select B, and repeat.  Only that pair of observations unlocks diagnosis.
+// Both bogies still read the SAME shared systems — the contactor/current from the
 // shared motorAdhesion, the axle load the player fixed in Phase IV, and air
 // from the shared airNetwork — so the contradiction is genuine, never staged:
 //   front: contactor closed -> current up -> brake released -> wheels turn
@@ -45,6 +48,7 @@
 //   'service-lock-engaged' / 'service-lock-removed'      (forwarded, id: 'rear')
 //   'brake-released' / 'brake-applied'                   (forwarded, per bogie id)
 //   'bogie-repaired'                                      (forwarded)
+//   'fault-localized'    the live A/B comparison proves the break is local
 //   'control-bounce'     { command, reason } refusal — local clunk, no reset
 //   'stage-complete'     one-shot: the repaired bogie turns under TEST
 
@@ -83,6 +87,9 @@ export function createBogieDiagnosis({ airNetwork, motor, config = {} } = {}) {
 
   let entered = false;
   let stageComplete = false;
+  let faultLocalized = false;
+  let selectedBogie = healthyId;
+  let observations = { front: null, rear: null };
   let events = [];
 
   function brakeBranch() {
@@ -107,10 +114,49 @@ export function createBogieDiagnosis({ airNetwork, motor, config = {} } = {}) {
       events.push({ type: 'control-bounce', command, reason: 'inactive' });
       return false;
     }
+    if (command === 'select-front' || command === 'select-rear') {
+      if (motor.snapshot().energized) {
+        events.push({ type: 'control-bounce', command, reason: 'return-test-off' });
+        return false;
+      }
+      selectedBogie = command === 'select-front' ? 'front' : 'rear';
+      events.push({ type: 'bogie-selected', id: selectedBogie });
+      return true;
+    }
     if (command === 'test') {
       const next = !motor.snapshot().energized;
       motor.setEnergized(next);
-      events.push({ type: next ? 'test-energized' : 'test-de-energized' });
+      events.push({ type: next ? 'test-energized' : 'test-de-energized', id: selectedBogie });
+      return true;
+    }
+    if (command === 'inspect-actuator') {
+      const motorSnap = motor.snapshot();
+      const healthy = bogieSnapshot(healthyId, motorSnap);
+      const faulty = bogieSnapshot(faultyId, motorSnap);
+      const liveComparison = selectedBogie === faultyId
+        && motorSnap.energized
+        && observations[healthyId]
+        && observations[faultyId]
+        && healthy.wheelTurning
+        && !faulty.wheelTurning
+        && faulty.linePressure >= 60;
+      if (!liveComparison) {
+        const reason = !observations[healthyId] || !observations[faultyId]
+          ? 'compare-both-bogies'
+          : selectedBogie !== faultyId
+            ? 'select-faulty-bogie'
+            : 'no-live-comparison';
+        events.push({ type: 'control-bounce', command, reason });
+        return false;
+      }
+      if (!faultLocalized) {
+        faultLocalized = true;
+        events.push({
+          type: 'fault-localized',
+          id: faultyId,
+          evidence: ['current-arrives', 'line-pressurized', 'piston-stationary'],
+        });
+      }
       return true;
     }
     if (command === 'brake-isolate') {
@@ -138,6 +184,10 @@ export function createBogieDiagnosis({ airNetwork, motor, config = {} } = {}) {
       const faulty = bogies[faultyId];
       if (faulty.isRepaired()) {
         events.push({ type: 'control-bounce', command, reason: 'already-repaired' });
+        return false;
+      }
+      if (!faultLocalized) {
+        events.push({ type: 'control-bounce', command, reason: 'fault-not-localized' });
         return false;
       }
       const state = branchState();
@@ -207,6 +257,18 @@ export function createBogieDiagnosis({ airNetwork, motor, config = {} } = {}) {
     });
     forwardBogieEvents();
 
+    if (motorSnap.energized) {
+      const observed = bogieSnapshot(selectedBogie, motorSnap);
+      observations = {
+        ...observations,
+        [selectedBogie]: {
+          linePressure: observed.linePressure,
+          pistonTravel: observed.brakeReleased ? 1 : 0,
+          wheelTurning: observed.wheelTurning,
+        },
+      };
+    }
+
     if (!stageComplete && bogieSnapshot(faultyId, motorSnap).wheelTurning) {
       stageComplete = true;
       events.push({ type: 'stage-complete', id: faultyId });
@@ -228,6 +290,12 @@ export function createBogieDiagnosis({ airNetwork, motor, config = {} } = {}) {
       front: bogieSnapshot('front', motorSnap),
       rear: bogieSnapshot('rear', motorSnap),
       faultyBogie: faultyId,
+      faultLocalized,
+      selectedBogie,
+      observations: {
+        front: observations.front ? { ...observations.front } : null,
+        rear: observations.rear ? { ...observations.rear } : null,
+      },
       stageComplete,
     };
   }
@@ -241,6 +309,9 @@ export function createBogieDiagnosis({ airNetwork, motor, config = {} } = {}) {
   function reset() {
     entered = false;
     stageComplete = false;
+    faultLocalized = false;
+    selectedBogie = healthyId;
+    observations = { front: null, rear: null };
     events = [];
     bogies.front.reset();
     bogies.rear.reset();

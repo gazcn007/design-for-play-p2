@@ -24,16 +24,13 @@ const W = 'plank';
 // which stage gets air-circuit machines (kind 'air-lock') instead of
 // queue-punch controls.
 const AIR_LOCK_STAGE = 2;
-// Phase IV (junction-4) runs the WEIGHT/ADHESION slice: no timetable queue,
-// no run handle, no manual window — the devices act on the shared airNetwork
-// and the motor directly (kind 'weight-transfer').
-const WEIGHT_TRANSFER_STAGE = 3;
-// Phase V (junction-5) runs READ THE BOGIE: the service devices act on the
-// faulty bogie's local brake branch (kind 'bogie-service').
-const BOGIE_SERVICE_STAGE = 4;
-// Phase VI (junction-6) runs PAST RIDES THE LOAD: the departure stand reads
-// the echo-driven load window (kind 'echo-load').
-const ECHO_LOAD_STAGE = 5;
+// Phase IV-VI are one narrative system arc in world space. IV teaches one
+// weight, V asks the player to make room for two true records, VI lets the
+// train reproduce the player's earlier counter-movement. None uses the
+// retired rolling-bearing service table.
+const FIRST_WEIGHT_STAGE = 3;
+const TWO_TRUE_THINGS_STAGE = 4;
+const TRAIN_REMEMBERS_STAGE = 5;
 
 export const LEVEL = {
   spawn: { x: 70, y: 400, lane: LANE_NEAR },
@@ -135,106 +132,78 @@ export const LEVEL = {
       },
       {
         id: 'junction-4',
-        title: 'IV  /  WEIGHT TRANSFER',
+        title: 'IV  /  THE FIRST WEIGHT',
         startX: 2400,
         endX: 3190,
         rackX: 2510,
         commandX: 2630,
         runX: 2800,
-        // WEIGHT / ADHESION (SYSTEM ARC LOCK §4). The suspension branch of the
-        // SHARED airNetwork is found damaged (cut off + venting flat); the
-        // player seals the drain cock, admits the header through the levelling
-        // valve, walks the counterweight trolley over the drive bogie, and
-        // TESTs the motor. All physics lives in phases/weightTransfer.js +
-        // phases/motorAdhesion.js + phases/airNetwork.js, locked by tests —
-        // none may be tuned here. The old manualX/manualWindowMs reflex
-        // window is abolished (lock §9 disposal table); the incomplete-stage
-        // guard at endX - 12 (3178) still bounds device placement.
-        weightTransfer: {
-          interactRadius: 62,
-          trolley: { leftX: 2480, rightX: 3060, y: 560 },
-          machines: {
-            drain: { x: 2560, y: 430, surface: 'underfloor-drain-cock' },
-            supply: { x: 2660, y: 430, surface: 'levelling-valve' },
-            test: { x: 2900, y: 430, surface: 'motor-test-stand' },
-          },
+        // A world-space balance story, not a service-table UI. The case falls
+        // at the right detent, the middle detent exposes its witness tag, and
+        // the final composition is case left + player at the right-hand door.
+        firstWeight: {
+          railY: 354,
+          detents: { left: 2585, middle: 2785, right: 2990 },
+          entryTriggerX: 2460,
+          exitZoneX: 3090,
+          interactRadius: 68,
         },
-        // The timetable strip is demolished in this room too: no rack, no
-        // punch keys, no RUN handle. The hardware itself is the interface.
+        // Compatibility-only pictogram input for shared completion art. The
+        // First Weight state machine, not this array, owns completion.
+        solution: ['brake', 'door'],
         showRack: false,
-        // UNDERCARRIAGE VIEW TEACHING: full underfloor machinery band (the
-        // weight/adhesion lesson lives below the floor: bags, bogie, wheels,
-        // motor) plus the look-down teaching flag — IV shows the weak [S]
-        // nudge after a dwell, then retires it (src/tutorial/underfloorView.js).
-        underfloor: true,
-        underfloorView: true,
+        showMachinery: false,
       },
       {
         id: 'junction-5',
-        title: 'V  /  READ THE BOGIE',
+        title: 'V  /  TWO TRUE THINGS',
         startX: 3200,
         endX: 3990,
         rackX: 3310,
         commandX: 3370,
         runX: 3860,
-        underfloor: true,
-        showRack: false,
-        // READ THE BOGIE (SYSTEM ARC LOCK §5). Two bogies accept the same
-        // TEST: the front one turns, the rear one does not — while contactor,
-        // current, line pressure and axle load all read normal. The break is
-        // local (locked fault: brake-actuator-seized, rear bogie). The repair
-        // is the Gate 0 chain on the rear bogie's LOCAL brake line (the
-        // airNetwork 'brake' branch): isolate -> HOLD-vent flat -> seat the
-        // service pin -> free the piston -> withdraw the pin -> restore ->
-        // re-TEST. The healthy side carries no service cocks and cannot be
-        // stripped. Physics lives in phases/bogieDiagnosis.js +
-        // phases/bogieSnapshot.js + the shared airNetwork/motor, locked by
-        // tests — none may be tuned here. The old pressureHold analogue band
-        // is abolished (lock §9 disposal table); the incomplete-stage guard
-        // at endX - 12 (3978) still bounds device placement.
-        bogieService: {
-          interactRadius: 62,
-          bogies: { front: 3300, rear: 3700 },
-          machines: {
-            test: { x: 3350, y: 430, surface: 'test-stand' },
-            isolate: { x: 3560, y: 430, surface: 'local-cutout-cock' },
-            vent: { x: 3660, y: 430, surface: 'local-bleed-wheel' },
-            lock: { x: 3760, y: 430, surface: 'service-pin-bracket' },
-            repair: { x: 3860, y: 430, surface: 'actuator-access' },
-          },
+        // Two archive cases overload one cradle. Punching both witness tags
+        // unfolds a second cradle; its amber winch and cyan air cushion are
+        // independent relationships and may be connected in either order.
+        // Completion requires one case on each physically supported cradle.
+        twoTrueThings: {
+          rail: { left: 3260, right: 3910 },
+          entryTriggerX: 3260,
+          mainCradleX: 3518,
+          secondCradleX: 3788,
+          amberX: 3310,
+          cyanX: 3880,
+          interactRadius: 72,
         },
+        // Compatibility-only input for shared completion pictograms.
+        solution: ['power', 'vent', 'door'],
+        showRack: false,
+        showMachinery: false,
       },
       {
         id: 'junction-6',
-        title: 'VI  /  PAST RIDES THE LOAD',
+        title: 'VI  /  THE TRAIN REMEMBERS',
         startX: 4000,
         endX: 4790,
         rackX: 4110,
         commandX: 4160,
         runX: 4660,
-        // PAST RIDES THE LOAD (SYSTEM ARC LOCK §6). The past self re-rides the
-        // counterweight trolley along the trace the player actually recorded in
-        // Phase IV (canonical fallback when QA skips IV — lock §2.4), and the
-        // moving load periodically re-weights the drive bogie. The player
-        // cannot steer the echo; they read its rhythm and energize the
-        // departure stand INSIDE the load window, with the systems they
-        // already repaired (II interlock, III air path, V brake branch) held
-        // aligned. The old three-gate echoGates design is abolished (lock §9
-        // disposal table). Physics lives in phases/echoReplay.js +
-        // phases/traceContract.js + the shared motor — none may be tuned here.
-        // The incomplete-stage guard at endX - 12 (4778) still bounds device
-        // placement.
-        echoLoad: {
-          interactRadius: 62,
-          machines: {
-            test: { x: 4400, y: 430, surface: 'departure-test-stand' },
-          },
-          // The echo's trolley rail below the floor: echoTrolleyX 0..1 maps
-          // onto x0..x1.
-          echoRail: { x0: 4060, x1: 4740 },
+        // The amber case replays Phase IV's real movement on the upper rail.
+        // The present case uses the same grip/release verb on the lower rail.
+        // After two readable balances the Archivist removes the echo; leaving
+        // the balance to catch it makes the train take over the missing weight.
+        trainRemembers: {
+          rail: { left: 4060, right: 4690 },
+          entryTriggerX: 4060,
+          pivotX: 4380,
+          winchX: 4110,
+          airX: 4650,
+          catchX: 4175,
+          interactRadius: 72,
         },
-        underfloor: true,
+        solution: ['power', 'couple'],
         showRack: false,
+        showMachinery: false,
       },
     ],
   },
@@ -338,38 +307,9 @@ export const LEVEL = {
         commands: ['isolate', 'bleed'],
         layout: [1750, 2110],
       },
-      // Stage 3 (junction-4) devices ride the same layout contract as
-      // Section III: the drain cock, the levelling valve, the counterweight
-      // trolley itself and the motor test stand, in spatial order along the
-      // underfloor run. No punch keys, no RUN handle — the timetable strip is
-      // demolished here too.
-      {
-        stage: 3,
-        commands: ['level-drain', 'level-supply', 'trolley', 'test'],
-        layout: [2560, 2660, 2480, 2900],
-      },
-      // Stage 4 (junction-5) service devices, mounted ON the hardware of the
-      // two-bogie diagnostic space (VISIBLE SYSTEM ARC CORRECTION §3): the
-      // shared TEST bench BETWEEN the bogies, the cutout cock on the rear
-      // bogie's local brake supply riser, the bleed wheel at that pipe's
-      // lowest point, the service pin at its guide on the actuator linkage
-      // and the seized actuator's access cover. The healthy bogie carries no
-      // cocks at all.
-      {
-        stage: 4,
-        commands: ['test', 'brake-isolate', 'brake-vent', 'service-lock', 'repair'],
-        layout: [3500, 3580, 3660, 3775, 3860],
-      },
-      // Stage 5 (junction-6): the departure test stand only. The past self
-      // re-rides the Phase IV counterweight trace below the floor; the
-      // player's single verb is to energize the stand inside the load window
-      // while the repaired systems stay aligned (lock §6). No punch keys, no
-      // RUN handle, no echo gates.
-      {
-        stage: 5,
-        commands: ['test'],
-        layout: [4400],
-      },
+      { stage: 3, commands: ['case'], layout: [2990] },
+      { stage: 4, commands: ['case-a', 'case-b', 'amber', 'cyan'], layout: [3481, 3605, 3310, 3880] },
+      { stage: 5, commands: ['present-case', 'catch'], layout: [4375, 4175] },
     ].flatMap(({ stage, commandX = 0, runX = 0, commands, physical = false, layout = null }) => {
       // Stages carrying an explicit `layout` need no interval and no runX, so
       // both default to 0 rather than producing NaN positions.
@@ -385,12 +325,12 @@ export const LEVEL = {
           // they have always been.
           kind: stage === AIR_LOCK_STAGE
             ? 'air-lock'
-            : stage === WEIGHT_TRANSFER_STAGE
-              ? 'weight-transfer'
-            : stage === BOGIE_SERVICE_STAGE
-              ? 'bogie-service'
-            : stage === ECHO_LOAD_STAGE
-              ? 'echo-load'
+            : stage === FIRST_WEIGHT_STAGE
+              ? 'first-weight'
+            : stage === TWO_TRUE_THINGS_STAGE
+              ? 'two-true-things'
+            : stage === TRAIN_REMEMBERS_STAGE
+              ? 'train-remembers'
             : (physical ? 'rail-control' : 'timetable-command'),
           command,
           stage,
@@ -401,7 +341,11 @@ export const LEVEL = {
         // The drum's planning bench, punch keys, RESET and RUN handles are all
         // deleted along with the drum itself. Section III's causality is
         // immediate, so there is nothing to write down and nothing to run.
-        ...(!physical && stage !== AIR_LOCK_STAGE && stage !== WEIGHT_TRANSFER_STAGE && stage !== ECHO_LOAD_STAGE ? [{
+        ...(!physical
+          && stage !== AIR_LOCK_STAGE
+          && stage !== FIRST_WEIGHT_STAGE
+          && stage !== TWO_TRUE_THINGS_STAGE
+          && stage !== TRAIN_REMEMBERS_STAGE ? [{
           id: `timetable-run-${stage}`,
           kind: 'timetable-run',
           stage,
