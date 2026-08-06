@@ -22,6 +22,7 @@ import { sfx } from '../sfx.js';
 import { NPC_DIALOGUES, STORY_WORLDS } from '../story.js';
 import TutorialCarArt from '../art/tutorialCarArt.js';
 import TutorialTrainRoomsArt from '../art/tutorialTrainRoomsArt.js';
+import { RETRO_TRANSIT_CSS } from '../art/retroTransitTheme.js';
 import TimetablePuzzle from '../tutorial/TimetablePuzzle.js';
 import {
   createPersistentUnderfloorState,
@@ -692,9 +693,11 @@ export default class GameScene extends Phaser.Scene {
       .text(0, 0, '[E]', {
         fontFamily: 'ui-monospace, Menlo, monospace',
         fontSize: '15px',
-        color: '#ffffff',
-        backgroundColor: '#1d2333',
-        padding: { x: 6, y: 3 },
+        color: RETRO_TRANSIT_CSS.charcoalDeep,
+        backgroundColor: RETRO_TRANSIT_CSS.ivory,
+        stroke: RETRO_TRANSIT_CSS.orangeShadow,
+        strokeThickness: 1,
+        padding: { x: 7, y: 4 },
       })
       .setOrigin(0.5, 1)
       .setDepth(64)
@@ -1249,8 +1252,8 @@ export default class GameScene extends Phaser.Scene {
       .text(GAME_W / 2, GAME_H - 100, '[HOLD S]  INSPECT UNDERCARRIAGE  ▼', {
         fontFamily: 'ui-monospace, Menlo, monospace',
         fontSize: '20px',
-        color: '#f2f7f7',
-        backgroundColor: '#10151f',
+        color: RETRO_TRANSIT_CSS.ivory,
+        backgroundColor: RETRO_TRANSIT_CSS.charcoalDeep,
         padding: { x: 12, y: 7 },
       })
       .setOrigin(0.5)

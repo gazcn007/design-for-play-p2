@@ -37,6 +37,88 @@ Status: `COMPLETE`
 
 Owner: `Codex`
 
+Task: Final Prologue UI cleanup
+
+## Product decision (2026-08-06)
+
+George approved the retro-transit colour pass and requested one bounded final
+cleanup: keep dialogue/subtitle UI clear of the player and floor interactions,
+remove the large non-interactive Archivist diagram from Phase VI, and remove
+the redundant Phase VI in-room caption. Preserve all puzzle logic, timing,
+hit regions, cameras and completion conditions.
+
+## Acceptance criteria
+
+1. Dialogue remains fully readable without covering the player or floor-mounted
+   interaction hardware.
+2. Phase VI no longer renders the central non-interactive Archivist diagram.
+3. The actual present case, remembered case, falling record, balance beam,
+   winch and air cushion remain visible and unchanged.
+4. Tutorial tests, asset verification, build and browser screenshots pass.
+
+## Completed QA
+
+- Moved the full dialogue card from the floor band to the upper window band;
+  speaker, role, typed line, choices and continue hint remain inside the card.
+- Removed Phase VI's large non-interactive Archivist diagram and its redundant
+  in-room caption while preserving every playable case, balance component and
+  state transition.
+- Browser review confirmed the conductor dialogue no longer covers the player,
+  door or floor hardware, and the Phase VI redaction fixture retains its active
+  objects without the false focal object.
+- Tutorial tests pass 457/457, 10 panoramas and 30 textures verify, production
+  build passes, browser console is clean and scoped whitespace checks pass.
+
+---
+
+## Previous completed task
+
+Status: `COMPLETE`
+
+Owner: `Codex`
+
+Task: Prologue late-1970s / early-1980s retro-transit interior skin
+
+## Product decision (2026-08-06)
+
+George approved the third visual direction. Preserve the existing blue-purple
+dusk panoramas outside every window and preserve all puzzle rules, geometry,
+camera behavior and state colours. Reskin only the shared carriage interior as
+an optimistic period transit vehicle: aged ivory wall panels, safety-orange
+lower panels and door leaves, charcoal structure and floor, oxidized silver
+hardware, small cyan status lamps, period route typography and restrained
+printed wear. This is retro transit, not outer space; add no stars, planets or
+new exterior backdrop.
+
+## Acceptance criteria
+
+1. All six Prologue rooms share one ivory/orange/charcoal material language.
+2. The existing dusk panorama remains visible and unchanged through the windows.
+3. The protagonist, machinery, state feedback and interaction prompts remain
+   readable against the lighter shell.
+4. No puzzle logic, hit region, stage data, camera rule or completion condition
+   changes.
+5. Tutorial tests, asset verification, production build and whitespace checks
+   pass, followed by browser screenshots of at least two rooms.
+
+## Completed QA
+
+- Preserved the existing dusk panoramas and all puzzle-state colours.
+- Verified the opening carriage and Phase IV at 960x600 in a clean Chromium
+  session; both show the shared ivory/orange/charcoal skin and readable actors.
+- Confirmed real keyboard movement in Phase IV and matching live
+  `render_game_to_text()` output after the reskin.
+- Tutorial tests, asset verification, production build and whitespace checks
+  pass.
+
+---
+
+## Previous completed task
+
+Status: `COMPLETE`
+
+Owner: `Codex`
+
 Task: Prologue Phase V `TWO TRUE THINGS` + Phase VI `THE TRAIN REMEMBERS`
 
 ## Product decision (2026-08-06)

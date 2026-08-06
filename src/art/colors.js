@@ -6,7 +6,7 @@
 // written down and then ignored by 73% of the literals, which is how the car
 // interior ended up running a second value structure that fought the depth
 // ramp. A wrapper that only warns would be ignored the same way. The throw is
-// the only thing that actually holds the palette at 24.
+// the only thing that actually holds the role-controlled palette in place.
 //
 // PAL in src/palette.js is untouched and still governs the exterior lanes.
 // CAR is additive, and covers surfaces inside the carriage.
@@ -45,9 +45,9 @@ function tryNormalize(input) {
   }
 }
 
-// The 24. Every entry is one role; a colour that does not match a role is a
-// bug. L* is kept inline so the value ramp can be checked without leaving the
-// file: the hero must out-value every control face it stands next to.
+// Every entry is one role; a colour that does not match a role is a bug. L* is
+// kept inline so the value ramp can be checked without leaving the file: the
+// hero must out-value every control face it stands next to.
 export const CAR = Object.freeze({
   // Hero. Never tinted, never used for anything else.
   HERO_BASE: 0xdfe7f2, // L*91.3  hero body
@@ -60,6 +60,10 @@ export const CAR = Object.freeze({
   BRASS_HI: 0xe8d5a7, // L*85.8  highlight edges, <=2px
   BRASS_MID: 0xcaa66b, // L*70.1  brass body, ticket punch, trim; control-face cap
   BRASS_DARK: 0x7f6540, // L*44.5  brass shadow
+
+  // Period body colour. It is reserved for large non-interactive carriage
+  // panels and doors, never for warnings or puzzle state.
+  SAFETY_ORANGE: 0xd96b30,
 
   // Tungsten and status lamps. Lamps may run hot in saturation but are capped
   // at 6x6 px in area, and only one alert may be lit at a time.
@@ -207,7 +211,7 @@ export function namesFor(color) {
   return [...(CAR_NAMES_BY_VALUE.get(hex) ?? [])];
 }
 
-/** True when the colour is exactly one of the 24. Never throws. */
+/** True when the colour is exactly one of the role colours. Never throws. */
 export function isCarColor(color) {
   const hex = tryNormalize(color);
   return hex !== null && CAR_VALUES.has(hex);
