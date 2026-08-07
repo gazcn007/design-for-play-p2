@@ -34,6 +34,8 @@ Phaser build.
 - `npm run assets:check`
 - `npm run build`
 - `git diff --check`
+- `npm run prod` still opens on the first frame of the Prologue, with
+  `?chapter=`, `?world=`, `?qa=` and `?artState=` in the URL ignored.
 - Exercise every changed interaction from cause through outcome.
 - Confirm `window.render_game_to_text()` matches the visible game state.
 

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_H, GAME_W } from '../constants.js';
 import { C, CAR } from './colors.js';
+import { devParam } from '../devMode.js';
 
 // This file's local swatch names are kept as an alias layer rather than being
 // inlined at every call site: the names say what a surface IS (shell, trim,
@@ -58,7 +59,9 @@ export default class TutorialCarArt {
 
   readPreviewState() {
     if (typeof window === 'undefined') return 'off';
-    const requested = new URLSearchParams(window.location.search).get('artState');
+    // Forcing a power state is a dev route: a production build always starts
+    // the car dark and earns every lamp.
+    const requested = devParam('artState');
     return POWER_STATES.has(requested) ? requested : 'off';
   }
 

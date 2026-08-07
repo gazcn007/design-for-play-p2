@@ -1,4 +1,5 @@
 import generatedManifest from '../assets/generated/worlds/manifest.generated.json';
+import { devParam } from '../devMode.js';
 
 const generatedUrls = import.meta.glob('../assets/generated/worlds/**/*.jpg', {
   eager: true,
@@ -51,8 +52,11 @@ export function isWorldAssetLoaded(scene, storyTextureKey) {
   );
 }
 
+// Backdrop-only preview: freezes the world index so a painting can be judged
+// without walking the level. A dev route, so it reads through devParam() and
+// returns null in a production build.
 export function resolvePreviewWorldIndex(worlds, search = window.location.search) {
-  const requested = new URLSearchParams(search).get('world');
+  const requested = devParam('world', search);
   if (!requested) return null;
 
   const numeric = Number(requested);

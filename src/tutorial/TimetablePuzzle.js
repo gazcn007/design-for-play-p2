@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { LANE_NEAR, LANES } from '../constants.js';
+import { DEV_MODE, devParams } from '../devMode.js';
 import { sfx } from '../sfx.js';
 import {
   causalBlocker,
@@ -7421,8 +7422,8 @@ export default class TimetablePuzzle {
   }
 
   setupQA() {
-    if (!import.meta.env.DEV || typeof window === 'undefined') return false;
-    const params = new URLSearchParams(window.location.search);
+    if (!DEV_MODE || typeof window === 'undefined') return false;
+    const params = devParams();
     const qa = params.get('qa');
     // Phase II fixture route: ?qa=phase2&state=<entry|power-fail|latch-closed|
     // signal-mid|energized|complete|reset-replay>. Warps into junction-2 and

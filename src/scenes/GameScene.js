@@ -9,6 +9,12 @@ import {
   SPRING_VELOCITY,
   BACKDROP,
 } from '../constants.js';
+import {
+  DEV_MODE,
+  devParams,
+  resolveChapterSpawn,
+  resolveDevChapterIndex,
+} from '../devMode.js';
 import { LEVEL } from '../level.js';
 import { PAL } from '../palette.js';
 import Player from '../Player.js';
@@ -55,7 +61,22 @@ export default class GameScene extends Phaser.Scene {
     this.activeWorldIndex = -1;
     this.requestedWorldIndex = -1;
     this.previewWorldIndex = resolvePreviewWorldIndex(STORY_WORLDS);
-    this.initialWorldIndex = this.previewWorldIndex ?? 0;
+    // `?chapter=N` is the chapter select's route. Unlike `?world=N` — which
+    // only swaps the painting and then freezes the world index — this one
+    // starts the player inside that chapter's geometry and leaves normal world
+    // streaming switched on, so walking onward behaves like a real run.
+    this.devChapterIndex = resolveDevChapterIndex(STORY_WORLDS);
+    this.initialWorldIndex = this.previewWorldIndex ?? this.devChapterIndex ?? 0;
+    this.devSpawn =
+      this.devChapterIndex !== null && this.devChapterIndex > 0
+        ? resolveChapterSpawn(
+            STORY_WORLDS,
+            this.devChapterIndex,
+            LEVEL.solids,
+            LANE_NEAR,
+            LEVEL.spawn.y,
+          )
+        : null;
     this.worldAssetLoader = new WorldAssetLoader(this);
     this.backdropChunks = [];
     this.checkpointTaken = false;
@@ -120,7 +141,10 @@ export default class GameScene extends Phaser.Scene {
     this.registry.set('lives', 3);
     this.registry.set('lane', LANE_NEAR);
     this.registry.set('tutorialPowerState', 'off');
-    this.registry.set('tutorialPowerRestored', false);
+    // Starting inside a later chapter means the Prologue already happened.
+    // Without this the exit gate would trap a dev warp the moment it walked
+    // back toward car 01.
+    this.registry.set('tutorialPowerRestored', this.devSpawn !== null);
 
     this.physics.world.setBounds(0, -600, WORLD_W, 2200);
     this.cameras.main.setBounds(0, 0, WORLD_W, GAME_H);
@@ -149,8 +173,16 @@ export default class GameScene extends Phaser.Scene {
 
     this.solids.refresh();
 
-    this.player = new Player(this, LEVEL.spawn.x, LEVEL.spawn.y, LEVEL.spawn.lane);
-    this.checkpoint = { ...LEVEL.spawn };
+    const spawn = this.devSpawn ?? LEVEL.spawn;
+    this.player = new Player(this, spawn.x, spawn.y, spawn.lane);
+    this.checkpoint = { ...spawn };
+    if (this.devSpawn) {
+      // A warp past the Prologue must not leave its junctions reading as
+      // unsolved, or the objective arrow and the stage gates come along.
+      this.tutorialPuzzle.stageIndex = LEVEL.tutorialPuzzle.stages.length - 1;
+      this.tutorialPuzzle.stageComplete = LEVEL.tutorialPuzzle.stages.map(() => true);
+      this.tutorialPuzzle.briefed = true;
+    }
 
     // A single collider for every solid in the level; the process callback is
     // what enforces lane separation, so the player simply cannot touch
@@ -1459,8 +1491,8 @@ export default class GameScene extends Phaser.Scene {
 
   setupTutorialQA() {
     if (LEVEL.tutorialPuzzle.mode === 'timetable' && this.timetablePuzzle?.setupQA()) return;
-    if (!import.meta.env.DEV || typeof window === 'undefined') return;
-    const qa = new URLSearchParams(window.location.search).get('qa');
+    if (!DEV_MODE || typeof window === 'undefined') return;
+    const qa = devParams().get('qa');
     if (
       ![
         'tutorial-power',

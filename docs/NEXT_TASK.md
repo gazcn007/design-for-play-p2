@@ -1,5 +1,38 @@
 # Next implementation task
 
+## Awaiting product accept — Chapter 4 `THE PAINTED COUNTRY` Bay A slice
+
+Status: `AWAITING PRODUCT ACCEPT` (not `READY` — do not start)
+
+Owner: unassigned
+
+George set the premise on 2026-08-07: chapter 4 is a paper world, and the
+mechanic is magical paint used to change parts of a mysterious train car,
+uncover clues, collect materials and reveal the route to the next car. This
+matches the Chapter 4 slot already locked in
+`docs/GAME_MASTER_V2_SIX_CHAPTERS.md` §8 (`paint/erase → reveal/change memory`),
+re-sited from an open landscape into a carriage interior.
+
+Full design: `docs/CHAPTER_04_PAINTED_COUNTRY_DESIGN_LOCK.md`. The short
+version — two verbs on one axis (PAINT makes a drawn line real, WASH makes a real
+thing drawn again and returns its pigment), three found mineral pigments with two
+loadable at a time, and a finite pigment budget, so every surface the player
+builds is taken out of a picture. The car's level design is a child's
+under-drawing, mistakes included, and the chapter's thesis beat requires painting
+a *wrong* drawing rather than correcting it.
+
+Proposed first slice is **Bay A only** (design lock §14): beats 1–3, a standalone
+entry point named `painted-country.html` for identity rather than sequence order,
+one pure deterministic region/pigment module with focused tests, one art layer
+that owns no rules, full `render_game_to_text()` coverage, and a row in
+`STANDALONE_SLICES` so the dev chapter select can reach it.
+
+This does not become `READY` until George accepts or amends the design lock.
+
+---
+
+## Completed task
+
 Status: `COMPLETE`
 
 Owner: `Codex`

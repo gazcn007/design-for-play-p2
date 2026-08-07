@@ -1,8 +1,20 @@
 import Phaser from 'phaser';
 import { GAME_W, GAME_H, GRAVITY } from './constants.js';
+import { DEV_MODE, hasDevRoute } from './devMode.js';
 import BootScene from './scenes/BootScene.js';
+import DevMenuScene from './scenes/DevMenuScene.js';
 import GameScene from './scenes/GameScene.js';
 import HudScene from './scenes/HudScene.js';
+
+// Phaser starts the first scene in the array. The chapter select is added only
+// for `npm run dev`, and only when the URL does not already name a starting
+// point — so every `?qa=` / `?chapter=` link in docs/ stays a deep link
+// instead of bouncing off a menu. In `npm run prod` the scene is never
+// registered at all.
+const chapterSelect = DEV_MODE && !hasDevRoute();
+const scenes = chapterSelect
+  ? [DevMenuScene, BootScene, GameScene, HudScene]
+  : [BootScene, GameScene, HudScene];
 
 const config = {
   type: Phaser.AUTO,
@@ -26,7 +38,7 @@ const config = {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  scene: [BootScene, GameScene, HudScene],
+  scene: scenes,
 };
 
 const game = new Phaser.Game(config);
@@ -39,6 +51,17 @@ game.canvas.setAttribute('role', 'application');
 game.canvas.setAttribute('aria-label', 'Nightfall game canvas');
 game.canvas.addEventListener('pointerdown', () => game.canvas.focus());
 
+// Backtick drops a dev session back to the chapter select. The menu is chosen
+// at boot from the URL, so getting back to it means reloading without a query
+// string rather than stopping a scene.
+if (DEV_MODE) {
+  window.addEventListener('keydown', (event) => {
+    if (event.key !== '`' || event.metaKey || event.ctrlKey || event.altKey) return;
+    event.preventDefault();
+    window.location.href = window.location.pathname;
+  });
+}
+
 // Handy in the devtools console:
 //   game.scene.getScene('Game').player
 //   game.scene.getScene('Game').physics.world.drawDebug = true
@@ -49,9 +72,23 @@ window.game = game;
 const renderGameToText = () => {
   const scene = game.scene.getScene('Game');
   const player = scene?.player;
+  const devMenu = game.scene.getScene('DevMenu');
   return JSON.stringify({
     coordinateSystem: 'origin top-left; +x right; +y down; world units are pixels',
-    scene: scene?.sys?.isActive() ? 'Game' : 'Boot',
+    devMode: DEV_MODE,
+    scene: scene?.sys?.isActive()
+      ? 'Game'
+      : devMenu?.sys?.isActive()
+        ? 'DevMenu'
+        : 'Boot',
+    chapterSelect: devMenu?.sys?.isActive()
+      ? {
+          index: devMenu.index,
+          label: devMenu.entries?.[devMenu.index]?.label ?? null,
+          route: devMenu.entries?.[devMenu.index]?.query ?? null,
+          entries: devMenu.entries?.map((entry) => entry.label) ?? [],
+        }
+      : null,
     world: scene
       ? {
           index: scene.activeWorldIndex,

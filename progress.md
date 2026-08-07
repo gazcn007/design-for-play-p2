@@ -470,3 +470,171 @@ Original prompt: 你把管线搭一下但是跟玩法有关的先不用管 因�
 - Verification: 457/457 tutorial tests pass, direct Vite production build
   passes, browser QA for V entry and VI solved reports no console errors, and
   the live preview remains available at `http://127.0.0.1:5187/`.
+
+## Dev/prod split and the chapter select
+
+- 2026-08-07: Separated the two ways this repository gets run. `npm run dev`
+  serves on 5180 and opens on a chapter select; `npm run prod` serves the same
+  code on 5181 with every skip route switched off and always starts on the first
+  frame of the Prologue. `npm run build` carries the same guarantee.
+- One build-time constant decides it. `vite.config.js` derives `devMode` from
+  Vite's `command`/`mode` (taken off the CLI flag, not `NODE_ENV`) and defines
+  `__DEV_MODE__`; `src/devMode.js` exposes it as `DEV_MODE` and wraps every
+  query-string read in `devParams()`, which returns an empty set in a production
+  build. `?world=` and `?artState=` had never been gated and worked in shipped
+  builds; they are now behind the same switch as `?qa=`.
+- New route `?chapter=N` (0 = Prologue, 1 = `THE SAFETY TEST`, or a slugified
+  title). Unlike `?world=N`, which only swaps the painting and freezes world
+  streaming, this one starts the player inside that chapter's geometry with
+  streaming live. `resolveChapterSpawn` lands the warp on the first near-lane
+  ground run that can hold a body — chapters 1, 3 and 8 begin over a hole — and
+  all ten were verified to land on solid ground.
+- A URL that already names a route boots straight into it, so every `?qa=` link
+  in `docs/` still works as a deep link. `` ` `` returns to the menu.
+- Verification: 597/597 Node tests, production build, `git diff --check`, and
+  browser QA of the menu, `?qa=timetable-3`, `?chapter=1`, `?chapter=6`,
+  `?world=5`, and a prod run with `?chapter=8&qa=timetable-5&world=7&artState=on`
+  in the URL all ignored. No console errors on either server.
+
+### How to add your chapter to the chapter select
+
+The menu is built from the data the game already runs on. Which case you are in
+depends on how your chapter is built; the same three cases are written up in
+`README.md`.
+
+- **A world in the main build.** Add your entry to `STORY_WORLDS` in
+  `src/story.js` and it appears in the right-hand column with a `?chapter=N`
+  route. `startX` is where the backdrop takes over, not a spawn point, so make
+  sure `src/level.js` has near-lane ground at or after it. Add a number word to
+  `CHAPTER_WORDS` in `src/scenes/DevMenuScene.js` for a name instead of the
+  `CHAPTER 11` fallback.
+- **A section of the Prologue.** Add your stage to `LEVEL.tutorialPuzzle.stages`
+  in `src/level.js`. It appears in the left-hand column with a
+  `?qa=timetable-N` route, and its `lesson` becomes the row's detail line.
+- **Your own entry point** (the car03 / car04 / car06 pattern: own HTML page,
+  own `src/carNN-main.js`, usually own `vite.carNN.config.js`). That game is a
+  different page, so no query string reaches it. Add one line to
+  `STANDALONE_SLICES` at the top of `src/scenes/DevMenuScene.js` with a `label`,
+  a `detail`, and an `href` such as `/car07.html`. The main dev server serves
+  every HTML page in the project root, so the link works without starting your
+  car's own Vite config.
+
+Keep world identity separate from sequence order in all three cases: name the
+chapter after what it is, not after the slot it currently occupies.
+
+## Chapter 4 // THE PAINTED COUNTRY — design and background pass
+
+- 2026-08-07: George set the premise: a paper-ish world whose mechanic is
+  magical paint used to change parts of a mysterious train car, uncover clues,
+  collect materials and reveal the route to the next car. This lands on the
+  Chapter 4 slot already locked in `docs/GAME_MASTER_V2_SIX_CHAPTERS.md` §8
+  (`paint/erase → reveal/change memory`), re-sited from an open landscape into a
+  carriage interior. Design proposed in
+  `docs/CHAPTER_04_PAINTED_COUNTRY_DESIGN_LOCK.md`; decision recorded in
+  `docs/PRODUCT_STATE.md`; `docs/NEXT_TASK.md` carries it as
+  `AWAITING PRODUCT ACCEPT`, not `READY`.
+- Spine: two verbs on one axis (PAINT turns a drawn construction line into a
+  real surface, WASH turns a real surface back into a line and returns its
+  pigment), three found mineral pigments with two loadable at a time, and a
+  finite budget whose only refill is the paint already on the walls. The car's
+  level design is a child's under-drawing, mistakes included; the thesis beat
+  requires painting a door she drew wrong rather than correcting it.
+- 2026-08-07: George then asked for the background to read as off-white paper.
+  Palette locked in `src/chapters/paintedCountry/paperPalette.js` on a warm
+  off-white family rather than a cool grey-white, and the value ramp is
+  **inverted** against every other car: furthest plane lightest, player the
+  darkest mark in the frame. Full table in the design lock §11.
+- Built a runnable background pass: `painted-country.html`,
+  `src/paintedCountry-main.js`, `src/chapters/paintedCountry/`
+  (`paperPalette.js`, `paperSurface.js`, `PaintedCountryScene.js`), plus
+  `vite.painted-country.config.js` on port 5302. It renders Bay A's world look
+  only and owns no rules.
+- `paperSurface.js` carries the drawing primitives: seeded deterministic wobble,
+  draughtsman's overshoot past every corner, analytic 45° hatching clipped to a
+  rect, painted fills that sit inside their outline with a dried rim, and a
+  generated paper-grain texture. Line boil runs at 12fps on two named contours
+  only, never full-frame.
+- The chapter's read-without-being-told rule: a painted region casts a hatched
+  shadow and a drawn line does not. Bay A shows the same beam half painted and
+  half drawn in one silhouette so that difference is legible in a single frame.
+- Registered in the dev chapter select's `STANDALONE_SLICES`. Not `pixelArt`:
+  the standalone entry sets `antialias: true, roundPixels: false`, because a
+  paper edge needs its antialiasing.
+- Verification: production build, full Node suite, whitespace check, and browser
+  inspection of the background pass with no console errors. Three composition
+  passes were needed — the first buried the car under corner-to-corner
+  perspective rays and rendered the stove as a flat slab; the shipped version
+  cuts the rays to stubs, gives the stove hob rings and feet, and lightens the
+  floor hatching so the beam and the figure hold the lower half of the frame.
+
+## Chapter 4 Bay A — playable slice
+
+- 2026-08-07: The background pass had no input wired, so George could not move.
+  Bay A is now playable: walk with `A`/`D` or the arrows, `SPACE` to jump, hold
+  left-click to PAINT and right-click to WASH, `R` to start over. Controls are
+  printed in the car's own margin rather than in a panel.
+- Rules moved into a pure module, `src/chapters/paintedCountry/bayAModel.js`,
+  with `PaintedCountryScene.js` reduced to pixels and input. Ten focused tests in
+  `tests/paintedCountry/bayAModel.test.mjs`; suite is now 607/607.
+- The tuning that makes beat 3 exist is asserted rather than commented: brush
+  capacity 0.7, weight-bearing at 0.75 coverage, 0.60 of free pigment in the bay
+  and 0.75 needed by the drawn beam. The 0.15 shortfall has to come out of the
+  plank the player is standing on, which can give 0.25 before it stops holding.
+- Failure is the chapter's own logic, not a penalty: over-washing the plank drops
+  it and the player falls through the paper, landing back at the cold end still
+  holding the pigment. The plank can be repainted from safety. Tests assert both
+  that the intended solve never drops it and that a dropped plank is always
+  recoverable, so the bay has no dead state.
+- Painted surfaces bind physics directly — a static body's `enable` is read
+  straight off the model's `isSolid`, so "painted enough" and "you can stand
+  here" are one fact rather than two that have to agree. Individual colliders
+  rather than a StaticGroup, because the beam is toggled while the player is
+  standing on it.
+- Browser QA on the live page: walking and collision, wash through the real
+  pointer path (region resolution and the reach gate both verified against
+  `activePointer`), the full intended solve, the over-wash fall and respawn, the
+  repaint recovery, and the completion bloom on crossing the far fold. No console
+  errors. Main build, standalone build and whitespace all pass.
+
+## Chapter 4 — the rest of the car
+
+- 2026-08-07: George: "this is way too short, we need more puzzles." Correct —
+  Bay A alone was three beats against a chapter budgeted at 24–28 minutes. The
+  car is now 2,880px of three bays carrying all seven beats from the design lock.
+- Bay B `THE WASHROOM` (beats 4–5). A panel painted over the basin scrubs off to
+  reveal the only indigo in the car. Indigo painted into the drawn channel makes
+  water that runs, fills a basin and floats the coal scuttle into a step. The
+  plank across the trough is bone black and the channel runs over it, so running
+  water takes the plank apart: cross first then fill, or fill first and recover.
+- The recovery route is the design's own rule that nothing is destroyed. What the
+  water dissolves collects in a **settling pan** under the trough and can be
+  washed back out, and the channel is its own valve, so no ordering strands the
+  player. A separate stopcock was built and cut — it could be left closed on the
+  far side of the trough, which is a genuine dead end, and it taught nothing the
+  channel does not already teach.
+- Bay C `THE LONG WALL` (beats 6–7). A correctly drawn door — panelled, handled,
+  the most carefully drawn object in the bay — refuses paint: the pigment beads
+  and runs off and costs nothing. The door the child drew on the ceiling accepts
+  it immediately, and inside that band the player's gravity inverts, so the
+  unfinished end of the car is crossed upside down. Then the coupling needs one
+  full brush and the mural is the only paint left; it takes any pigment, so the
+  door is made of whichever part of Mara's home the player spent, and which parts
+  survived is the packet Chapter 6's `painted-country` slot receives.
+- The brush now carries two pigments, per the design. There is no swap control:
+  which one applies is decided by the surface, because a surface only accepts the
+  pigment it is made of.
+- Three bugs found by writing the tests rather than by playing. `isSolid`
+  conflated "bears weight" with "the paint has taken", so the coupling door could
+  never read as finished — split into `isDone` and `isSolid`. Washing the basin
+  panel handed back book cloth nobody needed, which could occupy the second slot
+  and leave the player unable to pick the bone black back out of the settling
+  pan — a real dead end; that panel is scrubbed off, not lifted, and yields
+  nothing. And the inverted figure was drawn by hand-flipping each rectangle,
+  which put the player on their side; it is now built in one local space measured
+  up from the feet and flipped whole.
+- Verification: 612/612 Node tests (15 focused on the car model), both builds,
+  whitespace, and browser QA of every bay — bay A's solve and its over-wash
+  fall, bay B's cross-then-fill order with the plank dissolving and the float
+  rising, bay C's refusal beading off the correct door, the gravity flip landing
+  the player upside down on the ceiling walkway, and the mural scar left behind
+  by a wash. No console errors.

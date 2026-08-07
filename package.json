@@ -8,7 +8,9 @@
     "assets:prepare": "node scripts/prepare-world-assets.mjs",
     "assets:check": "node scripts/prepare-world-assets.mjs --check",
     "predev": "npm run assets:check",
-    "dev": "vite",
+    "dev": "vite --mode development",
+    "preprod": "npm run assets:check",
+    "prod": "vite --mode production",
     "prebuild": "npm run assets:check",
     "build": "vite build",
     "preview": "vite preview"

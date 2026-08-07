@@ -17,6 +17,7 @@ __pycache__/
 *.tripo.json
 screenshots/
 dist-car03/
+dist-painted-country/
 tmp/
 outputs/car03-acceptance/
 outputs/qa-phase2/
