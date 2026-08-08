@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { LANE_NEAR, LANES } from '../constants.js';
+import { DEV_MODE, devParams } from '../devMode.js';
 import { sfx } from '../sfx.js';
 import {
   causalBlocker,
@@ -30,21 +31,26 @@ import {
   createWeightTransfer,
   WEIGHT_TRANSFER_PROMPTS,
 } from './phases/weightTransfer.js';
+import { createFirstWeight } from './phases/firstWeight.js';
+import FirstWeightArt from '../art/firstWeightArt.js';
+import { createTwoTrueThings } from './phases/twoTrueThings.js';
+import TwoTrueThingsArt from '../art/twoTrueThingsArt.js';
+import { createTrainRemembers } from './phases/trainRemembers.js';
+import TrainRemembersArt from '../art/trainRemembersArt.js';
 // Phase V (junction-5) READ THE BOGIE: two bogies, one TEST, one genuine
 // contradiction, and the Gate 0 safe repair chain on the faulty bogie's
 // local brake branch. Pure logic in phases/; this file owns the wiring.
-import {
-  createBogieDiagnosis,
-  BOGIE_SERVICE_PROMPTS,
-} from './phases/bogieDiagnosis.js';
+import { createBogieDiagnosis } from './phases/bogieDiagnosis.js';
 // Phase VI (junction-6) PAST RIDES THE LOAD: the past self re-rides the
 // Phase IV counterweight trace; the player aligns the repaired systems with
 // its rhythm. Pure logic in phases/; this file owns the wiring.
 import { createEchoReplay } from './phases/echoReplay.js';
+import { createMechanicalTable } from './phases/mechanicalTable.js';
 // UNDERCARRIAGE VIEW TEACHING: shared flag semantics for the look-down
 // teaching layer (III carries underfloorView only; IV/V/VI underfloor).
 import { stageHasUnderfloorView } from './underfloorView.js';
 import { C, CAR } from '../art/colors.js';
+import { renderMechanicalTableStage } from '../art/mechanicalTableStageArt.js';
 // Phase II (junction-2): the door-latch / power-contactor interlock is the
 // room's only puzzle. Pure logic lives in phases/, world art in art/; this
 // file owns the wiring — enter/update/interact/reset timing, per-frame
@@ -73,6 +79,10 @@ const AIR_CIRCUIT_STAGE_INDEX = 2;
 // Stage index of junction-4 (WEIGHT / ADHESION). The transfer devices, the QA
 // warp, the trace hand-off to Phase VI and the objective text key off this.
 const WEIGHT_TRANSFER_STAGE_INDEX = 3;
+// Phase V — TWO TRUE THINGS, the second archive cradle.
+const TWO_TRUE_THINGS_STAGE_INDEX = 4;
+// Phase VI — THE TRAIN REMEMBERS, the temporal answer to IV/V.
+const TRAIN_REMEMBERS_STAGE_INDEX = 5;
 // Stage index of junction-5 (READ THE BOGIE). The service devices, the QA
 // warp and the objective text key off this.
 const BOGIE_SERVICE_STAGE_INDEX = 4;
@@ -80,13 +90,10 @@ const BOGIE_SERVICE_STAGE_INDEX = 4;
 // QA warp and the objective text key off this.
 const ECHO_LOAD_STAGE_INDEX = 5;
 
-// Phase VI world prompts: terse, on the device, never the answer. The
+// Phase VI world prompts and their gating live in the pure
+// phases/echoLoadPrompts.js module (VISIBLE SYSTEM ARC CORRECTION §4): the
 // engage handle only speaks once the first observation loop has mechanically
-// unlocked it (VISIBLE SYSTEM ARC CORRECTION §4).
-const ECHO_LOAD_PROMPTS = Object.freeze({
-  testOff: '[E]  接合牵引',
-  testOn: '[E]  断开牵引',
-});
+// unlocked it, and after that the offer itself is the window signal.
 // Scene-level readability tuning: the pure interlock keeps its reusable 550ms
 // default, while this long underfloor run gives a first-time player enough
 // time to follow the pulse from the door latch to the remote contactor.
@@ -230,6 +237,18 @@ export default class TimetablePuzzle {
     // trace lands on puzzle.weightTrace for Phase VI to consume.
     this.weightTransferQaFreeze = false;
     this._sparkCooldown = 0;
+    // Phase IV replacement — THE FIRST WEIGHT. One world-space state machine
+    // and one diegetic art layer; no service-table close-up.
+    this.firstWeightQaFreeze = false;
+    this.firstWeightArt = null;
+    // Phase V replacement — TWO TRUE THINGS. Both cases and both support
+    // relationships stay in the world; there is no service-table close-up.
+    this.twoTrueThingsQaFreeze = false;
+    this.twoTrueThingsArt = null;
+    // Phase VI replacement — THE TRAIN REMEMBERS. It consumes IV's trace and
+    // reuses the same case/cradle language rather than introducing a new UI.
+    this.trainRemembersQaFreeze = false;
+    this.trainRemembersArt = null;
     // Phase V wiring (READ THE BOGIE): QA freeze flag for the ?qa=phase5
     // route. The shared airNetwork and motor are the SAME instances III/IV
     // used; the diagnosis orchestrator lives on scene.tutorialPuzzle.
@@ -239,6 +258,8 @@ export default class TimetablePuzzle {
     // and consumes puzzle.weightTrace (IV's recorder) through the frozen
     // traceContract — canonical fallback when QA skips IV (lock §2.4).
     this.echoQaFreeze = false;
+    this.mechanicalTableQaFreeze = false;
+    this._mechanicalTableCompletionPending = false;
     // Relay cabinet wiring (THE MISSING CONTACT): frozen logic + close-up art
     // plus the close-up lifecycle state owned here.
     // relayCloseupState: 'closed' -> 'opening' -> 'open' -> 'closing' ->
@@ -253,6 +274,14 @@ export default class TimetablePuzzle {
     this._relayBlurHandler = null;
     this._relayHoverId = null; // last id handed to relayArt.setHoverTarget
     this._probeCursorValue = null;
+    // Phase V/VI share one diegetic point-and-click inspection layer. The
+    // world keeps only the large mechanical silhouette; detailed operation
+    // happens here, where hit targets can be generous and non-overlapping.
+    this.mechanicalPanelMode = null;
+    this.mechanicalPanel = null;
+    this._mechanicalVentHeld = false;
+    this._mechanicalHoverId = null;
+    this._mechanicalPressedId = null;
   }
 
   track(object, depth = 58) {
@@ -676,6 +705,27 @@ export default class TimetablePuzzle {
     });
     this.contactArt.applySnapshot(this.contactLock.snapshot());
     this._setupRelayInput();
+
+    const firstWeightStage = this.config.stages[WEIGHT_TRANSFER_STAGE_INDEX];
+    if (firstWeightStage?.firstWeight) {
+      this.firstWeightArt = new FirstWeightArt(scene, firstWeightStage);
+      const phase = this.ensureFirstWeightState(firstWeightStage);
+      this.firstWeightArt.applySnapshot(phase.snapshot());
+    }
+
+    const twoTrueThingsStage = this.config.stages[TWO_TRUE_THINGS_STAGE_INDEX];
+    if (twoTrueThingsStage?.twoTrueThings) {
+      this.twoTrueThingsArt = new TwoTrueThingsArt(scene, twoTrueThingsStage);
+      const phase = this.ensureTwoTrueThingsState(twoTrueThingsStage);
+      this.twoTrueThingsArt.applySnapshot(phase.snapshot());
+    }
+
+    const trainRemembersStage = this.config.stages[TRAIN_REMEMBERS_STAGE_INDEX];
+    if (trainRemembersStage?.trainRemembers) {
+      this.trainRemembersArt = new TrainRemembersArt(scene, trainRemembersStage);
+      const phase = this.ensureTrainRemembersState(trainRemembersStage);
+      this.trainRemembersArt.applySnapshot(phase.snapshot());
+    }
 
     this.refresh();
   }
@@ -1119,29 +1169,29 @@ export default class TimetablePuzzle {
       }
     }
     const trolley = index === 3
-      ? this.track(scene.add.rectangle(stage.weightTransfer?.trolley.leftX ?? stage.startX + 355, 445, 118, 12, 0x3a4a52, 1).setStrokeStyle(2, 0x8b9ba0, 0.8), 37)
+      ? this.track(scene.add.rectangle(stage.weightTransfer?.trolley.leftX ?? stage.startX + 355, 441, 132, 20, 0x263840, 1).setStrokeStyle(3, 0x9fb7c0, 0.86), 37)
       : null;
     const mkTrolleyPart = (dx, build) => (index === 3 && stage.weightTransfer
       ? this.track(build((stage.weightTransfer.trolley.leftX ?? stage.startX + 355) + dx), 37)
       : null);
-    const trolleyWheelA = mkTrolleyPart(-42, (x) => scene.add.circle(x, 455, 7, 0x111a20, 1).setStrokeStyle(2, 0x91a3a9, 0.9));
-    const trolleyWheelB = mkTrolleyPart(42, (x) => scene.add.circle(x, 455, 7, 0x111a20, 1).setStrokeStyle(2, 0x91a3a9, 0.9));
-    const trolleyBallastA = mkTrolleyPart(-4, (x) => scene.add.rectangle(x, 434, 66, 10, 0x222d33, 1).setStrokeStyle(1, 0x8b9ba0, 0.7));
-    const trolleyBallastB = mkTrolleyPart(5, (x) => scene.add.rectangle(x, 424, 58, 10, 0x222d33, 1).setStrokeStyle(1, 0x8b9ba0, 0.7));
-    const trolleyBallastC = mkTrolleyPart(-2, (x) => scene.add.rectangle(x, 414, 48, 10, 0x222d33, 1).setStrokeStyle(1, 0x8b9ba0, 0.7));
-    const trolleyHandle = mkTrolleyPart(56, (x) => scene.add.rectangle(x, 424, 7, 34, 0x2a3940, 1).setStrokeStyle(1, 0x91a3a9, 0.75));
-    const trolleyHandleGrip = mkTrolleyPart(48, (x) => scene.add.rectangle(x, 408, 24, 6, 0x2a3940, 1).setStrokeStyle(1, 0x91a3a9, 0.75));
-    const trolleyLock = mkTrolleyPart(-52, (x) => scene.add.rectangle(x, 436, 6, 20, 0x53656d, 1).setStrokeStyle(1, 0xc1c9c6, 0.7));
+    const trolleyWheelA = mkTrolleyPart(-47, (x) => scene.add.circle(x, 455, 10, 0x0a1015, 1).setStrokeStyle(3, 0x9fb7c0, 0.92));
+    const trolleyWheelB = mkTrolleyPart(47, (x) => scene.add.circle(x, 455, 10, 0x0a1015, 1).setStrokeStyle(3, 0x9fb7c0, 0.92));
+    const trolleyBallastA = mkTrolleyPart(-5, (x) => scene.add.rectangle(x, 425, 82, 13, 0x405159, 1).setStrokeStyle(2, 0x9fb7c0, 0.72));
+    const trolleyBallastB = mkTrolleyPart(3, (x) => scene.add.rectangle(x, 411, 70, 12, 0x405159, 1).setStrokeStyle(2, 0xcaa66b, 0.68));
+    const trolleyBallastC = mkTrolleyPart(-3, (x) => scene.add.rectangle(x, 398, 58, 11, 0x263840, 1).setStrokeStyle(2, 0xcaa66b, 0.78));
+    const trolleyHandle = mkTrolleyPart(63, (x) => scene.add.rectangle(x, 418, 8, 48, 0x405159, 1).setStrokeStyle(2, 0x9fb7c0, 0.8));
+    const trolleyHandleGrip = mkTrolleyPart(53, (x) => scene.add.rectangle(x, 395, 30, 7, 0x263840, 1).setStrokeStyle(2, 0xcaa66b, 0.75));
+    const trolleyLock = mkTrolleyPart(-61, (x) => scene.add.rectangle(x, 431, 8, 30, 0x687981, 1).setStrokeStyle(2, 0xe8d5a7, 0.74));
     const trolleyFollowers = index === 3 && stage.weightTransfer
       ? [
-        [trolleyWheelA, -42],
-        [trolleyWheelB, 42],
-        [trolleyBallastA, -4],
-        [trolleyBallastB, 5],
-        [trolleyBallastC, -2],
-        [trolleyHandle, 56],
-        [trolleyHandleGrip, 48],
-        [trolleyLock, -52],
+        [trolleyWheelA, -47],
+        [trolleyWheelB, 47],
+        [trolleyBallastA, -5],
+        [trolleyBallastB, 3],
+        [trolleyBallastC, -3],
+        [trolleyHandle, 63],
+        [trolleyHandleGrip, 53],
+        [trolleyLock, -61],
       ]
       : null;
     // Phase IV underfloor hardware (WEIGHT / ADHESION): two bellows air
@@ -1180,6 +1230,27 @@ export default class TimetablePuzzle {
     // All of it is redrawn every frame from the frozen snapshot — the motion
     // itself is the lesson; no arrows, no labels.
     const equalizerArt = stage.weightTransfer ? this.track(scene.add.graphics(), 58) : null;
+    const loadPathLabel = stage.weightTransfer
+      ? this.track(
+          scene.add.text(center, 488, 'MOVING LOAD  /  EQUALIZER  /  DRIVE AXLE', {
+            fontFamily: 'ui-monospace, Menlo, monospace',
+            fontSize: '9px',
+            color: '#9fb7c0',
+            backgroundColor: '#0a1015',
+            padding: { x: 7, y: 3 },
+          }).setOrigin(0.5).setAlpha(0.76),
+          58,
+        )
+      : null;
+    const driveStateLabel = stage.weightTransfer
+      ? this.track(scene.add.text(secondWheelX, wheelY + 118, 'DRIVE AXLE  /  NO LOAD', {
+          fontFamily: 'ui-monospace, Menlo, monospace',
+          fontSize: '10px',
+          color: '#687981',
+          backgroundColor: '#0a1015',
+          padding: { x: 7, y: 3 },
+        }).setOrigin(0.5), 59)
+      : null;
     const driveAxleDrop = stage.weightTransfer
       ? this.track(
           scene.add.rectangle(secondWheelX, wheelY - 7, 40, 32, 0x263840, 1)
@@ -1274,6 +1345,30 @@ export default class TimetablePuzzle {
     const bogieServiceArt = stage.bogieService ? this.track(scene.add.graphics(), 56) : null;
     if (bogieServiceArt) {
       const art = bogieServiceArt;
+      // Two inspection bays frame the comparison. Their silhouettes are
+      // intentionally mirrored; the rear bay's extra local branch is now the
+      // only visual difference, so the fault reads as local rather than as a
+      // room full of unrelated controls.
+      [[frontBogieX, 0x405159], [rearBogieX, 0x263840]].forEach(([bayX, tint]) => {
+        art.fillStyle(tint, 0.42);
+        art.fillRoundedRect(bayX - 126, bogieY - 108, 252, 192, 12);
+        art.lineStyle(2, 0x687981, 0.5);
+        art.strokeRoundedRect(bayX - 126, bogieY - 108, 252, 192, 12);
+        art.lineStyle(3, 0x53656d, 0.9);
+        art.lineBetween(bayX - 92, bogieY + 52, bayX + 92, bogieY + 52);
+        art.lineStyle(4, 0x607078, 0.94);
+        art.strokeCircle(bayX, bogieY, 54);
+        art.lineStyle(2, 0x2d3c43, 0.95);
+        art.strokeCircle(bayX, bogieY, 23);
+        [0, Math.PI / 2, Math.PI, Math.PI * 1.5].forEach((a) => {
+          art.lineBetween(
+            bayX + Math.cos(a) * 23,
+            bogieY + Math.sin(a) * 23,
+            bayX + Math.cos(a) * 47,
+            bogieY + Math.sin(a) * 47,
+          );
+        });
+      });
       // --- TEST bench between the bogies, cables to both motor leads ------
       art.fillStyle(0x263840, 1);
       art.fillRect(3468, bogieY - 66, 64, 26);
@@ -1342,6 +1437,33 @@ export default class TimetablePuzzle {
       art.strokeRect(3844, bogieY - 62, 32, 20);
       art.lineBetween(3850, bogieY - 52, 3870, bogieY - 52);
     }
+    const bogieServiceFlowArt = stage.bogieService ? this.track(scene.add.graphics(), 59) : null;
+    const bogieFrontLabel = stage.bogieService
+      ? this.track(scene.add.text(frontBogieX, bogieY - 92, 'A  REFERENCE', {
+          fontFamily: 'ui-monospace, Menlo, monospace',
+          fontSize: '10px',
+          color: '#9fb7c0',
+          backgroundColor: '#0a1015',
+          padding: { x: 6, y: 3 },
+        }).setOrigin(0.5), 59)
+      : null;
+    const bogieRearLabel = stage.bogieService
+      ? this.track(scene.add.text(rearBogieX, bogieY - 92, 'B  SERVICE', {
+          fontFamily: 'ui-monospace, Menlo, monospace',
+          fontSize: '10px',
+          color: '#e45a5f',
+          backgroundColor: '#0a1015',
+          padding: { x: 6, y: 3 },
+        }).setOrigin(0.5), 59)
+      : null;
+    const bogieServiceLegend = stage.bogieService
+      ? this.track(scene.add.text(3715, bogieY + 92, 'CUT-OFF     BLEED     PIN     ACTUATOR', {
+          fontFamily: 'ui-monospace, Menlo, monospace',
+          fontSize: '8px',
+          color: '#687981',
+          letterSpacing: 1,
+        }).setOrigin(0.5), 59)
+      : null;
     const mkServiceGlow = (x, y, r) => (stage.bogieService
       ? this.track(scene.add.circle(x, y, r, 0x75d4cd, 0).setBlendMode(Phaser.BlendModes.ADD), 55)
       : null);
@@ -1408,6 +1530,39 @@ export default class TimetablePuzzle {
           57,
         )
       : null;
+    const echoLoadPathArt = stage.echoLoad ? this.track(scene.add.graphics(), 59) : null;
+    const echoPastLabel = stage.echoLoad
+      ? this.track(scene.add.text(echoRailSpec.x0 + 34, bogieY + 78, 'PAST LOAD REPLAY', {
+          fontFamily: 'ui-monospace, Menlo, monospace',
+          fontSize: '9px',
+          color: '#75d4cd',
+          backgroundColor: '#0a1015',
+          padding: { x: 6, y: 3 },
+        }).setOrigin(0, 0.5), 59)
+      : null;
+    const echoTractionLabel = stage.echoLoad
+      ? this.track(scene.add.text(stage.echoLoad.machines.test.x, underY - 108, 'TRACTION CONTROL', {
+          fontFamily: 'ui-monospace, Menlo, monospace',
+          fontSize: '9px',
+          color: '#caa66b',
+          backgroundColor: '#0a1015',
+          padding: { x: 6, y: 3 },
+        }).setOrigin(0.5), 59)
+      : null;
+    const echoCaptureLabel = stage.echoLoad
+      ? this.track(scene.add.text(
+          echoRailSpec.x0 + (echoRailSpec.x1 - echoRailSpec.x0) * 0.875,
+          bogieY + 82,
+          'LOAD CAPTURE BAY',
+          {
+            fontFamily: 'ui-monospace, Menlo, monospace',
+            fontSize: '9px',
+            color: '#687981',
+            backgroundColor: '#0a1015',
+            padding: { x: 6, y: 3 },
+          },
+        ).setOrigin(0.5), 59)
+      : null;
     // The drive wheelset under test. The five-lamp condition strip is
     // DEMOLISHED (VISIBLE SYSTEM ARC CORRECTION §4): the player reads the
     // four systems in the world — copper cable, cyan air run, the echo's own
@@ -1458,10 +1613,14 @@ export default class TimetablePuzzle {
       art.lineStyle(6, 0xcaa66b, 0.85);
       art.lineBetween(left + 6, underY - 72, standX, underY - 72);
       art.lineBetween(standX, underY - 72, standX, underY - 40);
-      art.lineBetween(standX + 20, underY - 24, driveX - 16, bogieY - 46);
+      art.lineBetween(standX + 20, underY - 24, driveX - 48, underY - 24);
+      art.lineBetween(driveX - 48, underY - 24, driveX - 48, bogieY - 46);
+      art.lineBetween(driveX - 48, bogieY - 46, driveX - 16, bogieY - 46);
       // III: cyan air run with three readable branch tees.
       art.lineStyle(5, 0x75d4cd, 0.55);
-      art.lineBetween(left + 6, underY - 40, driveX - 8, bogieY - 18);
+      art.lineBetween(left + 6, underY - 40, driveX - 64, underY - 40);
+      art.lineBetween(driveX - 64, underY - 40, driveX - 64, bogieY - 18);
+      art.lineBetween(driveX - 64, bogieY - 18, driveX - 8, bogieY - 18);
       // Door branch tee + glyph.
       art.lineBetween(4120, underY - 48, 4120, underY - 96);
       art.fillStyle(0x75d4cd, 0.5);
@@ -1509,6 +1668,22 @@ export default class TimetablePuzzle {
           ).setBlendMode(Phaser.BlendModes.ADD),
           58,
         )
+      : null;
+    // The original underfloor construction remains underneath as historical
+    // state-driven machinery, but V/VI present a deliberately sparse world
+    // diagram above it. This cover lets the player identify the system before
+    // opening the detailed point-and-click inspection panel.
+    const simplifiedWorldArt = (stage.bogieService || stage.echoLoad)
+      ? this.track(scene.add.graphics(), 60)
+      : null;
+    const simplifiedWorldLabel = (stage.bogieService || stage.echoLoad)
+      ? this.track(scene.add.text(center, 606, '', {
+          fontFamily: 'ui-monospace, Menlo, monospace',
+          fontSize: '10px',
+          color: '#9fb7c0',
+          backgroundColor: '#0a1015',
+          padding: { x: 8, y: 4 },
+        }).setOrigin(0.5), 61)
       : null;
     const couplerLeft = index === this.config.stages.length - 1
       ? this.track(scene.add.rectangle(stage.endX - 126, underY + 4, 72, 18, 0x697980, 1), 57)
@@ -1595,6 +1770,8 @@ export default class TimetablePuzzle {
       suspensionBagRear,
       bodyTilt,
       equalizerArt,
+      loadPathLabel,
+      driveStateLabel,
       driveAxleDrop,
       driveContactGlow,
       testLamp,
@@ -1605,18 +1782,28 @@ export default class TimetablePuzzle {
       servicePin,
       actuatorPiston,
       bogieServiceArt,
+      bogieServiceFlowArt,
+      bogieFrontLabel,
+      bogieRearLabel,
+      bogieServiceLegend,
       serviceGlows,
       echoRailBeam,
       echoZoneStripe,
       echoTrolleyCar,
       echoGhostGlow,
       echoGhost,
+      echoLoadPathArt,
+      echoPastLabel,
+      echoTractionLabel,
+      echoCaptureLabel,
       echoDriveSpoke,
       echoConditionLamps,
       echoWindowLamp,
       convergenceArt,
       engageArt,
       echoContactGlow,
+      simplifiedWorldArt,
+      simplifiedWorldLabel,
       couplerLeft,
       couplerRight,
       controlLink,
@@ -1665,6 +1852,9 @@ export default class TimetablePuzzle {
       'timetable-run',
       'rail-control',
       'air-lock',
+      'first-weight',
+      'two-true-things',
+      'train-remembers',
       // Phase IV's four devices (drain cock, levelling valve, counterweight
       // trolley, test stand) ride the same routing.
       'weight-transfer',
@@ -1673,6 +1863,7 @@ export default class TimetablePuzzle {
       'bogie-service',
       // Phase VI's single departure stand likewise.
       'echo-load',
+      'mechanical-table',
       // Phase II's two devices ride the same proximity/E routing as every
       // other timetable kind; their prompts come from the art module instead
       // of the shared bubble.
@@ -1710,6 +1901,9 @@ export default class TimetablePuzzle {
     // counter would hand the player the order, which is the one thing the room
     // has to teach through the pipe instead.
     if (interactable.def.kind === 'air-lock') return Boolean(stage.airCircuit);
+    if (interactable.def.kind === 'first-weight') return Boolean(stage.firstWeight);
+    if (interactable.def.kind === 'two-true-things') return Boolean(stage.twoTrueThings);
+    if (interactable.def.kind === 'train-remembers') return Boolean(stage.trainRemembers);
     // All four transfer devices stay live at all times — the load path, not a
     // step counter, decides what works. Gating the TEST stand until the bags
     // were charged would hand the player the order.
@@ -1722,6 +1916,7 @@ export default class TimetablePuzzle {
     // step counter, decides what energizing does. The first observation loop
     // refuses on its own terms inside the orchestrator.
     if (interactable.def.kind === 'echo-load') return Boolean(stage.echoLoad);
+    if (interactable.def.kind === 'mechanical-table') return Boolean(stage.mechanicalTable);
     if (interactable.def.kind === 'rail-control') {
       if (!stage.physicalSequence) return false;
       if (stage.echoSync && puzzle.queue.length > 0) {
@@ -1793,47 +1988,60 @@ export default class TimetablePuzzle {
       }
       return null;
     }
+    if (interactable.def.kind === 'first-weight') {
+      const snap = puzzle.firstWeight?.snapshot?.();
+      if (!snap || !snap.caseFallen || snap.stageComplete) return null;
+      if (snap.grabbed) return '[E] RELEASE CASE';
+      if (snap.tagAvailable) return '[E] PUNCH WITNESS TAG';
+      return '[E] GRIP CASE';
+    }
+    if (interactable.def.kind === 'two-true-things') {
+      const snap = puzzle.twoTrueThings?.snapshot?.();
+      if (!snap || !snap.casesFallen || snap.stageComplete) return null;
+      const command = interactable.def.command;
+      if (command === 'amber') {
+        if (!snap.bothWitnessed) return null;
+        return snap.amberConnected ? '[E] RELEASE AMBER WINCH' : '[E] ATTACH AMBER WINCH';
+      }
+      if (command === 'cyan') {
+        if (!snap.bothWitnessed) return null;
+        return snap.cyanConnected ? '[E] VENT AIR CUSHION' : '[E] CHARGE AIR CUSHION';
+      }
+      const id = command?.slice(5);
+      if (!id || !snap.cases[id]) return null;
+      if (!snap.tags[id]) return '[E] PUNCH WITNESS TAG';
+      if (!snap.bothWitnessed) return null;
+      if (snap.grabbedCase === id) return '[E] PLACE CASE';
+      return '[E] GRIP CASE';
+    }
+    if (interactable.def.kind === 'train-remembers') {
+      const snap = puzzle.trainRemembers?.snapshot?.();
+      if (!snap || snap.stageComplete) return null;
+      if (interactable.def.command === 'present-case' && snap.phase === 'duet') {
+        return snap.grabbed ? '[E] PLACE PRESENT CASE' : '[E] GRIP PRESENT CASE';
+      }
+      if (interactable.def.command === 'catch' && snap.catchReady) return '[E] CATCH THE FALLING RECORD';
+      return null;
+    }
     if (interactable.def.kind === 'bogie-service') {
       const phase = puzzle.bogieDiagnosis;
       if (!phase) return null;
       const snap = phase.snapshot();
       if (snap.stageComplete) return null;
-      const command = interactable.def.command;
-      if (command === 'test') {
-        return snap.motor.energized
-          ? BOGIE_SERVICE_PROMPTS.testOn
-          : BOGIE_SERVICE_PROMPTS.testOff;
-      }
-      if (command === 'brake-isolate') {
-        return snap.brake.isolated
-          ? BOGIE_SERVICE_PROMPTS.isolateClosed
-          : BOGIE_SERVICE_PROMPTS.isolateOpen;
-      }
-      if (command === 'brake-vent') {
-        return snap.brake.venting ? null : BOGIE_SERVICE_PROMPTS.vent;
-      }
-      if (command === 'service-lock') {
-        return snap.rear.serviceLockEngaged
-          ? BOGIE_SERVICE_PROMPTS.lockEngaged
-          : BOGIE_SERVICE_PROMPTS.lockFree;
-      }
-      if (command === 'repair') {
-        return snap.rear.repaired ? null : BOGIE_SERVICE_PROMPTS.repair;
-      }
-      return null;
+      return '[E] INSPECT SERVICE HATCH';
     }
     if (interactable.def.kind === 'echo-load') {
       const phase = puzzle.echoReplay;
       if (!phase) return null;
-      const snap = phase.snapshot();
-      if (snap.stageComplete) return null;
-      // The handle is mechanically barred for the whole first observation
-      // loop: no prompt, no offer. The rhythm must be WATCHED once before
-      // the stand answers (VISIBLE SYSTEM ARC CORRECTION §4).
-      if (snap.observationLoop) return null;
-      return snap.motor.energized
-        ? ECHO_LOAD_PROMPTS.testOn
-        : ECHO_LOAD_PROMPTS.testOff;
+      if (phase.snapshot().stageComplete) return null;
+      // The timing signal now lives inside the physical synchronizer close-up;
+      // the world prompt only teaches the stable action of inspecting it.
+      return '[E] INSPECT SYNCHRONIZER';
+    }
+    if (interactable.def.kind === 'mechanical-table') {
+      const phase = puzzle.mechanicalTable;
+      if (phase?.snapshot?.().stageComplete) return null;
+      return '[E] OPEN SERVICE TABLE';
     }
     if (interactable.def.kind === 'contact-interlock') {
       // Null on purpose: the shared prompt bubble stays hidden and
@@ -1870,12 +2078,28 @@ export default class TimetablePuzzle {
       this.operateWeightTransfer(interactable);
       return true;
     }
+    if (interactable.def.kind === 'first-weight') {
+      this.operateFirstWeight(interactable);
+      return true;
+    }
+    if (interactable.def.kind === 'two-true-things') {
+      this.operateTwoTrueThings(interactable);
+      return true;
+    }
+    if (interactable.def.kind === 'train-remembers') {
+      this.operateTrainRemembers(interactable);
+      return true;
+    }
     if (interactable.def.kind === 'bogie-service') {
       this.operateBogieService(interactable);
       return true;
     }
     if (interactable.def.kind === 'echo-load') {
       this.operateEchoLoad(interactable);
+      return true;
+    }
+    if (interactable.def.kind === 'mechanical-table') {
+      this.operateMechanicalTable(interactable);
       return true;
     }
     return false;
@@ -3008,6 +3232,10 @@ export default class TimetablePuzzle {
 
   completeStage({ pendingActions = [] } = {}) {
     const { scene } = this;
+    // Phase V/VI detailed work happens in a screen-space inspection panel.
+    // Completion always returns to the physical car before the shared reveal
+    // camera begins, otherwise the modal would be stranded over the cutaway.
+    if (this.mechanicalPanelMode) this.closeMechanicalPanel();
     const puzzle = scene.tutorialPuzzle;
     const completedIndex = puzzle.stageIndex;
     const last = completedIndex === this.config.stages.length - 1;
@@ -3139,9 +3367,13 @@ export default class TimetablePuzzle {
     const puzzle = this.scene.tutorialPuzzle;
     this.updateContactInterlock(delta);
     this.updateAirCircuitStage(delta);
+    this.updateFirstWeightStage(delta);
+    this.updateTwoTrueThingsStage(delta);
+    this.updateTrainRemembersStage(delta);
     this.updateWeightTransferStage(delta);
     this.updateBogieDiagnosisStage(delta);
     this.updateEchoReplayStage(delta);
+    this.updateMechanicalTableStage(delta);
     this.updateDrum(delta);
     if (puzzle.phase === 'approach') {
       const stage = this.currentStage();
@@ -3386,12 +3618,386 @@ export default class TimetablePuzzle {
     }
   }
 
+  // ------------------------------------------ Phases IV-VI shared table --
+  // The old IV/V/VI orchestrators remain below as historical compatibility
+  // code, but level.js no longer gives any runtime stage their data fields.
+  // All three live rooms enter this one table and differ only in constraints.
+
+  ensureMechanicalTableState(stage) {
+    const puzzle = this.scene.tutorialPuzzle;
+    const phaseNumber = stage?.mechanicalTable?.phase;
+    if (!phaseNumber) return null;
+    const existing = puzzle.mechanicalTable;
+    if (!existing || existing.snapshot().phase !== phaseNumber) {
+      puzzle.mechanicalTable = createMechanicalTable({
+        phase: phaseNumber,
+        trace: phaseNumber === 6 ? puzzle.mechanicalTableTrace : null,
+      });
+      this._mechanicalTableCompletionPending = false;
+    }
+    return puzzle.mechanicalTable;
+  }
+
+  updateMechanicalTableStage(delta) {
+    const { scene } = this;
+    const puzzle = scene.tutorialPuzzle;
+    const stage = this.currentStage();
+    if (!stage?.mechanicalTable) return;
+    if (['opening', 'approach', 'departure', 'complete'].includes(puzzle.phase)) return;
+    const phase = this.ensureMechanicalTableState(stage);
+    if (!phase) return;
+    if (scene.player.x >= stage.startX + 10) phase.enter();
+    if (!this.mechanicalTableQaFreeze) phase.update(delta);
+    phase.drainEvents().forEach((event) => this.handleMechanicalTableEvent(event, phase));
+    if (this.mechanicalPanelMode?.startsWith('table-')) this.refreshMechanicalPanel();
+  }
+
+  operateMechanicalTable() {
+    const stage = this.currentStage();
+    const phase = this.ensureMechanicalTableState(stage);
+    if (!phase || this.mechanicalTableQaFreeze) return;
+    phase.enter();
+    this.scene.player.playInteraction();
+    const mode = `table-${stage.mechanicalTable.phase}`;
+    if (this.mechanicalPanelMode !== mode) this.openMechanicalPanel(mode);
+  }
+
+  handleMechanicalTableEvent(event, phase) {
+    const { scene } = this;
+    if (event.type === 'pressure-changed') {
+      sfx.lever();
+      return;
+    }
+    if (event.type === 'weight-moved' || event.type === 'route-changed' || event.type === 'bridge-changed') {
+      sfx.press();
+      return;
+    }
+    if (event.type === 'bridge-refused') {
+      sfx.blocked();
+      scene.cameras.main.shake(90, 0.0015);
+      return;
+    }
+    if (event.type === 'bearing-released') {
+      sfx.lever();
+      return;
+    }
+    if (event.type === 'bearing-result') {
+      if (event.result === 'phase-complete' || event.result === 'reference-pass') sfx.door();
+      else sfx.blocked();
+      return;
+    }
+    if (event.type !== 'stage-complete' || this._mechanicalTableCompletionPending) return;
+    this._mechanicalTableCompletionPending = true;
+    if (event.phase === 4) scene.tutorialPuzzle.mechanicalTableTrace = phase.exportTrace();
+    scene.time.delayedCall(760, () => {
+      if (scene.tutorialPuzzle.mechanicalTable !== phase || !phase.snapshot().stageComplete) return;
+      this.completeStage({ pendingActions: [] });
+    });
+  }
+
   // ------------------------------------------------------------ Phase IV --
   // Junction-4 runs WEIGHT / ADHESION. The frozen pure module owns the
   // physics (shared airNetwork suspension branch + motor model + trolley +
   // trace); this layer only wires it to the scene: enter timing, the grab
   // verb, event draining into world feedback, the steady-state redraw and
   // the completion hand-off.
+
+  ensureFirstWeightState(stage) {
+    const puzzle = this.scene.tutorialPuzzle;
+    if (!stage?.firstWeight) return null;
+    if (!puzzle.firstWeight) puzzle.firstWeight = createFirstWeight();
+    return puzzle.firstWeight;
+  }
+
+  updateFirstWeightStage(delta) {
+    const { scene } = this;
+    const puzzle = scene.tutorialPuzzle;
+    const stage = this.currentStage();
+    if (!stage?.firstWeight) return;
+    if (['opening', 'approach', 'departure', 'complete'].includes(puzzle.phase)) return;
+    const phase = this.ensureFirstWeightState(stage);
+    if (!phase) return;
+
+    if (scene.player.x >= stage.firstWeight.entryTriggerX) phase.enter();
+    const { left, right } = stage.firstWeight.detents;
+    const playerNormalized = Phaser.Math.Clamp((scene.player.x - left) / (right - left), 0, 1);
+    if (!this.firstWeightQaFreeze) phase.update(delta, { playerX: playerNormalized });
+    phase.drainEvents().forEach((event) => this.handleFirstWeightEvent(event));
+    const snap = phase.snapshot();
+    this.firstWeightArt?.applySnapshot(snap);
+
+    // The proximity anchor is the moving case; its sprite never renders.
+    const device = scene.interactables.find(
+      (it) => it.def.kind === 'first-weight' && it.def.stage === puzzle.stageIndex,
+    );
+    if (device) {
+      device.sprite
+        .setX(Phaser.Math.Linear(left, right, snap.caseX))
+        .setY(430)
+        .setVisible(false);
+    }
+  }
+
+  operateFirstWeight() {
+    const phase = this.scene.tutorialPuzzle.firstWeight;
+    if (!phase || this.firstWeightQaFreeze) return;
+    this.scene.player.playInteraction();
+    phase.interactCase();
+    phase.drainEvents().forEach((event) => this.handleFirstWeightEvent(event));
+    this.firstWeightArt?.applySnapshot(phase.snapshot());
+    this.refresh();
+  }
+
+  handleFirstWeightEvent(event) {
+    const { scene } = this;
+    const snap = scene.tutorialPuzzle.firstWeight?.snapshot?.();
+    if (event.type === 'case-fell') {
+      sfx.door();
+      scene.cameras.main.shake(150, 0.0025);
+      this.firstWeightArt?.pulse(C(CAR.BRASS_MID));
+      return;
+    }
+    if (event.type === 'case-grabbed' || event.type === 'case-released') {
+      sfx.press();
+      return;
+    }
+    if (event.type === 'first-balance') {
+      sfx.checkpoint();
+      this.firstWeightArt?.pulse(C(CAR.LAMP_OK));
+      return;
+    }
+    if (event.type === 'witness-punched') {
+      sfx.punch?.();
+      scene.applyHitstop(55, 0.1);
+      this.firstWeightArt?.pulse(C(CAR.BRASS_HI));
+      return;
+    }
+    if (event.type === 'player-weight-revealed') {
+      sfx.lever();
+      scene.cameras.main.shake(110, 0.0014);
+      return;
+    }
+    if (event.type === 'latch-refused') {
+      sfx.blocked();
+      const gate = scene.tutorialGates?.[WEIGHT_TRANSFER_STAGE_INDEX];
+      if (gate) {
+        scene.tweens.add({ targets: gate.gate, x: gate.gate.x - 4, duration: 55, yoyo: true, repeat: 2 });
+      }
+      return;
+    }
+    if (event.type === 'stage-complete' && snap?.stageComplete) {
+      // Phase VI consumes the player's actual case movement, not an authored
+      // imitation. The pure module guarantees a useful minimum duration.
+      scene.tutorialPuzzle.firstWeightTrace = scene.tutorialPuzzle.firstWeight?.exportTrace?.() ?? null;
+      sfx.checkpoint();
+      this.completeStage({ pendingActions: [] });
+    }
+  }
+
+  // ------------------------------------------------------------- Phase V --
+  // TWO TRUE THINGS. Two cases, two witnessed tags, one new physical place.
+  // Logic is pure; this layer owns only world coordinates, feedback and stage
+  // completion.
+  ensureTwoTrueThingsState(stage) {
+    const puzzle = this.scene.tutorialPuzzle;
+    if (!stage?.twoTrueThings) return null;
+    if (!puzzle.twoTrueThings) puzzle.twoTrueThings = createTwoTrueThings();
+    return puzzle.twoTrueThings;
+  }
+
+  updateTwoTrueThingsStage(delta) {
+    const { scene } = this;
+    const puzzle = scene.tutorialPuzzle;
+    const stage = this.currentStage();
+    if (!stage?.twoTrueThings) return;
+    if (['opening', 'approach', 'departure', 'complete'].includes(puzzle.phase)) return;
+    const phase = this.ensureTwoTrueThingsState(stage);
+    if (!phase) return;
+
+    if (scene.player.x >= stage.twoTrueThings.entryTriggerX) phase.enter();
+    const { left, right } = stage.twoTrueThings.rail;
+    const playerNormalized = Phaser.Math.Clamp((scene.player.x - left) / (right - left), 0, 1);
+    if (!this.twoTrueThingsQaFreeze) phase.update(delta, { playerX: playerNormalized });
+    phase.drainEvents().forEach((event) => this.handleTwoTrueThingsEvent(event));
+    const snap = phase.snapshot();
+    this.twoTrueThingsArt?.applySnapshot(snap);
+
+    scene.interactables
+      .filter((it) => it.def.kind === 'two-true-things' && it.def.stage === puzzle.stageIndex)
+      .forEach((it) => {
+        if (it.def.command?.startsWith('case-')) {
+          const id = it.def.command.slice(5);
+          const item = snap.cases[id];
+          if (item) it.sprite.setX(Phaser.Math.Linear(left, right, item.x));
+        }
+        it.sprite.setY(430).setVisible(false);
+      });
+  }
+
+  operateTwoTrueThings(interactable) {
+    const phase = this.scene.tutorialPuzzle.twoTrueThings;
+    if (!phase || this.twoTrueThingsQaFreeze) return;
+    this.scene.player.playInteraction();
+    phase.interact(interactable.def.command);
+    phase.drainEvents().forEach((event) => this.handleTwoTrueThingsEvent(event));
+    this.twoTrueThingsArt?.applySnapshot(phase.snapshot());
+    this.refresh();
+  }
+
+  handleTwoTrueThingsEvent(event) {
+    const { scene } = this;
+    const snap = scene.tutorialPuzzle.twoTrueThings?.snapshot?.();
+    if (event.type === 'cases-fell') {
+      sfx.door();
+      scene.cameras.main.shake(150, 0.0025);
+      this.twoTrueThingsArt?.pulse(C(CAR.BRASS_MID));
+      scene.game.events.emit('hud:toast', 'ARCHIVIST: One record must be removed.');
+      return;
+    }
+    if (event.type === 'witness-punched') {
+      sfx.punch?.();
+      scene.applyHitstop(55, 0.1);
+      const item = snap?.cases?.[event.caseId];
+      this.twoTrueThingsArt?.pulse(
+        C(CAR.BRASS_HI),
+        item ? Phaser.Math.Linear(this.currentStage().twoTrueThings.rail.left, this.currentStage().twoTrueThings.rail.right, item.x) : null,
+        375,
+      );
+      return;
+    }
+    if (event.type === 'second-cradle-unfolded') {
+      sfx.lever();
+      scene.cameras.main.shake(100, 0.0013);
+      this.twoTrueThingsArt?.pulse(C(CAR.STEEL_HI), this.currentStage().twoTrueThings.secondCradleX, 470);
+      scene.game.events.emit('hud:toast', 'The train unfolds a place the rule did not allow.');
+      return;
+    }
+    if (event.type === 'amber-changed' || event.type === 'cyan-changed') {
+      sfx.lever();
+      const color = event.type === 'amber-changed' ? C(CAR.TUNGSTEN_REFLECT) : C(CAR.LAMP_OK);
+      const x = event.type === 'amber-changed'
+        ? this.currentStage().twoTrueThings.amberX
+        : this.currentStage().twoTrueThings.cyanX;
+      this.twoTrueThingsArt?.pulse(color, x, 490);
+      return;
+    }
+    if (event.type === 'case-grabbed' || event.type === 'case-released') {
+      sfx.press();
+      return;
+    }
+    if (event.type === 'support-refused') {
+      sfx.blocked();
+      scene.cameras.main.shake(100, 0.0015);
+      return;
+    }
+    if (event.type === 'case-returned') {
+      sfx.door();
+      return;
+    }
+    if (event.type === 'stage-complete' && snap?.stageComplete) {
+      sfx.checkpoint();
+      this.twoTrueThingsArt?.pulse(C(CAR.LAMP_OK), this.currentStage().twoTrueThings.secondCradleX, 426);
+      scene.game.events.emit('hud:toast', 'The train keeps both records.');
+      this.completeStage({ pendingActions: [] });
+    }
+  }
+
+  // ------------------------------------------------------------ Phase VI --
+  // THE TRAIN REMEMBERS. PAST repeats IV's movement; PRESENT counterbalances,
+  // then leaves the balance to rescue the record. The train completes the
+  // missing counter-movement using V's visible winch and air cushion.
+  ensureTrainRemembersState(stage) {
+    const puzzle = this.scene.tutorialPuzzle;
+    if (!stage?.trainRemembers) return null;
+    if (!puzzle.trainRemembers) {
+      puzzle.trainRemembers = createTrainRemembers({ trace: puzzle.firstWeightTrace });
+    }
+    return puzzle.trainRemembers;
+  }
+
+  updateTrainRemembersStage(delta) {
+    const { scene } = this;
+    const puzzle = scene.tutorialPuzzle;
+    const stage = this.currentStage();
+    if (!stage?.trainRemembers) return;
+    if (['opening', 'approach', 'departure', 'complete'].includes(puzzle.phase)) return;
+    const phase = this.ensureTrainRemembersState(stage);
+    if (!phase) return;
+
+    if (scene.player.x >= stage.trainRemembers.entryTriggerX) phase.enter();
+    const { left, right } = stage.trainRemembers.rail;
+    const playerNormalized = Phaser.Math.Clamp((scene.player.x - left) / (right - left), 0, 1);
+    if (!this.trainRemembersQaFreeze) phase.update(delta, { playerX: playerNormalized });
+    phase.drainEvents().forEach((event) => this.handleTrainRemembersEvent(event));
+    const snap = phase.snapshot();
+    this.trainRemembersArt?.applySnapshot(snap);
+
+    scene.interactables
+      .filter((it) => it.def.kind === 'train-remembers' && it.def.stage === puzzle.stageIndex)
+      .forEach((it) => {
+        if (it.def.command === 'present-case') {
+          it.sprite.setX(Phaser.Math.Linear(left, right, snap.presentX));
+        } else if (it.def.command === 'catch') {
+          it.sprite.setX(stage.trainRemembers.catchX);
+        }
+        it.sprite.setY(430).setVisible(false);
+      });
+  }
+
+  operateTrainRemembers(interactable) {
+    const phase = this.scene.tutorialPuzzle.trainRemembers;
+    if (!phase || this.trainRemembersQaFreeze) return;
+    this.scene.player.playInteraction();
+    phase.interact(interactable.def.command);
+    phase.drainEvents().forEach((event) => this.handleTrainRemembersEvent(event));
+    this.trainRemembersArt?.applySnapshot(phase.snapshot());
+    this.refresh();
+  }
+
+  handleTrainRemembersEvent(event) {
+    const { scene } = this;
+    const snap = scene.tutorialPuzzle.trainRemembers?.snapshot?.();
+    if (event.type === 'duet-started') {
+      sfx.checkpoint();
+      this.trainRemembersArt?.pulse(C(CAR.TUNGSTEN_REFLECT), this.currentStage().trainRemembers.pivotX, 328);
+      return;
+    }
+    if (event.type === 'case-grabbed' || event.type === 'case-released') {
+      sfx.press();
+      return;
+    }
+    if (event.type === 'pose-matched') {
+      sfx.checkpoint();
+      this.trainRemembersArt?.pulse(C(CAR.LAMP_OK), this.currentStage().trainRemembers.pivotX, 438);
+      return;
+    }
+    if (event.type === 'echo-redacted') {
+      sfx.blocked();
+      scene.cameras.main.shake(120, 0.0012);
+      scene.game.events.emit('hud:toast', 'ARCHIVIST: Contradiction removed.');
+      return;
+    }
+    if (event.type === 'catch-reached-for') {
+      sfx.blocked();
+      return;
+    }
+    if (event.type === 'case-caught') {
+      sfx.punch?.();
+      scene.applyHitstop(70, 0.12);
+      this.trainRemembersArt?.pulse(C(CAR.SKY_RIM), this.currentStage().trainRemembers.catchX, 430);
+      return;
+    }
+    if (event.type === 'train-countermovement') {
+      sfx.lever();
+      scene.cameras.main.shake(160, 0.002);
+      scene.game.events.emit('hud:toast', 'The train remembers what you chose to carry.');
+      return;
+    }
+    if (event.type === 'stage-complete' && snap?.stageComplete) {
+      sfx.checkpoint();
+      this.completeStage({ pendingActions: [] });
+    }
+  }
 
   ensureWeightTransferState(stage) {
     const puzzle = this.scene.tutorialPuzzle;
@@ -3549,6 +4155,15 @@ export default class TimetablePuzzle {
       sfx.lever();
       return;
     }
+    if (evt.type === 'test-reset-required') {
+      // Real control-stand grammar: an unsuccessful live test must be
+      // returned to OFF before a prepared rig can be tested again.  The
+      // handle answers, rather than D movement silently completing the room.
+      const device = findDevice('test');
+      if (device) scene.pulseTutorialDevice(device.sprite, CAR.LAMP_ALERT);
+      sfx.blocked();
+      return;
+    }
     if (evt.type === 'wheel-bite') {
       // The wheels catch: one deep clunk through the floor, sparks dying.
       sfx.door();
@@ -3625,29 +4240,44 @@ export default class TimetablePuzzle {
       const pivotX = (machinery.__bagFrontX + machinery.__bagRearX) / 2;
       const pivotY = machinery.__beamPivotY;
       const half = (machinery.__bagRearX - machinery.__bagFrontX) / 2 - 8;
-      // The load split is narrow by design (the frozen motor caps it near
-      // ±0.2), so the beam amplifies it into an unmistakable rock: ±0.2 of
-      // split reads as ~6° at the pivot — the whole room can see which end
-      // the counterweight is pressing down.
-      const ang = (rearLoad - frontLoad) * 0.55;
+      // Keep the equalizer recognisably mechanical: a five-degree working
+      // range is enough to read without turning it into a giant ramp.
+      const ang = (rearLoad - frontLoad) * 0.22;
       const cosA = Math.cos(ang);
       const sinA = Math.sin(ang);
       const leftEnd = { x: pivotX - half * cosA, y: pivotY - half * sinA };
       const rightEnd = { x: pivotX + half * cosA, y: pivotY + half * sinA };
       const sink = rearLoad * 9;
       art.clear();
+      // A travelling plunger drops from the counterweight rail onto the
+      // equalizer. This is the missing visual verb: the player can now trace
+      // trolley -> plunger -> rocking beam -> loaded axle in one silhouette.
+      const saddleX = Phaser.Math.Clamp(trolleyWorldX, leftEnd.x + 18, rightEnd.x - 18);
+      const saddleT = (saddleX - leftEnd.x) / Math.max(1, rightEnd.x - leftEnd.x);
+      const saddleY = Phaser.Math.Linear(leftEnd.y, rightEnd.y, saddleT);
+      art.lineStyle(5, 0x687981, 0.92);
+      art.lineBetween(saddleX, 470, saddleX, saddleY - 11);
+      art.fillStyle(C(CAR.BRASS_MID), 0.95);
+      art.fillRoundedRect(saddleX - 15, saddleY - 13, 30, 11, 4);
+      art.lineStyle(2, C(CAR.BRASS_HI), 0.82);
+      art.strokeRoundedRect(saddleX - 15, saddleY - 13, 30, 11, 4);
       // Fulcrum: an unmistakable central pivot the beam rocks on.
       art.fillStyle(0x2a3940, 1);
-      art.fillTriangle(pivotX - 19, pivotY + 34, pivotX + 19, pivotY + 34, pivotX, pivotY + 2);
+      art.fillTriangle(pivotX - 22, pivotY + 34, pivotX + 22, pivotY + 34, pivotX, pivotY + 5);
       art.lineStyle(2, 0xc1c9c6, 0.85);
-      art.strokeTriangle(pivotX - 19, pivotY + 34, pivotX + 19, pivotY + 34, pivotX, pivotY + 2);
-      // The beam itself: heavy steel body, brass top edge.
-      art.lineStyle(12, 0x53656d, 1);
+      art.strokeTriangle(pivotX - 22, pivotY + 34, pivotX + 22, pivotY + 34, pivotX, pivotY + 5);
+      // Twin steel equalizer leaves with a narrow air gap read as a railway
+      // suspension part, not a platform. Brass is restricted to the wear edge.
+      art.lineStyle(9, 0x53656d, 1);
       art.lineBetween(leftEnd.x, leftEnd.y, rightEnd.x, rightEnd.y);
+      art.lineStyle(5, 0x263840, 1);
+      art.lineBetween(leftEnd.x, leftEnd.y + 8, rightEnd.x, rightEnd.y + 8);
       art.lineStyle(3, C(CAR.BRASS_MID), 0.95);
-      art.lineBetween(leftEnd.x, leftEnd.y - 6, rightEnd.x, rightEnd.y - 6);
+      art.lineBetween(leftEnd.x, leftEnd.y - 5, rightEnd.x, rightEnd.y - 5);
       art.fillStyle(C(CAR.BRASS_HI), 1);
-      art.fillCircle(pivotX, pivotY, 5);
+      art.fillCircle(pivotX, pivotY + 3, 7);
+      art.lineStyle(2, 0x0a1015, 0.9);
+      art.strokeCircle(pivotX, pivotY + 3, 7);
       // Link rods: beam ends -> both air-spring seats, and the drive-side
       // rod continuing down to the sinking drive axlebox.
       art.lineStyle(4, 0x53656d, 0.95);
@@ -3673,6 +4303,32 @@ export default class TimetablePuzzle {
     if (machinery.bodyTilt) {
       const split = snap.motor.axleLoad.rear - snap.motor.axleLoad.front;
       machinery.bodyTilt.setAngle(split * 4.5);
+    }
+    if (machinery.driveStateLabel) {
+      const state = snap.motor.wheelState;
+      machinery.driveStateLabel
+        .setText(
+          snap.testAttempt === 'stale' && snap.readyForTest
+            ? 'TEST HANDLE  /  RETURN TO OFF'
+            : snap.readyForTest && !snap.motor.energized
+              ? 'LOAD + PRESSURE READY  /  TEST'
+              : state === 'biting'
+                ? 'DRIVE AXLE  /  GRIP'
+                : state === 'spinning'
+                  ? 'DRIVE AXLE  /  SLIP'
+                  : 'DRIVE AXLE  /  NO LOAD',
+        )
+        .setColor(
+          snap.testAttempt === 'stale'
+            ? '#e45a5f'
+            : snap.readyForTest
+              ? '#75d4cd'
+              : state === 'biting'
+                ? '#75d4cd'
+                : state === 'spinning'
+                  ? '#e45a5f'
+                  : '#687981',
+        );
     }
     // The TEST stand lamp follows the motor, not a step counter: amber while
     // energized, bright while biting, dark at rest.
@@ -3764,7 +4420,11 @@ export default class TimetablePuzzle {
     const atValve = valve
       ? Math.abs(valve.sprite.x - scene.player.x) < radius && scene.player.lane === valve.def.lane
       : false;
-    phase.setVentHeld(Boolean(scene.inputState?.interactHeld && atValve));
+    phase.setVentHeld(
+      this.mechanicalPanelMode === 'bogie'
+        ? this._mechanicalVentHeld
+        : Boolean(scene.inputState?.interactHeld && atValve),
+    );
 
     // The Phase IV load persists: the trolley stayed home and the bags stayed
     // charged, so the drive axle keeps its weight in this room too.
@@ -3828,6 +4488,10 @@ export default class TimetablePuzzle {
     const puzzle = scene.tutorialPuzzle;
     const phase = puzzle.bogieDiagnosis;
     if (!phase || this.bogieQaFreeze || this._bogieObserving) return;
+    if (this.mechanicalPanelMode !== 'bogie') {
+      this.openMechanicalPanel('bogie');
+      return;
+    }
     const command = interactable.def.command;
     scene.player.playInteraction();
     if (command === 'brake-vent') {
@@ -3849,6 +4513,12 @@ export default class TimetablePuzzle {
         && it.def.kind === 'bogie-service'
         && it.def.command === command,
     );
+    if (evt.type === 'bogie-selected') {
+      // A real rotary selector has a distinct detent; the gauges redraw from
+      // the newly selected bogie on the same frame.
+      sfx.lever();
+      return;
+    }
     if (evt.type === 'test-energized' || evt.type === 'test-de-energized') {
       const device = findDevice('test');
       if (device) {
@@ -3865,7 +4535,10 @@ export default class TimetablePuzzle {
       // room back. Later tests stay fully player-owned.
       if (evt.type === 'test-energized' && !this._bogieFirstTestSeen) {
         this._bogieFirstTestSeen = true;
-        this.runBogieContradictionObserve();
+        // The point-and-click test stand already owns the player's attention
+        // and presents the two calibrated observations in-place. Do not pull
+        // the camera away from that instrument while it is open.
+        if (this.mechanicalPanelMode !== 'bogie') this.runBogieContradictionObserve();
       }
       return;
     }
@@ -3901,6 +4574,16 @@ export default class TimetablePuzzle {
       scene.cameras.main.shake(140, 0.003);
       return;
     }
+    if (evt.type === 'fault-localized') {
+      // The player has compared two live bogies and isolated the contradiction:
+      // current and air both reach B, but its piston never travels.  Mark the
+      // cylinder, not a generic UI button, so the diagnosis remains spatial.
+      const device = findDevice('repair');
+      if (device) scene.pulseTutorialDevice(device.sprite, CAR.LAMP_OK);
+      sfx.checkpoint();
+      scene.cameras.main.shake(70, 0.0014);
+      return;
+    }
     if (evt.type === 'brake-applied' && evt.id === 'rear') {
       // Fail-safe: as the local line dies, the clamp audibly bites. That bite
       // is the safe state announcing itself, not a failure.
@@ -3910,8 +4593,51 @@ export default class TimetablePuzzle {
     if (evt.type === 'control-bounce') {
       // A refusal names its missing condition ON the device, never in prose:
       // the pin that will not seat, the piston that will not move.
-      const device = findDevice(evt.command);
+      const visualCommand = evt.command === 'inspect-actuator' ? 'repair' : evt.command;
+      const device = findDevice(visualCommand);
       if (device) scene.pulseTutorialDevice(device.sprite, CAR.LAMP_ALERT);
+      // The inspection tray covers the world machinery. Mirror the refusal
+      // inside the tray itself so point-and-click players see the part push
+      // back under their cursor instead of hearing a disconnected error SFX.
+      if (this.mechanicalPanelMode === 'bogie') {
+        this._mechanicalBounce = {
+          id: visualCommand,
+          startedAt: scene.time?.now ?? 0,
+          duration: visualCommand === 'repair' ? 360 : 300,
+        };
+      }
+      // The part itself also answers physically: the player tried to move it
+      // and the machine pushed back. The pin dips toward its seat and is
+      // shoved back out (refreshBogieVisuals rewrites its X and fill every
+      // frame, so only Y is free); the jammed piston shudders in its bore
+      // (its X is free — only the fill is state-owned).
+      const machinery = this.stageAssemblies[puzzle.stageIndex]?.machinery;
+      if (machinery) {
+        if (visualCommand === 'service-lock' && machinery.servicePin) {
+          const pin = machinery.servicePin;
+          scene.tweens.killTweensOf(pin);
+          scene.tweens.add({
+            targets: pin,
+            y: pin.y + 5,
+            duration: 70,
+            yoyo: true,
+            repeat: 1,
+            ease: 'Sine.easeInOut',
+          });
+        }
+        if (visualCommand === 'repair' && machinery.actuatorPiston) {
+          const piston = machinery.actuatorPiston;
+          scene.tweens.killTweensOf(piston);
+          scene.tweens.add({
+            targets: piston,
+            x: piston.x + 4,
+            duration: 45,
+            yoyo: true,
+            repeat: 3,
+            ease: 'Sine.easeInOut',
+          });
+        }
+      }
       sfx.blocked();
       return;
     }
@@ -4024,6 +4750,57 @@ export default class TimetablePuzzle {
     });
   }
 
+  drawSimplifiedBogieWorld(snap, machinery) {
+    const art = machinery.simplifiedWorldArt;
+    if (!art) return;
+    const left = 3222;
+    const right = 3968;
+    const y = 748;
+    const bogies = [3345, 3745];
+    art.clear();
+    art.fillStyle(C(CAR.VOID), 1);
+    art.fillRoundedRect(left, 584, right - left, 282, 14);
+    art.lineStyle(3, C(CAR.ENAMEL_MID), 0.86);
+    art.strokeRoundedRect(left, 584, right - left, 282, 14);
+    // One common TEST bus, two otherwise identical bogies. The comparison is
+    // the picture; the local service hatch is the only extra object on B.
+    art.lineStyle(6, C(CAR.BRASS_MID), 0.72);
+    art.lineBetween(3388, 642, 3702, 642);
+    art.fillStyle(C(CAR.ENAMEL_DARK), 1);
+    art.fillRoundedRect(3508, 615, 74, 64, 8);
+    art.lineStyle(2, C(CAR.BRASS_MID), 0.84);
+    art.strokeRoundedRect(3508, 615, 74, 64, 8);
+    art.fillStyle(snap.motor.energized ? C(CAR.TUNGSTEN_REFLECT) : C(CAR.ENAMEL_MID), 0.95);
+    art.fillCircle(3545, 637, 7);
+    bogies.forEach((x, index) => {
+      art.fillStyle(C(CAR.ENAMEL_DARK), 1);
+      art.fillRoundedRect(x - 116, y - 54, 232, 90, 10);
+      art.lineStyle(4, C(CAR.STEEL_MID), 0.95);
+      art.lineBetween(x - 92, y - 20, x + 92, y - 20);
+      [-62, 62].forEach((dx) => {
+        art.fillStyle(C(CAR.VOID), 1);
+        art.fillCircle(x + dx, y + 28, 43);
+        art.lineStyle(6, C(CAR.STEEL_MID), 0.94);
+        art.strokeCircle(x + dx, y + 28, 39);
+        art.lineStyle(3, C(CAR.STEEL_DARK), 1);
+        art.strokeCircle(x + dx, y + 28, 16);
+      });
+      const turning = index === 0 ? snap.front.wheelTurning : snap.rear.wheelTurning;
+      art.lineStyle(4, turning ? C(CAR.LAMP_OK) : C(CAR.STEEL_HI), turning ? 0.95 : 0.62);
+      art.lineBetween(x - 101, y + 28, x + 101, y + 28);
+    });
+    // B's brake actuator and service door are spatially one assembly.
+    art.fillStyle(snap.rear.repaired ? C(CAR.BRASS_MID) : C(CAR.ENAMEL_DARK), 1);
+    art.fillRoundedRect(3800, 675, 92, 58, 7);
+    art.lineStyle(3, snap.rear.repaired ? C(CAR.LAMP_OK) : C(CAR.LAMP_ALERT), 0.9);
+    art.strokeRoundedRect(3800, 675, 92, 58, 7);
+    art.lineStyle(5, snap.rear.brakeReleased ? C(CAR.STEEL_MID) : C(CAR.LAMP_ALERT), 0.88);
+    art.lineBetween(3774, 708, 3800, 708);
+    machinery.simplifiedWorldLabel
+      ?.setText(snap.rear.repaired ? 'A  REFERENCE    /    B  RESTORED' : 'A  REFERENCE    /    B  LOCKED    /    [E] INSPECT')
+      .setColor(snap.rear.repaired ? '#75d4cd' : '#9fb7c0');
+  }
+
   // Brake shoes, the service pin, wheel spokes and the line gauge all read
   // the same snapshot. The healthy bogie spins under TEST; the faulty one
   // stays dark until the chain is honestly repaired.
@@ -4032,6 +4809,8 @@ export default class TimetablePuzzle {
     const puzzle = scene.tutorialPuzzle;
     const machinery = this.stageAssemblies[puzzle.stageIndex]?.machinery;
     if (!machinery) return;
+    this.drawSimplifiedBogieWorld(snap, machinery);
+    if (this.mechanicalPanelMode === 'bogie') this.refreshMechanicalPanel();
 
     // VISIBLE SYSTEM ARC CORRECTION §3: the five generic floor-lever sprites
     // are retired. Invisible anchors now sit ON the real devices, so the
@@ -4051,7 +4830,13 @@ export default class TimetablePuzzle {
           const anchor = anchors[it.def.command];
           if (!anchor) return;
           it.sprite.setVisible(false);
-          it.sprite.setPosition(anchor[0], anchor[1]);
+          // The sparse world has one service hatch. Detailed controls live in
+          // the point-and-click close-up, so only TEST remains a reachable
+          // world anchor; the other routing sprites are parked off-stage.
+          it.sprite.setPosition(
+            it.def.command === 'test' ? anchor[0] : -9999,
+            it.def.command === 'test' ? anchor[1] : -9999,
+          );
         });
     }
 
@@ -4099,6 +4884,39 @@ export default class TimetablePuzzle {
         snap.rear.repaired ? C(CAR.BRASS_MID) : 0x2a3940,
         0.95,
       );
+    }
+    // A single bright route replaces five equally loud control glows. The
+    // live segment advances through the real local branch as the player makes
+    // it safe: header -> cut-off -> low bleed -> pin guide -> actuator cover.
+    if (machinery.bogieServiceFlowArt) {
+      const art = machinery.bogieServiceFlowArt;
+      art.clear();
+      const pulse = 0.58 + 0.22 * Math.sin(scene.time.now / 210);
+      art.lineStyle(4, C(CAR.LAMP_OK), pulse);
+      if (!snap.brake.isolated) {
+        art.lineBetween(3580, 631, 3580, 639);
+        art.strokeCircle(3580, 639, 15);
+      } else if (snap.brake.pressure > 3) {
+        art.lineBetween(3580, 650, 3580, 800);
+        art.lineBetween(3580, 800, 3660, 800);
+        art.strokeCircle(3660, 817, 15);
+      } else if (!snap.rear.serviceLockEngaged) {
+        art.lineBetween(3660, 800, 3775, 800);
+        art.lineBetween(3775, 800, 3775, 728);
+        art.strokeRect(3763, 716, 24, 24);
+      } else if (!snap.rear.repaired) {
+        art.lineBetween(3775, 728, 3860, 728);
+        art.lineBetween(3860, 728, 3860, 703);
+        art.strokeRect(3841, 688, 38, 30);
+      }
+    }
+    if (machinery.bogieFrontLabel) {
+      machinery.bogieFrontLabel.setColor(snap.front.wheelTurning ? '#75d4cd' : '#9fb7c0');
+    }
+    if (machinery.bogieRearLabel) {
+      machinery.bogieRearLabel
+        .setText(snap.rear.repaired ? 'B  RESTORED' : 'B  SERVICE')
+        .setColor(snap.rear.repaired ? '#75d4cd' : '#e45a5f');
     }
     // TEST stand lamp follows the shared contactor.
     if (machinery.testLamp) {
@@ -4273,7 +5091,12 @@ export default class TimetablePuzzle {
     const { scene } = this;
     const puzzle = scene.tutorialPuzzle;
     const phase = puzzle.echoReplay;
-    if (!phase || this.echoQaFreeze) return;
+    if (!phase) return;
+    if (this.mechanicalPanelMode !== 'echo') {
+      this.openMechanicalPanel('echo');
+      return;
+    }
+    if (this.echoQaFreeze) return;
     scene.player.playInteraction();
     phase.interact(interactable.def.command);
     phase.drainEvents().forEach((evt) => this.handleEchoReplayEvent(evt));
@@ -4292,7 +5115,7 @@ export default class TimetablePuzzle {
     if (evt.type === 'loop-start') {
       // The first completed loop retracts the handle's lock bar for good
       // (VISIBLE SYSTEM ARC CORRECTION §4): one mechanical clunk on the
-      // stand, then the local [E] 接合牵引 prompt can appear.
+      // stand, then the local [E] ENGAGE TRACTION prompt can appear.
       if (evt.loopIndex === 1) {
         sfx.door();
         const device = findDevice('test');
@@ -4312,6 +5135,17 @@ export default class TimetablePuzzle {
     }
     if (evt.type === 'test-released') {
       sfx.lever();
+      return;
+    }
+    if (evt.type === 'load-route-changed') {
+      sfx.lever();
+      return;
+    }
+    if (evt.type === 'load-misrouted') {
+      // A wrong branch is a readable local failure: the reference bogie takes
+      // the weight while the drive bogie free-revs. Nothing is reset.
+      sfx.blocked();
+      scene.cameras.main.shake(80, 0.002);
       return;
     }
     if (evt.type === 'spinning-stale') {
@@ -4356,6 +5190,67 @@ export default class TimetablePuzzle {
     }
   }
 
+  drawSimplifiedEchoWorld(snap, machinery, echoX) {
+    const art = machinery.simplifiedWorldArt;
+    if (!art) return;
+    const left = 4022;
+    const right = 4768;
+    const driveX = 4655;
+    const railY = 684;
+    const wheelY = 776;
+    art.clear();
+    art.fillStyle(C(CAR.VOID), 1);
+    art.fillRoundedRect(left, 584, right - left, 282, 14);
+    art.lineStyle(3, C(CAR.ENAMEL_MID), 0.86);
+    art.strokeRoundedRect(left, 584, right - left, 282, 14);
+    // Two repaired supply trunks enter from the left. They remain parallel
+    // and terminate at the one traction cabinet, rather than crossing the
+    // entire bogie as decorative diagonals.
+    art.lineStyle(6, C(CAR.BRASS_MID), 0.78);
+    art.lineBetween(left + 26, 625, 4390, 625);
+    art.lineStyle(6, C(CAR.LAMP_OK), 0.62);
+    art.lineBetween(left + 26, 645, 4390, 645);
+    art.fillStyle(C(CAR.ENAMEL_DARK), 1);
+    art.fillRoundedRect(4370, 607, 86, 92, 8);
+    art.lineStyle(3, C(CAR.BRASS_MID), 0.9);
+    art.strokeRoundedRect(4370, 607, 86, 92, 8);
+    // Replay rail and moving weight. The capture bay is a real overhead yoke
+    // directly above the drive axle.
+    art.lineStyle(5, C(CAR.STEEL_MID), 0.9);
+    art.lineBetween(4070, railY, 4732, railY);
+    art.fillStyle(C(CAR.ENAMEL_MID), 1);
+    art.fillRoundedRect(echoX - 42, railY - 28, 84, 24, 6);
+    art.lineStyle(3, snap.windowActive ? C(CAR.BRASS_HI) : C(CAR.STEEL_HI), 0.9);
+    art.strokeRoundedRect(echoX - 42, railY - 28, 84, 24, 6);
+    art.fillCircle(echoX - 28, railY + 2, 7);
+    art.fillCircle(echoX + 28, railY + 2, 7);
+    art.lineStyle(5, snap.windowActive ? C(CAR.LAMP_OK) : C(CAR.STEEL_MID), snap.windowActive ? 0.95 : 0.62);
+    art.lineBetween(4588, 650, 4588, 714);
+    art.lineBetween(4588, 650, 4722, 650);
+    art.lineBetween(4722, 650, 4722, 714);
+    // One drive bogie, stripped to frame, two wheels and motor. It is the
+    // only downstream result the player needs to read.
+    art.fillStyle(C(CAR.ENAMEL_DARK), 1);
+    art.fillRoundedRect(driveX - 126, 718, 252, 74, 10);
+    [-62, 62].forEach((dx) => {
+      art.fillStyle(C(CAR.VOID), 1);
+      art.fillCircle(driveX + dx, wheelY, 43);
+      art.lineStyle(6, C(CAR.STEEL_MID), 0.96);
+      art.strokeCircle(driveX + dx, wheelY, 39);
+    });
+    const biting = snap.motor.wheelState === 'biting';
+    const spinning = snap.motor.wheelState === 'spinning';
+    art.lineStyle(5, biting ? C(CAR.LAMP_OK) : spinning ? C(CAR.LAMP_ALERT) : C(CAR.STEEL_HI), 0.9);
+    art.lineBetween(driveX - 105, wheelY, driveX + 105, wheelY);
+    if (snap.windowActive) {
+      art.lineStyle(6, C(CAR.BRASS_HI), 0.9);
+      art.lineBetween(echoX, railY - 4, echoX, 718);
+    }
+    machinery.simplifiedWorldLabel
+      ?.setText(snap.observationLoop ? 'WATCH THE PAST LOAD' : snap.windowActive ? 'LOAD IN CAPTURE BAY    /    [E] INSPECT' : 'WAIT FOR LOAD    /    [E] INSPECT')
+      .setColor(snap.windowActive ? '#75d4cd' : '#9fb7c0');
+  }
+
   // The ghost, the trolley, the zone stripe, the condition strip and the
   // gauge all read the same snapshot. The rhythm is SEEN before it is used.
   refreshEchoVisuals(snap) {
@@ -4367,6 +5262,8 @@ export default class TimetablePuzzle {
     const x0 = machinery.__echoRailX0 ?? 0;
     const x1 = machinery.__echoRailX1 ?? 0;
     const echoX = x0 + snap.echoTrolleyX * (x1 - x0);
+    this.drawSimplifiedEchoWorld(snap, machinery, echoX);
+    if (this.mechanicalPanelMode === 'echo') this.refreshMechanicalPanel();
     if (machinery.echoTrolleyCar) machinery.echoTrolleyCar.setX(echoX);
     if (machinery.echoGhost) {
       machinery.echoGhost.setX(echoX);
@@ -4379,6 +5276,37 @@ export default class TimetablePuzzle {
         .setX(echoX)
         .setAlpha(snap.windowActive ? 0.3 : 0.14);
     }
+    if (machinery.echoLoadPathArt) {
+      const art = machinery.echoLoadPathArt;
+      const driveX = x0 + (x1 - x0) * 0.875;
+      const active = snap.windowActive;
+      const pulse = 0.62 + 0.24 * Math.sin(scene.time.now / 190);
+      art.clear();
+      // Flanged trolley detail rides with the ghost; its central hanger drops
+      // onto the load rail. Inside the timing window the same hanger closes a
+      // short mechanical bridge to the drive axle, making the required moment
+      // visible without a row of abstract lamps.
+      art.lineStyle(3, active ? C(CAR.BRASS_HI) : 0x687981, active ? pulse : 0.72);
+      art.strokeCircle(echoX - 30, 797, 8);
+      art.strokeCircle(echoX + 30, 797, 8);
+      art.lineBetween(echoX - 42, 782, echoX + 42, 782);
+      art.lineBetween(echoX, 782, echoX, 744);
+      art.fillStyle(active ? C(CAR.BRASS_MID) : 0x405159, active ? 0.95 : 0.72);
+      art.fillRoundedRect(echoX - 12, 736, 24, 12, 4);
+      if (active) {
+        art.lineStyle(5, C(CAR.BRASS_HI), pulse);
+        art.lineBetween(echoX, 742, driveX, 742);
+        art.lineBetween(driveX, 742, driveX, 807);
+        art.strokeCircle(driveX, 807, 17);
+      }
+      // Permanent bracket around the usable quarter of the rail: the moving
+      // load enters a physical capture bay rather than an invisible interval.
+      const zoneLeft = x0 + (x1 - x0) * 0.75;
+      art.lineStyle(3, active ? C(CAR.LAMP_OK) : 0x53656d, active ? 0.9 : 0.62);
+      art.lineBetween(zoneLeft, 814, zoneLeft, 770);
+      art.lineBetween(zoneLeft, 770, x1, 770);
+      art.lineBetween(x1, 770, x1, 814);
+    }
     // The zone stripe breathes while the weight is over the drive bogie.
     if (machinery.echoZoneStripe) {
       machinery.echoZoneStripe.setFillStyle(
@@ -4390,6 +5318,11 @@ export default class TimetablePuzzle {
       machinery.echoWindowLamp
         .setFillStyle(snap.windowActive ? 0x75d4cd : 0x405159, 0.95)
         .setAlpha(snap.windowActive ? 0.9 : 0.45);
+    }
+    if (machinery.echoCaptureLabel) {
+      machinery.echoCaptureLabel
+        .setText(snap.windowActive ? 'LOAD CAPTURED' : 'LOAD CAPTURE BAY')
+        .setColor(snap.windowActive ? '#75d4cd' : '#687981');
     }
     // The drive spoke turns with the shared motor: free-rev fast and pale
     // while spinning, crawl-steady and bright while biting.
@@ -4642,6 +5575,1105 @@ export default class TimetablePuzzle {
   // the same span and always restored; the post-relay trace is progress-held
   // until finish() so trace-energized can only light in world view.
 
+  openMechanicalPanel(mode) {
+    const { scene } = this;
+    if (this.mechanicalPanelMode || this.relayCloseupState !== 'closed') return;
+    const camera = scene.cameras.main;
+    // The rolling-bearing close-up is an architectural train cutaway rather
+    // than a small control plate. Other legacy close-ups retain their compact
+    // dimensions; IV–VI use nearly the whole viewport as a fixed theatre.
+    const tableMode = mode.startsWith('table-');
+    const width = Math.min(tableMode ? 1100 : 840, camera.width - (tableMode ? 24 : 48));
+    const height = Math.min(tableMode ? 540 : 500, camera.height - (tableMode ? 20 : 42));
+    const left = (camera.width - width) / 2;
+    const top = (camera.height - height) / 2;
+    const make = (object, depth = 790) => {
+      object.setScrollFactor(0).setDepth(depth);
+      this.objects.push(object);
+      return object;
+    };
+    this.mechanicalPanelMode = mode;
+    this._mechanicalVentHeld = false;
+    this._mechanicalHoverId = null;
+    this._mechanicalPressedId = null;
+    const partTextStyle = {
+      fontFamily: 'ui-monospace, Menlo, monospace',
+      fontSize: '11px',
+      color: '#9fb7c0',
+      align: 'center',
+    };
+    const partTexts = Object.fromEntries(
+      ['reference', 'test', 'isolate', 'gauge', 'bleed', 'pin', 'actuator', 'close'].map((id) => [
+        id,
+        make(scene.add.text(0, 0, '', partTextStyle).setOrigin(0.5), 792).setVisible(false),
+      ]),
+    );
+    this.mechanicalPanel = {
+      left,
+      top,
+      width,
+      height,
+      base: tableMode
+        ? make(scene.add.image(left + width / 2, top + height / 2, 'mechanical-table-base').setDisplaySize(width, height), 790)
+        : null,
+      graphics: make(scene.add.graphics(), tableMode ? 791 : 790),
+      title: make(scene.add.text(left + 28, top + 20, '', {
+        fontFamily: 'ui-monospace, Menlo, monospace',
+        fontSize: '18px',
+        color: '#e8d5a7',
+      }), 792),
+      status: make(scene.add.text(left + width / 2, top + 68, '', {
+        fontFamily: 'ui-monospace, Menlo, monospace',
+        fontSize: '13px',
+        color: '#9fb7c0',
+        align: 'center',
+      }).setOrigin(0.5), 792),
+      help: make(scene.add.text(left + width / 2, top + height - 24, 'CLICK MECHANICAL PARTS    /    ESC OR E TO CLOSE', {
+        fontFamily: 'ui-monospace, Menlo, monospace',
+        fontSize: '10px',
+        color: '#687981',
+      }).setOrigin(0.5), 792),
+      objects: [],
+      hits: [],
+      partTexts,
+    };
+    if (tableMode) {
+      const pipePart = (frame, depth = 793) => make(
+        scene.add.sprite(0, 0, 'mechanical-pipe-parts', frame).setOrigin(0.5),
+        depth,
+      );
+      this.mechanicalPanel.bearing = pipePart(2).setTint(C(CAR.BRASS_HI)).setScale(1.45);
+      this.mechanicalPanel.ghostBearing = pipePart(2).setTint(C(CAR.LAMP_OK)).setScale(1.25).setAlpha(0);
+      this.mechanicalPanel.outputA = pipePart(2).setTint(C(CAR.BRASS_MID)).setScale(2.7);
+      this.mechanicalPanel.outputB = pipePart(2).setTint(C(CAR.STEEL_MID)).setScale(2.7);
+    }
+    this.mechanicalPanel.objects = [
+      this.mechanicalPanel.base,
+      this.mechanicalPanel.graphics,
+      this.mechanicalPanel.title,
+      this.mechanicalPanel.status,
+      this.mechanicalPanel.help,
+      ...Object.values(partTexts),
+      this.mechanicalPanel.bearing,
+      this.mechanicalPanel.ghostBearing,
+      this.mechanicalPanel.outputA,
+      this.mechanicalPanel.outputB,
+    ].filter(Boolean);
+    scene.relayCloseupActive = true;
+    scene.player.frozen = true;
+    scene.player.setVelocity(0, 0);
+    scene.scene.setVisible(false, 'Hud');
+    this._setRelayCursor(true);
+    this.refreshMechanicalPanel();
+  }
+
+  closeMechanicalPanel() {
+    if (!this.mechanicalPanelMode) return;
+    const { scene } = this;
+    this._mechanicalVentHeld = false;
+    this._mechanicalHoverId = null;
+    this._mechanicalPressedId = null;
+    scene.tutorialPuzzle?.bogieDiagnosis?.setVentHeld?.(false);
+    const panelObjects = new Set(this.mechanicalPanel?.objects ?? []);
+    panelObjects.forEach((object) => object?.destroy?.());
+    // Repeated inspection must not grow the tracked-object list. The objects
+    // are short-lived modal furniture, unlike the persistent world art.
+    this.objects = this.objects.filter((object) => !panelObjects.has(object));
+    this.mechanicalPanel = null;
+    this.mechanicalPanelMode = null;
+    scene.relayCloseupActive = false;
+    scene.player.frozen = false;
+    scene.scene.setVisible(true, 'Hud');
+    this._setRelayCursor(false);
+    const camera = scene.cameras.main;
+    camera.startFollow(scene.player, true, 0.075, 0.11, 0, 150);
+    camera.setDeadzone(220, 170);
+  }
+
+  refreshMechanicalPanel() {
+    const panel = this.mechanicalPanel;
+    if (!panel || !this.mechanicalPanelMode) return;
+    if (this.mechanicalPanelMode.startsWith('table-')) {
+      this.refreshRollingBearingTable(panel);
+      return;
+    }
+    const { left, top, width, height, graphics: art } = panel;
+    art.clear();
+    art.fillStyle(C(CAR.VOID), 0.98);
+    art.fillRoundedRect(left, top, width, height, 14);
+    art.lineStyle(4, C(CAR.STEEL_MID), 0.95);
+    art.strokeRoundedRect(left, top, width, height, 14);
+    art.lineStyle(2, C(CAR.BRASS_MID), 0.7);
+    art.lineBetween(left + 22, top + 54, left + width - 22, top + 54);
+    art.fillStyle(C(CAR.ENAMEL_DARK), 1);
+    art.fillRoundedRect(left + width - 62, top + 14, 34, 34, 5);
+    art.lineStyle(2, C(CAR.LAMP_ALERT), 0.8);
+    art.strokeRoundedRect(left + width - 62, top + 14, 34, 34, 5);
+    art.lineBetween(left + width - 52, top + 24, left + width - 38, top + 38);
+    art.lineBetween(left + width - 38, top + 24, left + width - 52, top + 38);
+    panel.hits = [{ id: 'close', x: left + width - 70, y: top + 8, w: 50, h: 46 }];
+    Object.values(panel.partTexts ?? {}).forEach((text) => text.setVisible(false));
+
+    if (this.mechanicalPanelMode === 'bogie') {
+      const snap = this.scene.tutorialPuzzle?.bogieDiagnosis?.snapshot?.();
+      if (!snap) return;
+      const partTexts = panel.partTexts;
+      const now = this.scene.time?.now ?? 0;
+      const breathe = 0.72 + Math.sin(now / 260) * 0.2;
+      const hover = this._mechanicalHoverId;
+      const pressed = this._mechanicalPressedId;
+      const bounce = this._mechanicalBounce;
+      const bounceProgress = bounce
+        ? Phaser.Math.Clamp((now - bounce.startedAt) / bounce.duration, 0, 1)
+        : 1;
+      const bounceWave = bounceProgress < 1
+        ? Math.sin(bounceProgress * Math.PI * 5) * (1 - bounceProgress)
+        : 0;
+      panel.title.setText(snap.faultLocalized
+        ? 'BOGIE B  /  BRAKE CYLINDER SERVICE'
+        : 'SINGLE-CAR BRAKE TEST  /  A–B SELECTOR');
+
+      // One inset steel inspection tray. It is deliberately a single machine,
+      // not five equal UI buttons: every clickable area sits on the real part
+      // it operates and the air/mechanical path can be traced left to right.
+      const trayX = left + 22;
+      const trayY = top + 86;
+      const trayW = width - 44;
+      const trayH = height - 126;
+      art.fillStyle(C(CAR.VOID_LIFT), 1);
+      art.fillRoundedRect(trayX, trayY, trayW, trayH, 10);
+      art.lineStyle(2, C(CAR.STEEL_DARK), 0.95);
+      art.strokeRoundedRect(trayX, trayY, trayW, trayH, 10);
+      art.fillStyle(C(CAR.ENAMEL_DARK), 0.95);
+      art.fillRoundedRect(trayX + 12, trayY + 12, 164, trayH - 24, 7);
+      art.lineStyle(1, C(CAR.STEEL_MID), 0.55);
+      art.strokeRoundedRect(trayX + 12, trayY + 12, 164, trayH - 24, 7);
+
+      // Borrowed directly from a single-car air-brake test stand: one A/B
+      // selector, one spring TEST knife, and two large observations.  The
+      // service hardware stays behind its cover until the operator proves the
+      // contradiction, so the first screen teaches a diagnostic method rather
+      // than presenting five unrelated controls.
+      if (!snap.faultLocalized) {
+        const selected = snap.selectedBogie ?? 'front';
+        const selectedSnap = selected === 'front' ? snap.front : snap.rear;
+        const observedA = snap.observations?.front;
+        const observedB = snap.observations?.rear;
+        const selectorX = left + 164;
+        const selectorY = top + 202;
+        const testX = left + 164;
+        const testY = top + 346;
+        const gaugeX = left + 420;
+        const travelX = left + 650;
+        const meterY = top + 262;
+        const testLive = Boolean(snap.motor?.energized);
+
+        // A/B rotary selector with a hard OFF interlock while TEST is live.
+        art.fillStyle(C(CAR.ENAMEL_DARK), 1);
+        art.fillRoundedRect(selectorX - 92, selectorY - 62, 184, 124, 8);
+        art.lineStyle(3, C(CAR.BRASS_MID), 0.9);
+        art.strokeRoundedRect(selectorX - 92, selectorY - 62, 184, 124, 8);
+        ['A', 'B'].forEach((label, index) => {
+          const isActive = selected === (index === 0 ? 'front' : 'rear');
+          const cx = selectorX + (index === 0 ? -48 : 48);
+          art.fillStyle(C(isActive ? CAR.BRASS_MID : CAR.ENAMEL_MID), 1);
+          art.fillRoundedRect(cx - 34, selectorY - 38, 68, 76, 6);
+          art.lineStyle(3, C(isActive ? CAR.BRASS_HI : CAR.STEEL_MID), 0.95);
+          art.strokeRoundedRect(cx - 34, selectorY - 38, 68, 76, 6);
+        });
+        art.lineStyle(9, C(CAR.STEEL_HI), 1);
+        art.lineBetween(selectorX, selectorY + 12, selectorX + (selected === 'front' ? -44 : 44), selectorY - 24);
+        art.fillStyle(C(CAR.BRASS_HI), 1);
+        art.fillCircle(selectorX + (selected === 'front' ? -44 : 44), selectorY - 24, 10);
+        panel.hits.push({ id: 'select-front', x: selectorX - 90, y: selectorY - 56, w: 82, h: 112 });
+        panel.hits.push({ id: 'select-rear', x: selectorX + 8, y: selectorY - 56, w: 82, h: 112 });
+        partTexts.reference
+          .setText(`BOGIE SELECTOR  /  ${selected === 'front' ? 'A REFERENCE' : 'B SERVICE'}`)
+          .setPosition(selectorX, selectorY + 78)
+          .setColor('#e8d5a7')
+          .setVisible(true);
+
+        // Spring TEST knife. It must return OFF before the selector moves.
+        art.fillStyle(C(CAR.ENAMEL_MID), 1);
+        art.fillRoundedRect(testX - 74, testY - 42, 148, 84, 7);
+        art.lineStyle(3, C(testLive ? CAR.LAMP_OK : CAR.BRASS_DARK), 0.96);
+        art.strokeRoundedRect(testX - 74, testY - 42, 148, 84, 7);
+        art.fillStyle(C(CAR.BRASS_MID), 1);
+        art.fillCircle(testX - 35, testY + 18, 7);
+        art.fillCircle(testX + 35, testY + 18, 7);
+        art.lineStyle(8, C(testLive ? CAR.LAMP_OK : CAR.STEEL_HI), 1);
+        art.lineBetween(testX - 35, testY + 18, testX + (testLive ? 35 : 12), testY - 24);
+        art.fillStyle(C(testLive ? CAR.LAMP_OK : CAR.LAMP_WARN), 1);
+        art.fillCircle(testX + (testLive ? 35 : 12), testY - 24, 10);
+        panel.hits.push({ id: 'test', x: testX - 82, y: testY - 50, w: 164, h: 100 });
+        partTexts.test
+          .setText(testLive ? 'TEST  /  LIVE' : 'TEST  /  OFF')
+          .setPosition(testX, testY + 56)
+          .setColor(testLive ? '#75d4cd' : '#9fb7c0')
+          .setVisible(true);
+
+        // Large analogue line-pressure dial, matching the selected bogie.
+        const pressure = Phaser.Math.Clamp((selectedSnap?.linePressure ?? 0) / 100, 0, 1);
+        art.fillStyle(C(CAR.ENAMEL_DARK), 1);
+        art.fillCircle(gaugeX, meterY, 76);
+        art.lineStyle(5, C(CAR.BRASS_MID), 0.96);
+        art.strokeCircle(gaugeX, meterY, 76);
+        for (let i = 0; i <= 10; i += 1) {
+          const a = Math.PI * (0.75 + i * 0.15);
+          art.lineStyle(2, C(CAR.STEEL_HI), 0.85);
+          art.lineBetween(
+            gaugeX + Math.cos(a) * 57,
+            meterY + Math.sin(a) * 57,
+            gaugeX + Math.cos(a) * 67,
+            meterY + Math.sin(a) * 67,
+          );
+        }
+        const gaugeA = Math.PI * (0.75 + pressure * 1.5);
+        art.lineStyle(5, C(CAR.BRASS_HI), 1);
+        art.lineBetween(gaugeX, meterY, gaugeX + Math.cos(gaugeA) * 55, meterY + Math.sin(gaugeA) * 55);
+        art.fillStyle(C(CAR.BRASS_MID), 1);
+        art.fillCircle(gaugeX, meterY, 7);
+        partTexts.gauge
+          .setText(`BRAKE LINE  /  ${Math.round(selectedSnap?.linePressure ?? 0)} PSI`)
+          .setPosition(gaugeX, meterY + 98)
+          .setColor('#9fb7c0')
+          .setVisible(true);
+
+        // Piston-travel indicator: A travels, B remains at zero despite the
+        // same pressure.  This is the inference, not a hidden completion flag.
+        const travel = selectedSnap?.brakeReleased ? 1 : 0;
+        art.fillStyle(C(CAR.ENAMEL_DARK), 1);
+        art.fillRoundedRect(travelX - 105, meterY - 75, 210, 150, 9);
+        art.lineStyle(4, C(CAR.STEEL_MID), 0.95);
+        art.strokeRoundedRect(travelX - 105, meterY - 75, 210, 150, 9);
+        art.lineStyle(14, C(CAR.STEEL_DARK), 1);
+        art.lineBetween(travelX - 72, meterY + 10, travelX + 72, meterY + 10);
+        art.lineStyle(8, C(travel ? CAR.LAMP_OK : CAR.LAMP_ALERT), 1);
+        art.lineBetween(travelX - 66, meterY + 10, travelX - 66 + travel * 132, meterY + 10);
+        art.fillStyle(C(travel ? CAR.LAMP_OK : CAR.LAMP_ALERT), 1);
+        art.fillRoundedRect(travelX - 78 + travel * 132, meterY - 18, 24, 56, 4);
+        partTexts.actuator
+          .setText(`PISTON TRAVEL  /  ${travel ? 'NORMAL' : 'ZERO'}`)
+          .setPosition(travelX, meterY + 98)
+          .setColor(travel ? '#75d4cd' : '#e45a5f')
+          .setVisible(true);
+
+        // After both calibrated tests, B's zero-travel housing becomes the
+        // confirmable fault location.  Clicking it opens the service face.
+        if (observedA && observedB && selected === 'rear' && testLive) {
+          panel.hits.push({ id: 'repair', x: travelX - 112, y: meterY - 84, w: 224, h: 168 });
+          art.lineStyle(3, C(CAR.LAMP_OK), breathe);
+          art.strokeRoundedRect(travelX - 112, meterY - 84, 224, 168, 10);
+        }
+
+        const statusText = !observedA
+          ? 'SELECT A  /  APPLY TEST  /  NOTE PRESSURE AND TRAVEL'
+          : testLive && selected === 'front'
+            ? 'A: PRESSURE NORMAL  /  PISTON TRAVELS  /  RETURN TEST TO OFF'
+            : !observedB
+              ? 'SELECT B  /  REPEAT THE SAME TEST'
+              : selected !== 'rear'
+                ? 'A AND B RECORDED  /  SELECT B TO LOCATE THE BREAK'
+                : !testLive
+                  ? 'BOGIE B SELECTED  /  APPLY TEST TO CONFIRM ZERO TRAVEL'
+                  : 'SAME PRESSURE, ZERO TRAVEL  /  CLICK THE B ACTUATOR';
+        panel.status.setText(statusText).setColor(observedA && observedB ? '#e8d5a7' : '#9fb7c0');
+        panel.help.setText('SELECT A OR B    /    TEST MUST RETURN TO OFF BEFORE SWITCHING    /    ESC OR E TO CLOSE');
+        return;
+      }
+
+      // Reference bogie A: small but mechanically complete enough to establish
+      // the expected response under TEST. It is a comparison specimen, not a
+      // second command surface.
+      const refX = trayX + 94;
+      const refY = trayY + 128;
+      art.fillStyle(C(CAR.ENAMEL_MID), 1);
+      art.fillRoundedRect(refX - 61, refY - 29, 122, 39, 5);
+      art.lineStyle(3, snap.front.wheelTurning ? C(CAR.LAMP_OK) : C(CAR.STEEL_MID), 0.92);
+      [-34, 34].forEach((dx) => {
+        art.strokeCircle(refX + dx, refY + 23, 22);
+        art.strokeCircle(refX + dx, refY + 23, 7);
+        const spin = snap.front.wheelTurning ? now / 95 : 0;
+        for (let i = 0; i < 4; i += 1) {
+          const a = spin + i * Math.PI / 2;
+          art.lineBetween(
+            refX + dx + Math.cos(a) * 7,
+            refY + 23 + Math.sin(a) * 7,
+            refX + dx + Math.cos(a) * 19,
+            refY + 23 + Math.sin(a) * 19,
+          );
+        }
+      });
+      art.fillStyle(snap.front.wheelTurning ? C(CAR.LAMP_OK) : C(CAR.LAMP_WARN), 1);
+      art.fillCircle(refX, refY - 47, 5);
+      partTexts.reference
+        .setText('BOGIE A  /  REFERENCE')
+        .setPosition(refX, trayY + 28)
+        .setColor(snap.front.wheelTurning ? '#75d4cd' : '#9fb7c0')
+        .setVisible(true);
+
+      // Spring-loaded TEST knife switch. Its copper leads split visibly to A
+      // and B, making the diagnostic comparison a physical circuit.
+      const testX = refX;
+      const testY = trayY + trayH - 66;
+      const testLive = Boolean(snap.motor?.energized);
+      const testHot = hover === 'test' || pressed === 'test';
+      art.fillStyle(C(CAR.ENAMEL_MID), 1);
+      art.fillRoundedRect(testX - 54, testY - 35, 108, 70, 6);
+      art.lineStyle(testHot ? 3 : 2, testHot ? C(CAR.BRASS_HI) : C(CAR.BRASS_DARK), testHot ? 1 : 0.85);
+      art.strokeRoundedRect(testX - 54, testY - 35, 108, 70, 6);
+      art.fillStyle(C(CAR.BRASS_MID), 1);
+      art.fillCircle(testX - 27, testY + 14, 7);
+      art.fillCircle(testX + 27, testY + 14, 7);
+      art.lineStyle(7, C(testLive ? CAR.LAMP_OK : CAR.STEEL_HI), 1);
+      art.lineBetween(testX - 27, testY + 14, testX + (testLive ? 27 : 11), testY - 18);
+      art.fillStyle(C(testLive ? CAR.LAMP_OK : CAR.LAMP_WARN), 1);
+      art.fillCircle(testX + (testLive ? 27 : 11), testY - 18, 9);
+      art.lineStyle(3, C(CAR.BRASS_MID), 0.62);
+      art.lineBetween(testX + 54, testY, trayX + 192, testY);
+      art.lineBetween(trayX + 192, testY, trayX + 192, trayY + 68);
+      art.lineBetween(trayX + 192, trayY + 68, left + width - 44, trayY + 68);
+      panel.hits.push({ id: 'test', x: testX - 60, y: testY - 42, w: 120, h: 84 });
+      partTexts.test
+        .setText('SPRING TEST')
+        .setPosition(testX, testY + 47)
+        .setColor(testHot ? '#e8d5a7' : '#9fb7c0')
+        .setVisible(true);
+
+      // Bogie B pneumatic branch: reservoir -> cut-off cock -> gauge -> low
+      // drain -> brake cylinder. Flow colour/brightness is proportional to the
+      // real local pressure snapshot, so the path teaches the sequence.
+      const pipeY = trayY + 90;
+      const reservoirX = trayX + 240;
+      const isolateX = trayX + 360;
+      const gaugeX = trayX + 456;
+      const bleedX = trayX + 536;
+      const cylinderX = trayX + 657;
+      const pressure = Phaser.Math.Clamp(snap.brake.pressure / 100, 0, 1);
+      const pipeColor = snap.brake.isolated ? CAR.BRASS_DARK : CAR.LAMP_OK;
+      const flowAlpha = snap.brake.isolated ? 0.45 : 0.44 + pressure * 0.5;
+      art.lineStyle(10, C(CAR.STEEL_DARK), 1);
+      art.lineBetween(reservoirX + 47, pipeY, cylinderX + 64, pipeY);
+      art.lineStyle(4, C(pipeColor), flowAlpha);
+      art.lineBetween(reservoirX + 47, pipeY, cylinderX + 64, pipeY);
+
+      // Reservoir shell and mounting straps.
+      art.fillStyle(C(CAR.ENAMEL_MID), 1);
+      art.fillRoundedRect(reservoirX - 47, pipeY - 24, 94, 48, 22);
+      art.lineStyle(3, C(CAR.STEEL_MID), 0.95);
+      art.strokeRoundedRect(reservoirX - 47, pipeY - 24, 94, 48, 22);
+      art.lineBetween(reservoirX - 27, pipeY - 23, reservoirX - 27, pipeY + 23);
+      art.lineBetween(reservoirX + 27, pipeY - 23, reservoirX + 27, pipeY + 23);
+
+      // Quarter-turn cut-off cock mounted directly in the branch.
+      const isolateHot = hover === 'brake-isolate' || pressed === 'brake-isolate';
+      art.fillStyle(C(CAR.BRASS_DARK), 1);
+      art.fillCircle(isolateX, pipeY, 13);
+      art.lineStyle(isolateHot ? 6 : 5, C(isolateHot ? CAR.BRASS_HI : CAR.BRASS_MID), 1);
+      const valveAngle = snap.brake.isolated ? -Math.PI / 4 : Math.PI / 4;
+      art.lineBetween(
+        isolateX - Math.cos(valveAngle) * 25,
+        pipeY - Math.sin(valveAngle) * 25,
+        isolateX + Math.cos(valveAngle) * 25,
+        pipeY + Math.sin(valveAngle) * 25,
+      );
+      art.fillStyle(C(snap.brake.isolated ? CAR.LAMP_OK : CAR.LAMP_WARN), 1);
+      art.fillCircle(isolateX, pipeY - 37, 5);
+      panel.hits.push({ id: 'brake-isolate', x: isolateX - 42, y: pipeY - 48, w: 84, h: 82 });
+      partTexts.isolate
+        .setText(snap.brake.isolated ? 'BRANCH CUT-OFF  /  SHUT' : 'BRANCH CUT-OFF  /  OPEN')
+        .setPosition(isolateX, pipeY - 56)
+        .setColor(isolateHot ? '#e8d5a7' : '#9fb7c0')
+        .setVisible(true);
+
+      // Eye-level pressure gauge with a real threshold mark and continuous
+      // needle. It corroborates the pipe instead of replacing it.
+      art.fillStyle(C(CAR.VOID), 1);
+      art.fillCircle(gaugeX, pipeY, 34);
+      art.lineStyle(4, C(CAR.BRASS_MID), 0.95);
+      art.strokeCircle(gaugeX, pipeY, 34);
+      for (let i = 0; i <= 8; i += 1) {
+        const a = Math.PI * (0.78 + i * 0.18);
+        art.lineStyle(i === 2 ? 3 : 2, C(i === 2 ? CAR.LAMP_ALERT : CAR.STEEL_HI), 0.9);
+        art.lineBetween(
+          gaugeX + Math.cos(a) * 24,
+          pipeY + Math.sin(a) * 24,
+          gaugeX + Math.cos(a) * 29,
+          pipeY + Math.sin(a) * 29,
+        );
+      }
+      const needleA = Math.PI * (0.78 + pressure * 1.44);
+      art.lineStyle(3, C(CAR.BRASS_HI), 1);
+      art.lineBetween(gaugeX, pipeY, gaugeX + Math.cos(needleA) * 25, pipeY + Math.sin(needleA) * 25);
+      art.fillStyle(C(CAR.BRASS_MID), 1);
+      art.fillCircle(gaugeX, pipeY, 4);
+      partTexts.gauge
+        .setText(`LOCAL PIPE  ${Math.round(snap.brake.pressure)} PSI`)
+        .setPosition(gaugeX, pipeY + 47)
+        .setColor(snap.brake.pressure < 20 ? '#75d4cd' : '#9fb7c0')
+        .setVisible(true);
+
+      // Drain cock sits at the lowest point of the branch. Holding it visibly
+      // pulls the ring down and opens the exhaust, matching the input grammar.
+      const bleedHot = hover === 'brake-vent' || pressed === 'brake-vent' || this._mechanicalVentHeld;
+      art.lineStyle(8, C(CAR.STEEL_DARK), 1);
+      art.lineBetween(bleedX, pipeY, bleedX, pipeY + 78);
+      art.lineStyle(4, C(pipeColor), flowAlpha);
+      art.lineBetween(bleedX, pipeY, bleedX, pipeY + 78);
+      art.fillStyle(C(CAR.BRASS_DARK), 1);
+      art.fillCircle(bleedX, pipeY + 75, 10);
+      art.lineStyle(4, C(bleedHot ? CAR.BRASS_HI : CAR.BRASS_MID), 1);
+      art.strokeCircle(bleedX, pipeY + (this._mechanicalVentHeld ? 105 : 96), 15);
+      art.lineBetween(bleedX, pipeY + 85, bleedX, pipeY + (this._mechanicalVentHeld ? 90 : 81));
+      if (this._mechanicalVentHeld && snap.brake.pressure > 0) {
+        art.lineStyle(3, C(CAR.STEEL_HI), 0.68);
+        art.lineBetween(bleedX - 14, pipeY + 126, bleedX - 22, pipeY + 139);
+        art.lineBetween(bleedX, pipeY + 126, bleedX, pipeY + 145);
+        art.lineBetween(bleedX + 14, pipeY + 126, bleedX + 22, pipeY + 139);
+      }
+      panel.hits.push({ id: 'brake-vent', x: bleedX - 40, y: pipeY + 58, w: 80, h: 96 });
+      partTexts.bleed
+        .setText('HOLD  /  DRAIN COCK')
+        .setPosition(bleedX, pipeY + 158)
+        .setColor(bleedHot ? '#e8d5a7' : '#9fb7c0')
+        .setVisible(true);
+
+      // Pneumatic tread-brake unit: cylinder, piston rod, bell crank, pull
+      // rod and shoes are one visible chain. This is the core readability fix.
+      const cylY = pipeY + 8;
+      const repaired = Boolean(snap.rear.repaired);
+      const brakeReleased = Boolean(snap.rear.brakeReleased);
+      const actuatorHot = hover === 'repair' || pressed === 'repair';
+      art.fillStyle(C(CAR.ENAMEL_MID), 1);
+      art.fillRoundedRect(cylinderX - 64, cylY - 32, 128, 64, 10);
+      art.lineStyle(actuatorHot ? 4 : 3, C(actuatorHot ? CAR.BRASS_HI : (repaired ? CAR.LAMP_OK : CAR.STEEL_MID)), 0.98);
+      art.strokeRoundedRect(cylinderX - 64, cylY - 32, 128, 64, 10);
+      art.fillStyle(C(CAR.STEEL_DARK), 1);
+      art.fillRect(cylinderX + 13, cylY - 23, 34, 46);
+      art.lineStyle(5, C(CAR.STEEL_HI), 1);
+      const pistonEndX = cylinderX + (repaired ? 90 : 75)
+        + (bounce?.id === 'repair' ? bounceWave * 9 : 0);
+      art.lineBetween(cylinderX + 47, cylY, pistonEndX, cylY);
+
+      const wheelY = trayY + 272;
+      const wheel1X = cylinderX - 80;
+      const wheel2X = cylinderX + 68;
+      art.fillStyle(C(CAR.ENAMEL_DARK), 1);
+      art.fillRoundedRect(cylinderX - 152, wheelY - 76, 290, 62, 8);
+      art.lineStyle(4, C(CAR.STEEL_MID), 0.96);
+      art.lineBetween(cylinderX - 128, wheelY - 45, cylinderX + 116, wheelY - 45);
+      [wheel1X, wheel2X].forEach((x) => {
+        art.fillStyle(C(CAR.VOID), 1);
+        art.fillCircle(x, wheelY, 47);
+        art.lineStyle(7, snap.rear.wheelTurning ? C(CAR.LAMP_OK) : C(CAR.STEEL_MID), 0.96);
+        art.strokeCircle(x, wheelY, 42);
+        art.lineStyle(3, C(CAR.STEEL_DARK), 1);
+        art.strokeCircle(x, wheelY, 14);
+        const spin = snap.rear.wheelTurning ? now / 95 : 0;
+        for (let i = 0; i < 6; i += 1) {
+          const a = spin + i * Math.PI / 3;
+          art.lineBetween(
+            x + Math.cos(a) * 14,
+            wheelY + Math.sin(a) * 14,
+            x + Math.cos(a) * 38,
+            wheelY + Math.sin(a) * 38,
+          );
+        }
+      });
+      const crankX = cylinderX + 104;
+      const crankY = cylY + 74;
+      art.lineStyle(7, C(repaired ? CAR.STEEL_HI : CAR.LAMP_ALERT), 0.95);
+      art.lineBetween(pistonEndX, cylY, crankX, crankY);
+      art.lineBetween(crankX, crankY, wheel2X - 22, wheelY - 6);
+      art.lineBetween(crankX, crankY, wheel1X + 22, wheelY - 6);
+      art.fillStyle(C(CAR.BRASS_MID), 1);
+      art.fillCircle(crankX, crankY, 9);
+      // Brake shoes visibly touch or clear the tread.
+      const shoeGap = brakeReleased ? 10 : 1;
+      art.fillStyle(C(brakeReleased ? CAR.STEEL_MID : CAR.LAMP_ALERT), 0.9);
+      art.fillRoundedRect(wheel1X + 39 + shoeGap, wheelY - 25, 11, 50, 4);
+      art.fillRoundedRect(wheel2X - 50 - shoeGap, wheelY - 25, 11, 50, 4);
+
+      // Removable service pin crosses the linkage guide only after the line is
+      // safely isolated and drained. Its position itself carries the state.
+      const pinHot = hover === 'service-lock' || pressed === 'service-lock';
+      const pinY = cylY + 74;
+      const pinX = (snap.rear.serviceLockEngaged ? crankX - 24 : crankX + 18)
+        + (bounce?.id === 'service-lock' ? bounceWave * 10 : 0);
+      art.fillStyle(C(CAR.ENAMEL_DARK), 1);
+      art.fillRoundedRect(crankX - 26, pinY - 18, 52, 36, 5);
+      art.lineStyle(4, C(pinHot ? CAR.BRASS_HI : CAR.STEEL_MID), 1);
+      art.lineBetween(pinX - 24, pinY, pinX + 24, pinY);
+      art.strokeCircle(pinX + 28, pinY, 7);
+      panel.hits.push({ id: 'service-lock', x: crankX - 48, y: pinY - 35, w: 96, h: 70 });
+      partTexts.pin
+        .setText(snap.rear.serviceLockEngaged ? 'SERVICE PIN  /  SEATED' : 'SERVICE PIN')
+        .setPosition(crankX, pinY + 31)
+        .setColor(pinHot ? '#e8d5a7' : '#9fb7c0')
+        .setVisible(true);
+
+      panel.hits.push({ id: 'repair', x: cylinderX - 72, y: cylY - 42, w: 144, h: 84 });
+      const localized = Boolean(snap.faultLocalized);
+      partTexts.actuator
+        .setText(repaired
+          ? 'BRAKE CYLINDER  /  FREE'
+          : localized
+            ? 'FAULT LOCATED  /  PISTON SEIZED'
+            : testLive
+              ? 'CYLINDER B  /  NO TRAVEL'
+              : 'BRAKE CYLINDER  /  SEALED')
+        .setPosition(cylinderX, cylY - 47)
+        .setColor(actuatorHot ? '#e8d5a7' : (repaired || localized ? '#75d4cd' : '#9fb7c0'))
+        .setVisible(true);
+
+      // Only the very first TEST is invited. After that the machine presents
+      // evidence, never a next-step outline; choosing the safe service chain
+      // is the actual puzzle.
+      const firstTestHit = !this._bogieFirstTestSeen
+        ? panel.hits.find((hit) => hit.id === 'test')
+        : null;
+      if (firstTestHit) {
+        art.lineStyle(2, C(CAR.LAMP_OK), breathe);
+        art.strokeRoundedRect(firstTestHit.x - 3, firstTestHit.y - 3, firstTestHit.w + 6, firstTestHit.h + 6, 8);
+        art.fillStyle(C(CAR.LAMP_OK), breathe);
+        art.fillCircle(firstTestHit.x + firstTestHit.w - 6, firstTestHit.y + 7, 4);
+      }
+      const statusText = repaired
+        ? 'CYLINDER FREE  /  PROVE THE RELEASE WITH TEST'
+        : localized
+          ? 'FAULT IS DOWNSTREAM OF THE GAUGE  /  MAKE THE CYLINDER SAFE'
+          : testLive
+            ? `A: PRESSURE + MOTION    /    B: ${Math.round(snap.brake.pressure)} PSI + NO MOTION`
+            : this._bogieFirstTestSeen
+              ? 'COMPARE A AND B UNDER THE SAME LIVE TEST'
+              : 'RUN ONE TEST  /  WATCH BOTH BOGIES';
+      panel.status
+        .setText(statusText)
+        .setColor(repaired || localized ? '#75d4cd' : '#9fb7c0');
+      panel.help.setText('CLICK THE HARDWARE    /    HOLD THE DRAIN RING    /    ESC OR E TO CLOSE');
+      return;
+    }
+
+    const snap = this.scene.tutorialPuzzle?.echoReplay?.snapshot?.();
+    if (!snap) return;
+    panel.title.setText('TRACTION TEST STAND  /  BOGIE GROUP CONTROL');
+    const x0 = left + 56;
+    const x1 = left + width - 56;
+    const recorderY = top + 112;
+    const echoX = x0 + snap.echoTrolleyX * (x1 - x0);
+    const zoneLeft = x0 + (x1 - x0) * 0.75;
+    const routeRear = snap.loadRoute === 'rear';
+    const thrown = snap.motor.energized;
+
+    // A strip-chart load recorder replaces the abstract branching diagram.
+    // It is the one unfamiliar element, so loop one is purely observational:
+    // the moving pen enters a plainly marked capture sector once per cycle.
+    art.fillStyle(C(CAR.ENAMEL_DARK), 1);
+    art.fillRoundedRect(x0, recorderY - 34, x1 - x0, 68, 6);
+    art.lineStyle(2, C(CAR.STEEL_MID), 0.85);
+    art.strokeRoundedRect(x0, recorderY - 34, x1 - x0, 68, 6);
+    for (let i = 1; i < 8; i += 1) {
+      const tickX = x0 + ((x1 - x0) * i) / 8;
+      art.lineStyle(1, C(CAR.STEEL_DARK), 0.7);
+      art.lineBetween(tickX, recorderY - 26, tickX, recorderY + 26);
+    }
+    art.fillStyle(C(snap.windowActive ? CAR.LAMP_OK : CAR.BRASS_DARK), snap.windowActive ? 0.28 : 0.14);
+    art.fillRect(zoneLeft, recorderY - 29, x1 - zoneLeft - 5, 58);
+    art.lineStyle(3, C(snap.windowActive ? CAR.LAMP_OK : CAR.BRASS_MID), 0.9);
+    art.lineBetween(echoX, recorderY - 25, echoX, recorderY + 25);
+    art.fillStyle(C(snap.windowActive ? CAR.LAMP_OK : CAR.BRASS_HI), 1);
+    art.fillCircle(echoX, recorderY, 7);
+
+    // Real control-stand grammar: two large ammeters answer which motor group
+    // received current. The selector chooses the group; the notched master
+    // controller decides when to energize it. No hidden routing diagram.
+    const meterY = top + 265;
+    const meterAX = left + 285;
+    const meterBX = left + 540;
+    const selectedCurrent = thrown ? Phaser.Math.Clamp(snap.motor.current ?? 0, 0, 1) : 0;
+    const ampsA = routeRear ? 0 : selectedCurrent;
+    const ampsB = routeRear ? selectedCurrent : 0;
+    const drawAmmeter = (cx, value, label, selected, healthy) => {
+      art.fillStyle(C(CAR.ENAMEL_DARK), 1);
+      art.fillCircle(cx, meterY, 84);
+      art.lineStyle(5, C(selected ? CAR.BRASS_HI : CAR.STEEL_MID), selected ? 1 : 0.75);
+      art.strokeCircle(cx, meterY, 84);
+      for (let i = 0; i <= 8; i += 1) {
+        const a = Math.PI * (0.75 + i * 0.1875);
+        art.lineStyle(2, C(CAR.STEEL_HI), 0.75);
+        art.lineBetween(cx + Math.cos(a) * 62, meterY + Math.sin(a) * 62, cx + Math.cos(a) * 72, meterY + Math.sin(a) * 72);
+      }
+      const needleA = Math.PI * (0.75 + value * 1.5);
+      art.lineStyle(5, C(value > 0.55 && healthy ? CAR.LAMP_OK : value > 0 ? CAR.LAMP_WARN : CAR.STEEL_MID), 1);
+      art.lineBetween(cx, meterY, cx + Math.cos(needleA) * 59, meterY + Math.sin(needleA) * 59);
+      art.fillStyle(C(CAR.BRASS_MID), 1);
+      art.fillCircle(cx, meterY, 8);
+      art.fillStyle(C(selected ? CAR.BRASS_MID : CAR.ENAMEL_MID), 1);
+      art.fillRoundedRect(cx - 70, meterY + 94, 140, 25, 3);
+      art.lineStyle(2, C(selected ? CAR.BRASS_HI : CAR.STEEL_DARK), 0.9);
+      art.strokeRoundedRect(cx - 70, meterY + 94, 140, 25, 3);
+    };
+    drawAmmeter(meterAX, ampsA, 'A', !routeRear, false);
+    drawAmmeter(meterBX, ampsB, 'B', routeRear, true);
+    panel.partTexts.reference
+      .setText(`BOGIE A AMPS  /  ${Math.round(ampsA * 800)}`)
+      .setPosition(meterAX, meterY + 136)
+      .setColor(!routeRear ? '#e8d5a7' : '#687981')
+      .setVisible(true);
+    panel.partTexts.actuator
+      .setText(`BOGIE B AMPS  /  ${Math.round(ampsB * 800)}`)
+      .setPosition(meterBX, meterY + 136)
+      .setColor(routeRear ? '#75d4cd' : '#9fb7c0')
+      .setVisible(true);
+
+    const selectorX = left + width - 105;
+    const selectorY = meterY;
+    const routeHot = this._mechanicalHoverId === 'route' || this._mechanicalPressedId === 'route';
+    art.fillStyle(C(CAR.ENAMEL_DARK), 1);
+    art.fillRoundedRect(selectorX - 86, selectorY - 82, 172, 164, 9);
+    art.lineStyle(routeHot ? 4 : 3, C(routeHot ? CAR.BRASS_HI : CAR.BRASS_MID), 0.95);
+    art.strokeRoundedRect(selectorX - 86, selectorY - 82, 172, 164, 9);
+    art.fillStyle(C(!routeRear ? CAR.BRASS_MID : CAR.ENAMEL_MID), 1);
+    art.fillRoundedRect(selectorX - 66, selectorY - 56, 52, 46, 5);
+    art.fillStyle(C(routeRear ? CAR.LAMP_OK : CAR.ENAMEL_MID), 1);
+    art.fillRoundedRect(selectorX + 14, selectorY - 56, 52, 46, 5);
+    art.lineStyle(11, C(CAR.STEEL_HI), 1);
+    art.lineBetween(selectorX, selectorY + 38, selectorX + (routeRear ? 42 : -42), selectorY - 32);
+    art.fillStyle(C(routeRear ? CAR.LAMP_OK : CAR.BRASS_HI), 1);
+    art.fillCircle(selectorX + (routeRear ? 42 : -42), selectorY - 32, 14);
+    panel.hits.push({ id: 'route', x: selectorX - 92, y: selectorY - 88, w: 184, h: 176 });
+    panel.partTexts.gauge
+      .setText(`MOTOR GROUP  /  ${routeRear ? 'B DRIVE' : 'A REFERENCE'}`)
+      .setPosition(selectorX, selectorY - 102)
+      .setColor(routeRear ? '#75d4cd' : '#e8d5a7')
+      .setVisible(true);
+
+    // A detented master controller borrowed from locomotive control stands.
+    // OFF is a deliberate reset state; NOTCH 1 is the only powered test notch.
+    const handleX = selectorX;
+    const handleY = top + height - 88;
+    art.fillStyle(C(CAR.ENAMEL_DARK), 1);
+    art.fillRoundedRect(handleX - 86, handleY - 41, 172, 82, 9);
+    art.lineStyle(4, C(snap.windowActive && routeRear ? CAR.LAMP_OK : CAR.BRASS_MID), 0.9);
+    art.strokeRoundedRect(handleX - 86, handleY - 41, 172, 82, 9);
+    [-50, 50].forEach((dx) => {
+      art.fillStyle(C(CAR.BRASS_DARK), 1);
+      art.fillCircle(handleX + dx, handleY + 20, 8);
+    });
+    art.lineStyle(10, C(CAR.STEEL_HI), 1);
+    art.lineBetween(handleX, handleY + 23, handleX + (thrown ? 50 : -50), handleY - 18);
+    art.fillStyle(C(thrown ? CAR.BRASS_HI : CAR.STEEL_MID), 1);
+    art.fillCircle(handleX + (thrown ? 50 : -50), handleY - 18, 13);
+    panel.hits.push({ id: 'test', x: handleX - 92, y: handleY - 47, w: 184, h: 94 });
+    panel.partTexts.test
+      .setText(thrown ? 'MASTER CONTROLLER  /  NOTCH 1' : 'MASTER CONTROLLER  /  OFF')
+      .setPosition(handleX, handleY + 54)
+      .setColor(snap.windowActive && routeRear ? '#75d4cd' : '#9fb7c0')
+      .setVisible(true);
+
+    const echoStatus = snap.observationLoop
+      ? 'FIRST PASS  /  WATCH THE LOAD RECORDER ENTER THE MARKED SECTOR'
+      : snap.attempt === 'misrouted'
+        ? 'A AMMETER RESPONDED  /  DRIVE B RECEIVED NO CURRENT'
+        : !routeRear
+          ? 'SELECT THE REPAIRED DRIVE GROUP FROM THE A/B TEST'
+          : snap.windowActive
+            ? 'LOAD RECORDER IN SECTOR  /  APPLY NOTCH 1'
+            : 'BOGIE B SELECTED  /  HOLD CONTROLLER OFF AND WATCH THE RECORDER';
+    panel.status
+      .setText(echoStatus)
+      .setColor(snap.windowActive && routeRear ? '#75d4cd' : '#9fb7c0');
+    panel.help.setText('SELECT MOTOR GROUP A OR B    /    MASTER CONTROLLER OFF–NOTCH 1    /    ESC OR E TO CLOSE');
+  }
+
+  refreshRollingBearingTable(panel) {
+    const phase = this.scene.tutorialPuzzle?.mechanicalTable;
+    if (!phase) return;
+    panel.hits = renderMechanicalTableStage({
+      panel,
+      snap: phase.snapshot(),
+      hover: this._mechanicalHoverId,
+      pressed: this._mechanicalPressedId,
+      now: this.scene.time?.now ?? 0,
+    });
+  }
+
+  // Retained for one migration cycle as a visual rollback reference. The live
+  // IV–VI path above is the theatrical cutaway; no runtime call reaches this
+  // former photographed-service-plate renderer.
+  refreshRollingBearingTableLegacy(panel) {
+    const phase = this.scene.tutorialPuzzle?.mechanicalTable;
+    if (!phase) return;
+    const snap = phase.snapshot();
+    const { left, top, width, height, graphics: art } = panel;
+    const sx = width / 840;
+    const sy = height / 500;
+    const px = (x) => left + x * sx;
+    const py = (y) => top + y * sy;
+    const hover = this._mechanicalHoverId;
+    const pressed = this._mechanicalPressedId;
+    const hot = (id) => hover === id || pressed === id;
+    const now = this.scene.time?.now ?? 0;
+    const breathe = 0.7 + Math.sin(now / 230) * 0.22;
+    const titles = {
+      4: 'IV  /  LOAD THE RAIL',
+      5: 'V  /  FIND THE BREAK',
+      6: 'VI  /  MEET THE PAST',
+    };
+    panel.base?.setPosition(left + width / 2, top + height / 2).setDisplaySize(width, height).setAlpha(0.94);
+    panel.title.setText(titles[snap.phase]).setPosition(px(38), py(22)).setFontSize('17px');
+    panel.help
+      .setText('OPERATE THE HARDWARE    /    FOLLOW THE BEARING    /    ESC OR E TO CLOSE')
+      .setPosition(left + width / 2, py(476));
+    Object.values(panel.partTexts ?? {}).forEach((text) => text.setVisible(false));
+    art.clear();
+
+    // Close plate — the only screen-level affordance. Everything else is a
+    // physical part mounted on the photographed service table.
+    art.fillStyle(C(CAR.ENAMEL_DARK), 0.94);
+    art.fillRoundedRect(px(782), py(18), 34 * sx, 34 * sy, 5);
+    art.lineStyle(2, C(CAR.LAMP_ALERT), 0.82);
+    art.strokeRoundedRect(px(782), py(18), 34 * sx, 34 * sy, 5);
+    art.lineBetween(px(792), py(28), px(806), py(42));
+    art.lineBetween(px(806), py(28), px(792), py(42));
+    panel.hits = [{ id: 'close', x: px(775), y: py(12), w: 50 * sx, h: 48 * sy }];
+
+    // Cast-iron hand pump and sight glass. This replaces the old abstract '+'.
+    // The handle visibly changes angle while pressed and the two glass bands
+    // fill from the bottom, so both the verb and its consequence read without
+    // explanatory UI.
+    const reservoir = { x: 134, y: 218, w: 54, h: 116 };
+    art.fillStyle(C(CAR.ENAMEL_DARK), 0.98);
+    art.fillRoundedRect(px(92), py(126), 88 * sx, 206 * sy, 9);
+    art.lineStyle(hot('pump') ? 4 : 2, C(hot('pump') ? CAR.BRASS_HI : CAR.STEEL_MID), 0.94);
+    art.strokeRoundedRect(px(92), py(126), 88 * sx, 206 * sy, 9);
+    // mounting feet and rivets
+    art.fillStyle(C(CAR.STEEL_DARK), 1);
+    art.fillRect(px(84), py(314), 104 * sx, 13 * sy);
+    [104, 168].forEach((x) => {
+      art.fillStyle(C(CAR.STEEL_HI), 0.72);
+      art.fillCircle(px(x), py(142), 3 * sx);
+      art.fillCircle(px(x), py(314), 3 * sx);
+    });
+    // glass reservoir, brass caps and two unmistakable fill bands
+    art.fillStyle(C(CAR.GLASS_DARK), 0.9);
+    art.fillRoundedRect(px(reservoir.x - reservoir.w / 2), py(reservoir.y - reservoir.h / 2), reservoir.w * sx, reservoir.h * sy, 6);
+    const glassBottom = reservoir.y + reservoir.h / 2 - 7;
+    const fillH = (reservoir.h - 14) * snap.pressure;
+    art.fillStyle(C(CAR.LAMP_OK), 0.25 + snap.pressure * 0.5);
+    art.fillRect(px(reservoir.x - reservoir.w / 2 + 7), py(glassBottom - fillH), (reservoir.w - 14) * sx, fillH * sy);
+    art.lineStyle(2, C(CAR.BRASS_MID), 0.98);
+    art.strokeRoundedRect(px(reservoir.x - reservoir.w / 2), py(reservoir.y - reservoir.h / 2), reservoir.w * sx, reservoir.h * sy, 6);
+    art.fillStyle(C(CAR.BRASS_DARK), 1);
+    art.fillRect(px(103), py(151), 62 * sx, 9 * sy);
+    art.fillRect(px(103), py(276), 62 * sx, 9 * sy);
+    [0.5, 1].forEach((level) => {
+      const y = glassBottom - (reservoir.h - 14) * level;
+      art.lineStyle(2, C(snap.pressure >= level ? CAR.LAMP_OK : CAR.STEEL_MID), snap.pressure >= level ? 0.95 : 0.55);
+      art.lineBetween(px(111), py(y), px(157), py(y));
+    });
+    // pump barrel, piston rod and a handle that has a real pivot
+    const pumpDown = pressed === 'pump';
+    const pumpHot = hot('pump');
+    art.fillStyle(C(CAR.ENAMEL_HI), 1);
+    art.fillRoundedRect(px(101), py(287), 27 * sx, 29 * sy, 4);
+    art.fillStyle(C(CAR.BRASS_MID), 1);
+    art.fillCircle(px(114), py(300), 7 * sx);
+    art.lineStyle(6, C(CAR.STEEL_HI), 1);
+    art.lineBetween(px(114), py(300), px(163), py(pumpDown ? 318 : 282));
+    art.lineStyle(10, C(pumpHot ? CAR.BRASS_HI : CAR.BRASS_MID), 1);
+    art.lineBetween(px(157), py(pumpDown ? 316 : 284), px(177), py(pumpDown ? 323 : 277));
+    art.lineStyle(3, C(CAR.BRASS_MID), 0.9);
+    art.lineBetween(px(161), py(230), px(184), py(230));
+    panel.hits.push({ id: 'pump', x: px(92), y: py(132), w: 84 * sx, h: 190 * sy });
+
+    // Sliding load carriage on a toothed railway. Three detents remain the
+    // same pure-logic choices, but they now read as positions of one physical
+    // machine instead of three radio buttons.
+    const detents = { left: 245, center: 335, right: 425 };
+    art.fillStyle(C(CAR.ENAMEL_DARK), 0.95);
+    art.fillRoundedRect(px(202), py(353), 266 * sx, 67 * sy, 7);
+    art.lineStyle(2, C(CAR.STEEL_MID), 0.85);
+    art.strokeRoundedRect(px(202), py(353), 266 * sx, 67 * sy, 7);
+    art.fillStyle(C(CAR.STEEL_DARK), 1);
+    art.fillRect(px(214), py(389), 242 * sx, 11 * sy);
+    // rack teeth make the three stops spatially legible
+    for (let x = 220; x <= 450; x += 12) {
+      art.fillStyle(C(CAR.STEEL_MID), 0.82);
+      art.fillRect(px(x), py(383), 5 * sx, 9 * sy);
+    }
+    Object.entries(detents).forEach(([id, x]) => {
+      const selected = snap.weight === id;
+      const detentHot = hot(`weight-${id}`);
+      art.fillStyle(C(selected ? CAR.BRASS_MID : CAR.STEEL_DARK), selected ? 1 : 0.88);
+      art.fillRoundedRect(px(x - 9), py(399), 18 * sx, 12 * sy, 3);
+      art.lineStyle(detentHot ? 3 : 2, C(detentHot ? CAR.BRASS_HI : CAR.STEEL_HI), detentHot ? 1 : 0.72);
+      art.lineBetween(px(x), py(401), px(x), py(414));
+      panel.hits.push({ id: `weight-${id}`, x: px(x - 34), y: py(350), w: 68 * sx, h: 70 * sy });
+    });
+    const carriageX = detents[snap.weight];
+    const carriageHot = hot(`weight-${snap.weight}`);
+    art.fillStyle(C(CAR.ENAMEL_HI), 1);
+    art.fillRoundedRect(px(carriageX - 38), py(350), 76 * sx, 35 * sy, 4);
+    art.fillStyle(C(CAR.STEEL_MID), 1);
+    art.fillRect(px(carriageX - 30), py(358), 60 * sx, 18 * sy);
+    art.lineStyle(carriageHot ? 3 : 2, C(carriageHot ? CAR.BRASS_HI : CAR.STEEL_HI), 0.96);
+    art.strokeRoundedRect(px(carriageX - 38), py(350), 76 * sx, 35 * sy, 4);
+    // twin rollers and a brass latch handle communicate drag + seat
+    [-24, 24].forEach((dx) => {
+      art.fillStyle(C(CAR.VOID), 1);
+      art.fillCircle(px(carriageX + dx), py(386), 8 * sx);
+      art.lineStyle(2, C(CAR.STEEL_HI), 0.9);
+      art.strokeCircle(px(carriageX + dx), py(386), 8 * sx);
+    });
+    art.lineStyle(5, C(CAR.BRASS_MID), 1);
+    art.lineBetween(px(carriageX), py(352), px(carriageX), py(337));
+    art.lineBetween(px(carriageX), py(337), px(carriageX + 13), py(337));
+
+    // Fork and electrical route. The heavy brass rail carries the bearing;
+    // the thin cyan run is the relay circuit. Keeping both visible makes the
+    // shared grammar physical: pressure launches, weight biases the traveller,
+    // and wiring selects which machine can receive it.
+    const forkX = 430;
+    const forkY = 267;
+    const routeY = snap.route === 'a' ? 194 : 306;
+    art.lineStyle(6, C(CAR.BRASS_MID), 0.78);
+    art.lineBetween(px(185), py(230), px(forkX), py(forkY));
+    art.lineStyle(7, C(snap.route === 'a' ? CAR.LAMP_OK : CAR.BRASS_HI), 0.92);
+    art.lineBetween(px(forkX), py(forkY), px(690), py(routeY));
+    [
+      { id: 'a', y: 194 },
+      { id: 'b', y: 306 },
+    ].forEach((branch) => {
+      if (branch.id === 'b' && snap.phase < 5) return;
+      const selected = snap.route === branch.id;
+      art.lineStyle(selected ? 4 : 2, C(selected ? CAR.LAMP_OK : CAR.STEEL_DARK), selected ? 0.96 : 0.42);
+      art.lineBetween(px(forkX + 8), py(forkY + 13), px(690), py(branch.y + 13));
+    });
+    // Cast A/B knife selector. The handle points at the live branch instead of
+    // decorating an otherwise invisible toggle.
+    art.fillStyle(C(CAR.ENAMEL_DARK), 0.98);
+    art.fillRoundedRect(px(392), py(211), 82 * sx, 112 * sy, 7);
+    art.lineStyle(2, C(CAR.STEEL_MID), 0.92);
+    art.strokeRoundedRect(px(392), py(211), 82 * sx, 112 * sy, 7);
+    art.fillStyle(C(snap.route === 'a' ? CAR.LAMP_OK : CAR.STEEL_DARK), snap.route === 'a' ? 0.9 : 0.65);
+    art.fillCircle(px(454), py(231), 7 * sx);
+    art.fillStyle(C(snap.route === 'b' ? CAR.LAMP_OK : CAR.STEEL_DARK), snap.route === 'b' ? 0.9 : 0.65);
+    art.fillCircle(px(454), py(303), 7 * sx);
+    art.fillStyle(C(CAR.BRASS_MID), 1);
+    art.fillCircle(px(forkX), py(forkY), 12 * sx);
+    const selectorEndY = snap.route === 'a' ? 231 : 303;
+    art.lineStyle(9, C(hot('route') ? CAR.BRASS_HI : CAR.STEEL_HI), 1);
+    art.lineBetween(px(forkX), py(forkY), px(454), py(selectorEndY));
+    art.fillStyle(C(CAR.BRASS_MID), 1);
+    art.fillCircle(px(454), py(selectorEndY), 11 * sx);
+    if (snap.phase >= 5) {
+      art.lineStyle(hot('route') ? 3 : 1, C(hot('route') ? CAR.BRASS_HI : CAR.STEEL_MID), hot('route') ? 0.95 : 0.5);
+      art.strokeRoundedRect(px(386), py(205), 94 * sx, 124 * sy, 9);
+      panel.hits.push({ id: 'route', x: px(388), y: py(222), w: 84 * sx, h: 90 * sy });
+    }
+
+    // The Phase-V contact is physically absent until the comparison reveals
+    // it. Once observed, two exposed posts and their gap are impossible to
+    // confuse with another button. VI inherits the repaired bridge.
+    const bridgeVisible = snap.phase >= 5 && (snap.phase === 6 || snap.breakObserved || snap.bridgeConnected);
+    if (bridgeVisible) {
+      const by = snap.route === 'a' ? 204 : 294;
+      const bridgeHot = hot('bridge');
+      // ceramic terminal posts
+      [570, 622].forEach((x) => {
+        art.fillStyle(C(CAR.ENAMEL_HI), 1);
+        art.fillRoundedRect(px(x - 11), py(by - 20), 22 * sx, 40 * sy, 5);
+        art.fillStyle(C(CAR.STEEL_HI), 1);
+        art.fillCircle(px(x), py(by), 7 * sx);
+        art.fillStyle(C(CAR.BRASS_MID), 1);
+        art.fillCircle(px(x), py(by), 4 * sx);
+      });
+      // removable copper bridge: horizontal when seated, hanging in its clip
+      // when open. The red gap is a consequence, not the control itself.
+      art.lineStyle(7, C(bridgeHot ? CAR.BRASS_HI : CAR.BRASS_MID), 1);
+      if (snap.bridgeConnected) {
+        art.lineBetween(px(570), py(by), px(622), py(by));
+        art.fillStyle(C(CAR.LAMP_OK), 0.9);
+        art.fillCircle(px(596), py(by), 4 * sx);
+      } else {
+        art.lineBetween(px(620), py(by + 6), px(620), py(by + 31));
+        art.fillStyle(C(CAR.LAMP_ALERT), 0.92);
+        art.fillCircle(px(596), py(by), 5 * sx);
+      }
+      art.lineStyle(bridgeHot ? 3 : 1, C(bridgeHot ? CAR.BRASS_HI : CAR.STEEL_MID), bridgeHot ? 1 : 0.45);
+      art.strokeRoundedRect(px(548), py(by - 26), 96 * sx, 57 * sy, 8);
+      panel.hits.push({ id: 'bridge', x: px(540), y: py(by - 34), w: 112 * sx, h: 68 * sy });
+    }
+
+    // Guarded spring-loaded launch plunger. The old filled circle looked like
+    // a software button; this has a shaft, collar, compression spring and a
+    // moving cap, while keeping the exact same hit region and command.
+    art.fillStyle(C(CAR.ENAMEL_DARK), 0.96);
+    art.fillRoundedRect(px(92), py(344), 82 * sx, 76 * sy, 8);
+    art.lineStyle(hot('release') ? 4 : 2, C(hot('release') ? CAR.BRASS_HI : CAR.STEEL_MID), 0.96);
+    art.strokeRoundedRect(px(92), py(344), 82 * sx, 76 * sy, 8);
+    const plungerY = 363 + (pressed === 'release' ? 9 : 0);
+    art.fillStyle(C(CAR.BRASS_DARK), 1);
+    art.fillRoundedRect(px(111), py(399), 44 * sx, 10 * sy, 3);
+    art.lineStyle(5, C(CAR.STEEL_HI), 1);
+    art.lineBetween(px(133), py(plungerY + 8), px(133), py(399));
+    // spring coils around the shaft
+    for (let y = plungerY + 12; y < 398; y += 7) {
+      art.lineStyle(2, C(CAR.STEEL_MID), 0.95);
+      art.lineBetween(px(121), py(y), px(145), py(y + 4));
+    }
+    art.fillStyle(C(hot('release') ? CAR.BRASS_HI : CAR.BRASS_MID), 1);
+    art.fillRoundedRect(px(111), py(plungerY - 8), 44 * sx, 18 * sy, 7);
+    art.lineStyle(2, C(CAR.BRASS_HI), 0.85);
+    art.lineBetween(px(116), py(plungerY - 4), px(150), py(plungerY - 4));
+    panel.hits.push({ id: 'release', x: px(84), y: py(334), w: 98 * sx, h: 96 * sy });
+
+    // Asset-backed output bearings/gears. Their spin and tint are consequences,
+    // not decorative animation.
+    const outputAX = px(710);
+    const outputAY = py(194);
+    const outputBX = px(710);
+    const outputBY = py(306);
+    panel.outputA?.setPosition(outputAX, outputAY).setVisible(true)
+      .setTint(C(snap.stageComplete && snap.route === 'a' ? CAR.LAMP_OK : CAR.BRASS_MID))
+      .setRotation(snap.stageComplete && snap.route === 'a' ? now / 260 : 0);
+    panel.outputB?.setPosition(outputBX, outputBY).setVisible(snap.phase >= 5)
+      .setTint(C(snap.stageComplete && snap.route === 'b' ? CAR.LAMP_OK : CAR.STEEL_MID))
+      .setRotation(snap.stageComplete && snap.route === 'b' ? now / 260 : 0);
+
+    // Present bearing follows a continuous path. A failed launch ends at the
+    // part that rejected it, stays long enough to read, then recirculates.
+    const bearingState = snap.bearing;
+    const outcome = bearingState?.outcome ?? snap.result;
+    const bearingProgress = bearingState?.progress ?? 0;
+    let end = snap.route === 'a' ? { x: 710, y: 194 } : { x: 710, y: 306 };
+    if (outcome === 'underpowered') end = { x: 330, y: 252 };
+    if (outcome === 'misweighted') end = { x: 455, y: 365 };
+    if (outcome === 'open-contact' || outcome === 'no-reference') end = { x: 590, y: snap.route === 'a' ? 204 : 294 };
+    if (outcome === 'mistimed' || outcome === 'misrouted') end = { x: 675, y: 380 };
+    const start = { x: 172, y: 230 };
+    const junction = { x: forkX, y: forkY };
+    const t = bearingProgress;
+    const point = t < 0.55
+      ? {
+          x: Phaser.Math.Linear(start.x, junction.x, t / 0.55),
+          y: Phaser.Math.Linear(start.y, junction.y, t / 0.55),
+        }
+      : {
+          x: Phaser.Math.Linear(junction.x, end.x, (t - 0.55) / 0.45),
+          y: Phaser.Math.Linear(junction.y, end.y, (t - 0.55) / 0.45),
+        };
+    panel.bearing?.setPosition(px(point.x), py(point.y)).setVisible(Boolean(bearingState))
+      .setRotation(now / 95)
+      .setTint(C(outcome === 'phase-complete' ? CAR.LAMP_OK : CAR.BRASS_HI));
+
+    // VI: a second, translucent asset-backed bearing is the remembered action.
+    // The cradle is drawn at the actual meeting point; timing is spatial, not a
+    // bar or countdown.
+    if (snap.ghost) {
+      const gx = Phaser.Math.Linear(190, 690, snap.ghost.progress);
+      const gy = 148 + Math.sin(snap.ghost.progress * Math.PI) * 34;
+      panel.ghostBearing?.setPosition(px(gx), py(gy)).setVisible(true)
+        .setAlpha(snap.ghost.windowActive ? 0.95 : 0.5)
+        .setRotation(-now / 120);
+      const cradleX = Phaser.Math.Linear(190, 690, snap.ghost.couplingProgress);
+      art.lineStyle(snap.ghost.windowActive ? 5 : 3, C(snap.ghost.windowActive ? CAR.LAMP_OK : CAR.BRASS_MID), snap.ghost.windowActive ? 1 : 0.6);
+      art.strokeCircle(px(cradleX), py(170), 25 * sx);
+      art.lineBetween(px(cradleX - 29), py(170), px(cradleX - 14), py(170));
+      art.lineBetween(px(cradleX + 14), py(170), px(cradleX + 29), py(170));
+    } else {
+      panel.ghostBearing?.setVisible(false);
+    }
+
+    const resultText = {
+      underpowered: 'PRESSURE FADED  /  THE BEARING STALLED BEFORE THE FORK',
+      misweighted: 'THE LOAD SENT THE BEARING INTO THE RETURN TRAY',
+      'reference-pass': 'ROUTE A PROVED  /  COMPARE THE SAME RUN ON B',
+      'no-reference': 'B STOPPED  /  THERE IS NO REFERENCE RUN TO COMPARE',
+      'open-contact': 'ROUTE B STOPPED AT THE OPEN CONTACT',
+      misrouted: 'THE PRESENT BEARING TOOK THE WRONG OUTPUT',
+      mistimed: 'THE TWO BEARINGS MISSED  /  BOTH ARE RECIRCULATING',
+      'phase-complete': snap.phase === 6 ? 'THE BEARINGS MESHED  /  TRACTION COUPLED' : 'OUTPUT TURNING  /  TEST PROVED',
+    };
+    const defaultText = snap.phase === 4
+      ? 'PRESSURE LAUNCHES  /  WEIGHT CHANGES THE JOURNEY'
+      : snap.phase === 5
+        ? snap.bridgeConnected
+          ? 'BYPASS SEATED  /  PROVE ROUTE B'
+          : snap.breakObserved
+            ? 'A PASSED  /  B STOPPED AT THE GAP'
+            : snap.referencePassed
+              ? 'A PASSED  /  THROW THE FORK AND COMPARE B'
+              : 'RUN ONE BEARING THROUGH A  /  THEN COMPARE B'
+        : 'CONFIGURE THE KNOWN SYSTEMS  /  MEET THE REMEMBERED BEARING';
+    panel.status
+      .setText(resultText[outcome] ?? defaultText)
+      .setPosition(left + width / 2, py(72))
+      .setColor(outcome && outcome !== 'phase-complete' && outcome !== 'reference-pass' ? '#e45a5f' : '#9ce8e2');
+
+    // Reuse the text objects rather than allocating every frame.
+    panel.partTexts.reference.setText('HAND PUMP').setPosition(px(134), py(112)).setColor('#9fb7c0').setVisible(true);
+    panel.partTexts.isolate.setText('LOAD CARRIAGE   LIGHT  /  BALANCED  /  HEAVY').setPosition(px(335), py(438)).setColor('#9fb7c0').setVisible(true);
+    panel.partTexts.gauge.setText(`A / B SELECTOR   ${snap.route.toUpperCase()}`).setPosition(px(432), py(335)).setColor('#f2d49a').setVisible(snap.phase >= 5);
+    panel.partTexts.test.setText('LAUNCH').setPosition(px(133), py(436)).setColor(hot('release') ? '#f2d49a' : '#9fb7c0').setVisible(true);
+    panel.partTexts.bleed.setText(snap.bridgeConnected ? 'COPPER LINK SEATED' : 'COPPER LINK OPEN').setPosition(px(596), py(354)).setColor(snap.bridgeConnected ? '#75d4cd' : '#9fb7c0').setVisible(bridgeVisible);
+    panel.partTexts.pin.setText('A').setPosition(px(751), py(194)).setColor(snap.route === 'a' ? '#75d4cd' : '#9fb7c0').setVisible(true);
+    panel.partTexts.actuator.setText('B').setPosition(px(751), py(306)).setColor(snap.route === 'b' ? '#75d4cd' : '#9fb7c0').setVisible(snap.phase >= 5);
+  }
+
+  _mechanicalHit(x, y) {
+    return this.mechanicalPanel?.hits?.find((hit) => x >= hit.x && x <= hit.x + hit.w && y >= hit.y && y <= hit.y + hit.h) ?? null;
+  }
+
+  _onMechanicalPointerDown(pointer) {
+    const hit = this._mechanicalHit(pointer.x, pointer.y);
+    this._mechanicalPointerDownCount = (this._mechanicalPointerDownCount ?? 0) + 1;
+    this._mechanicalLastPointerDown = {
+      x: Math.round(pointer.x),
+      y: Math.round(pointer.y),
+      hit: hit?.id ?? null,
+    };
+    if (!hit) return;
+    this._mechanicalPressedId = hit.id;
+    if (hit.id === 'close') {
+      this.closeMechanicalPanel();
+      return;
+    }
+    if (this.mechanicalPanelMode?.startsWith('table-')) {
+      const phase = this.scene.tutorialPuzzle?.mechanicalTable;
+      if (!phase) return;
+      phase.interact(hit.id);
+      phase.drainEvents().forEach((event) => this.handleMechanicalTableEvent(event, phase));
+      this.refreshMechanicalPanel();
+      return;
+    }
+    if (this.mechanicalPanelMode === 'bogie') {
+      const phase = this.scene.tutorialPuzzle?.bogieDiagnosis;
+      if (!phase) return;
+      if (hit.id === 'brake-vent') this._mechanicalVentHeld = true;
+      else if (hit.id === 'repair' && !phase.snapshot().faultLocalized) phase.interact('inspect-actuator');
+      else phase.interact(hit.id);
+      phase.drainEvents().forEach((evt) => this.handleBogieDiagnosisEvent(evt));
+      this.refreshBogieVisuals(phase.snapshot());
+      return;
+    }
+    const phase = this.scene.tutorialPuzzle?.echoReplay;
+    if (!phase || !['route', 'test'].includes(hit.id)) return;
+    phase.interact(hit.id);
+    phase.drainEvents().forEach((evt) => this.handleEchoReplayEvent(evt));
+    this.refreshEchoVisuals(phase.snapshot());
+  }
+
+  _onMechanicalPointerUp() {
+    this._mechanicalPressedId = null;
+    if (this.mechanicalPanelMode === 'bogie' && this._mechanicalVentHeld) {
+      this._mechanicalVentHeld = false;
+      this.scene.tutorialPuzzle?.bogieDiagnosis?.setVentHeld?.(false);
+    }
+    if (this.mechanicalPanelMode) this.refreshMechanicalPanel();
+  }
+
   _setupRelayInput() {
     const { scene } = this;
     // The frozen art module owns hit tests and drag state; this layer owns
@@ -4666,6 +6698,7 @@ export default class TimetablePuzzle {
   }
 
   _cancelRelayDrag() {
+    if (this.mechanicalPanelMode) this._onMechanicalPointerUp();
     if (this.relayCloseupState === 'open' || this.relayCloseupState === 'opening') {
       this.relayArt?.cancelDrag();
       this._setRelayHover(null); // drag aborted; next move recomputes
@@ -4702,12 +6735,26 @@ export default class TimetablePuzzle {
   }
 
   _onRelayPointerDown(pointer) {
+    if (this.mechanicalPanelMode) {
+      this._onMechanicalPointerDown(pointer);
+      return;
+    }
     if (this.relayCloseupState !== 'open') return;
     this._setRelayHover(null); // a press/drag supersedes the hover ring
     this.relayArt?.pointerDown(pointer.worldX, pointer.worldY);
   }
 
   _onRelayPointerMove(pointer) {
+    if (this.mechanicalPanelMode) {
+      const hit = this._mechanicalHit(pointer.x, pointer.y);
+      const next = hit?.id ?? null;
+      if (next !== this._mechanicalHoverId) {
+        this._mechanicalHoverId = next;
+        this.scene.input?.setDefaultCursor?.(next ? 'pointer' : this._probeCursor());
+        this.refreshMechanicalPanel();
+      }
+      return;
+    }
     if (this.relayCloseupState !== 'open') return;
     const art = this.relayArt;
     if (!art || art.destroyed) return;
@@ -4720,6 +6767,10 @@ export default class TimetablePuzzle {
   }
 
   _onRelayPointerUp(pointer) {
+    if (this.mechanicalPanelMode) {
+      this._onMechanicalPointerUp(pointer);
+      return;
+    }
     if (this.relayCloseupState !== 'open') return;
     const art = this.relayArt;
     const logic = this.relay;
@@ -4809,6 +6860,10 @@ export default class TimetablePuzzle {
   }
 
   closeRelayCloseup({ force = false } = {}) {
+    if (this.mechanicalPanelMode) {
+      this.closeMechanicalPanel();
+      return;
+    }
     const { scene } = this;
     if (this.relayCloseupState === 'closed' || this.relayCloseupState === 'closing') return;
     if (this.relayCloseupState === 'opening' && !force) return;
@@ -4969,6 +7024,60 @@ export default class TimetablePuzzle {
       }
       return 'get through the door at the far end of the car';
     }
+    if (stage.firstWeight) {
+      const snap = puzzle.firstWeight?.snapshot?.();
+      if (!snap || !snap.caseFallen) return 'a baggage case is loose above the rail';
+      if (snap.stageComplete) return 'enter the next carriage';
+      if (!snap.firstBalanced) return 'the fallen case has pulled the carriage off level';
+      if (!snap.tagPunched) return 'the level case has exposed its witness tag';
+      if (snap.atExit && !snap.level) return 'the exit latch has slipped out of line';
+      return 'the punched weight and your body now share the same balance beam';
+    }
+    if (stage.twoTrueThings) {
+      const snap = puzzle.twoTrueThings?.snapshot?.();
+      if (!snap || !snap.casesFallen) return 'two archive cases are descending onto one cradle';
+      if (snap.stageComplete) return 'enter the next carriage';
+      if (!snap.bothWitnessed) return 'both records are present, but not both have been witnessed';
+      if (snap.cradleSupport === 'folded' || snap.cradleSupport === 'unsupported') {
+        return 'a second place has unfolded, but nothing carries its weight';
+      }
+      if (snap.cradleSupport === 'winch-only') return 'the winch lifts the cradle, but its underside still falls away';
+      if (snap.cradleSupport === 'air-only') return 'the air cushion floats the cradle, but it has no restraint';
+      if (!snap.separated) return 'two supported places are waiting for two separate records';
+      return 'both witnessed records now have a place in the train';
+    }
+    if (stage.trainRemembers) {
+      const snap = puzzle.trainRemembers?.snapshot?.();
+      if (!snap || snap.phase === 'idle' || snap.phase === 'arrival') return 'the train is recalling the first weight';
+      if (snap.stageComplete) return 'the train remembers how to carry you forward';
+      if (snap.phase === 'duet') {
+        if (snap.balanced) return 'past and present are holding the carriage level';
+        return 'the amber past is moving; the present case shares its equalizer';
+      }
+      if (snap.phase === 'redaction') return 'the Archivist is removing the remembered weight';
+      if (snap.phase === 'catch') return 'the falling record has left the balance';
+      if (snap.phase === 'train-help') return 'the train is taking the counterweight you had to abandon';
+    }
+    if (stage.mechanicalTable) {
+      const snap = puzzle.mechanicalTable?.snapshot?.();
+      if (!snap || snap.stageComplete) return 'enter the next carriage';
+      if (snap.result === 'underpowered') return 'the bearing stalled before the fork';
+      if (snap.result === 'misweighted') return 'the bearing fell into the return tray';
+      if (snap.phase === 5) {
+        if (snap.bridgeConnected) return 'the bypass is seated; route B is ready to prove';
+        if (snap.breakObserved) return 'route B stops at the visible contact gap';
+        if (snap.referencePassed) return 'route A is proved; compare the other branch';
+        return 'the rolling-bearing table is waiting for a reference run';
+      }
+      if (snap.phase === 6) {
+        if (snap.result === 'mistimed') return 'the present bearing missed the remembered one';
+        if (snap.ghost?.windowActive) return 'the remembered bearing is crossing the coupling cradle';
+        return 'the remembered bearing keeps circling the upper rail';
+      }
+      if (snap.balance?.aligned && !snap.balance?.launchReady) return 'the pin is aligned, but the air charge is below the working mark';
+      if (snap.balance?.aligned) return 'the equalizer pin is aligned with its fork';
+      return 'match the suspension load to the air charge';
+    }
     if (stage.physicalSequence) {
       const expected = stage.solution[puzzle.queue.length];
       return expected
@@ -5045,6 +7154,15 @@ export default class TimetablePuzzle {
     const visible = this.visible && scene.activeWorldIndex === 0;
     // The interlock art follows the same world-0 visibility as the rooms.
     this.contactArt?.setVisible(visible);
+    this.firstWeightArt?.setVisible(
+      visible && puzzle.stageIndex >= AIR_CIRCUIT_STAGE_INDEX,
+    );
+    this.twoTrueThingsArt?.setVisible(
+      visible && puzzle.stageIndex >= WEIGHT_TRANSFER_STAGE_INDEX,
+    );
+    this.trainRemembersArt?.setVisible(
+      visible && puzzle.stageIndex >= TWO_TRUE_THINGS_STAGE_INDEX,
+    );
     this.stageAssemblies.forEach((assembly, index) => {
       const active = visible && index === puzzle.stageIndex;
       const completed = visible && Boolean(puzzle.stageComplete[index]);
@@ -5186,9 +7304,10 @@ export default class TimetablePuzzle {
     scene.interactables
       .filter((it) => this.isTimetableKind(it.def.kind))
       .forEach((it) => {
-        if (it.def.kind === 'contact-interlock') {
+        if (['contact-interlock', 'first-weight', 'two-true-things', 'train-remembers'].includes(it.def.kind)) {
           // The interlock devices are drawn by ContactInterlockArt; the
-          // interactable sprite is only a proximity anchor and never shows.
+          // IV-VI archive hardware is likewise drawn by its world art. These
+          // sprites are proximity anchors only and never show.
           it.sprite.setVisible(false);
           return;
         }
@@ -5303,8 +7422,8 @@ export default class TimetablePuzzle {
   }
 
   setupQA() {
-    if (!import.meta.env.DEV || typeof window === 'undefined') return false;
-    const params = new URLSearchParams(window.location.search);
+    if (!DEV_MODE || typeof window === 'undefined') return false;
+    const params = devParams();
     const qa = params.get('qa');
     // Phase II fixture route: ?qa=phase2&state=<entry|power-fail|latch-closed|
     // signal-mid|energized|complete|reset-replay>. Warps into junction-2 and
@@ -5427,6 +7546,156 @@ export default class TimetablePuzzle {
       this.refresh();
       return true;
     }
+    // Phase IV — THE FIRST WEIGHT. Entry is the real playable doorway; named
+    // states are frozen visual fixtures for screenshot review.
+    if (qa === 'phase4') {
+      this.scene.tutorialQAActive = true;
+      const requested = params.get('state') ?? 'entry';
+      const stateName = ['entry', 'fall', 'middle', 'punched', 'refusal', 'solved'].includes(requested)
+        ? requested
+        : 'entry';
+      const puzzle = this.scene.tutorialPuzzle;
+      puzzle.stageIndex = WEIGHT_TRANSFER_STAGE_INDEX;
+      puzzle.stageComplete = this.config.stages.map((_, index) => index < WEIGHT_TRANSFER_STAGE_INDEX);
+      puzzle.briefed = true;
+      puzzle.phase = 'idle';
+      puzzle.queue = [];
+      puzzle.executionStep = -1;
+      puzzle.activeCommand = null;
+      puzzle.firstWeight = null;
+      const stage = this.config.stages[WEIGHT_TRANSFER_STAGE_INDEX];
+      const phase = this.ensureFirstWeightState(stage);
+      const tick = (ms, playerX) => {
+        for (let elapsed = 0; elapsed < ms; elapsed += 20) phase.update(20, { playerX });
+      };
+      const carryTo = (x) => {
+        phase.interactCase();
+        phase.update(20, { playerX: x });
+        phase.interactCase();
+      };
+      phase.enter();
+      if (stateName !== 'entry') tick(stateName === 'fall' ? 260 : 700, 0.05);
+      if (['middle', 'punched', 'refusal', 'solved'].includes(stateName)) {
+        carryTo(0.5);
+        tick(500, 0.05);
+      }
+      if (['punched', 'refusal', 'solved'].includes(stateName)) phase.interactCase();
+      if (stateName === 'refusal') tick(180, 0.95);
+      if (stateName === 'solved') {
+        carryTo(0);
+        tick(650, 0.95);
+      }
+      phase.drainEvents();
+      // `punched` is also a playable checkpoint: it starts immediately before
+      // the player's weight overturns the apparent middle answer. Other names
+      // are frozen composition fixtures.
+      this.firstWeightQaFreeze = !['entry', 'punched'].includes(stateName);
+      const snap = phase.snapshot();
+      const focusX = stateName === 'entry'
+        ? stage.startX + 90
+        : stateName === 'refusal' || stateName === 'solved'
+          ? stage.firstWeight.exitZoneX
+          : Phaser.Math.Linear(stage.firstWeight.detents.left, stage.firstWeight.detents.right, snap.caseX);
+      this.scene.player.resetTo(focusX, 400, LANE_NEAR);
+      const camera = this.scene.cameras.main;
+      camera.setScroll(Math.max(0, focusX - camera.width / 2), 0);
+      this.firstWeightArt?.applySnapshot(snap);
+      this.scene.refreshTutorialStageVisuals();
+      this.refresh();
+      return true;
+    }
+    // Phase V/VI world-space narrative fixtures. Entry remains a real
+    // playable route; other names freeze the live pure state for visual QA.
+    if (['phase5', 'phase6'].includes(qa)) {
+      this.scene.tutorialQAActive = true;
+      const phaseNumber = Number(qa.at(-1));
+      const stageIndex = phaseNumber - 1;
+      const puzzle = this.scene.tutorialPuzzle;
+      puzzle.stageIndex = stageIndex;
+      puzzle.stageComplete = this.config.stages.map((_, index) => index < stageIndex);
+      puzzle.briefed = true;
+      puzzle.phase = 'idle';
+      puzzle.queue = [];
+      puzzle.executionStep = -1;
+      puzzle.activeCommand = null;
+      const stage = this.config.stages[stageIndex];
+      const requested = params.get('state') ?? 'entry';
+      let focusX = stage.startX + 90;
+      if (phaseNumber === 5) {
+        puzzle.twoTrueThings = null;
+        const phase = this.ensureTwoTrueThingsState(stage);
+        const allowed = ['entry', 'hanging', 'fallen', 'city-witnessed', 'witnessed', 'amber', 'cyan', 'supported', 'solved'];
+        const stateName = allowed.includes(requested) ? requested : 'entry';
+        const run = (ms, x = 0.1) => {
+          for (let elapsed = 0; elapsed < ms; elapsed += 20) phase.update(20, { playerX: x });
+        };
+        phase.enter();
+        // 'hanging' freezes on the first read: both cases still on the hoist
+        // rail above one empty cradle, before the fall beat starts.
+        if (!['entry', 'hanging'].includes(stateName)) run(700);
+        if (stateName === 'city-witnessed') phase.interact('case-a');
+        if (['witnessed', 'amber', 'cyan', 'supported', 'solved'].includes(stateName)) {
+          phase.interact('case-a'); phase.interact('case-b');
+        }
+        if (['amber', 'supported', 'solved'].includes(stateName)) phase.interact('amber');
+        if (['cyan', 'supported', 'solved'].includes(stateName)) phase.interact('cyan');
+        if (stateName === 'solved') {
+          if (!phase.snapshot().amberConnected) phase.interact('amber');
+          if (!phase.snapshot().cyanConnected) phase.interact('cyan');
+          phase.interact('case-b'); run(20, 0.82); phase.interact('case-b'); run(650, 0.82);
+        }
+        phase.drainEvents();
+        this.twoTrueThingsQaFreeze = stateName !== 'entry';
+        const snap = phase.snapshot();
+        focusX = stateName === 'entry' ? stage.startX + 90
+          : stateName === 'solved' ? stage.twoTrueThings.secondCradleX
+            : stage.twoTrueThings.mainCradleX;
+        this.twoTrueThingsArt?.applySnapshot(snap);
+      } else {
+        puzzle.trainRemembers = null;
+        const phase = this.ensureTrainRemembersState(stage);
+        const allowed = ['entry', 'pose1', 'pose2', 'redaction', 'catch', 'caught', 'solved'];
+        const stateName = allowed.includes(requested) ? requested : 'entry';
+        const run = (ms, x = 0.5) => {
+          for (let elapsed = 0; elapsed < ms; elapsed += 20) phase.update(20, { playerX: x });
+        };
+        const placePresent = (x) => {
+          phase.interact('present-case'); run(20, x); phase.interact('present-case');
+        };
+        phase.enter();
+        if (stateName !== 'entry') run(1600, 0.5);
+        if (['pose1', 'pose2', 'redaction', 'catch', 'caught', 'solved'].includes(stateName)) {
+          placePresent(0.12); run(700, 0.12);
+        }
+        if (['pose2', 'redaction', 'catch', 'caught', 'solved'].includes(stateName)) {
+          run(950, 0.12); placePresent(0.88); run(700, 0.88);
+        }
+        // Hold the redaction fixture on the actual fracture/fall beat instead
+        // of freezing on its nearly invisible first frame.
+        if (stateName === 'redaction') run(460, 0.88);
+        if (['catch', 'caught', 'solved'].includes(stateName)) run(950, 0.05);
+        // 'caught' freezes on the carried beat: the record is in the player's
+        // hands and the train's counter-movement has only just begun.
+        if (stateName === 'caught') { phase.interact('catch'); run(260, 0.05); }
+        if (stateName === 'solved') { phase.interact('catch'); run(1100, 0.05); }
+        phase.drainEvents();
+        this.trainRemembersQaFreeze = stateName !== 'entry';
+        const snap = phase.snapshot();
+        focusX = ['pose1', 'pose2'].includes(stateName)
+          ? stage.trainRemembers.pivotX
+          : ['redaction', 'catch', 'caught', 'solved'].includes(stateName)
+            ? stage.trainRemembers.catchX
+            : Phaser.Math.Linear(stage.trainRemembers.rail.left, stage.trainRemembers.rail.right, snap.presentX);
+        this.trainRemembersArt?.applySnapshot(snap);
+      }
+      this.scene.player.resetTo(focusX, 400, LANE_NEAR);
+      const camera = this.scene.cameras.main;
+      camera.setScroll(Math.max(0, focusX - camera.width / 2), 0);
+      this.scene.tutorialForceLookDown = false;
+      this.scene.refreshTutorialStageVisuals();
+      this.refresh();
+      return true;
+    }
     // Phase IV fixture route: ?qa=phase4&state=<entry|spinning|charged|
     // biting>. Warps into junction-4 and drives the LIVE weight-transfer
     // instance to the named fixture, then freezes it (except 'entry', the
@@ -5538,6 +7807,19 @@ export default class TimetablePuzzle {
         phase.interact('test');
         runFor(1800);
       }
+      if (stateName === 'safe' || stateName === 'repaired') {
+        // A service fixture performs the same calibrated A/B comparison as a
+        // player: test A, return OFF, select B, repeat, then confirm B's zero
+        // piston travel. It may not manufacture an already-known fault.
+        phase.interact('test');
+        runFor(200);
+        phase.interact('test');
+        phase.interact('select-rear');
+        phase.interact('test');
+        runFor(200);
+        phase.interact('inspect-actuator');
+        phase.interact('test');
+      }
       if (stateName === 'safe') {
         // Mid-chain: isolated, bled flat, pin seated — the safe-work state.
         phase.interact('brake-isolate');
@@ -5609,6 +7891,7 @@ export default class TimetablePuzzle {
       if (stateName !== 'entry') {
         // Fixtures skip the observation loop and land mid-rhythm.
         runFor(6000 + 2950); // loop 1, inside the arming window
+        phase.interact('route'); // send the captured load to repaired drive B
       }
       if (stateName === 'biting' || stateName === 'departing') {
         phase.interact('test');
@@ -5775,6 +8058,7 @@ export default class TimetablePuzzle {
   }
 
   destroy() {
+    if (this.mechanicalPanelMode) this.closeMechanicalPanel();
     // Relay close-up teardown first: every listener registered in
     // _setupRelayInput comes off, the blur hook is removed, and no path may
     // leave the scene flagged mid-close-up (a HUD hidden by an open close-up
@@ -5806,11 +8090,20 @@ export default class TimetablePuzzle {
     this.contactArt = null;
     this.contactLock?.destroy();
     this.contactLock = null;
+    this.firstWeightArt?.destroy();
+    this.firstWeightArt = null;
+    this.twoTrueThingsArt?.destroy();
+    this.twoTrueThingsArt = null;
+    this.trainRemembersArt?.destroy();
+    this.trainRemembersArt = null;
     // The air-circuit instance lives on the puzzle state object.
     this.scene.tutorialPuzzle?.airCircuit?.destroy();
     if (this.scene.tutorialPuzzle) {
       this.scene.tutorialPuzzle.airCircuit = null;
       this.scene.tutorialPuzzle.airNetwork = null;
+      this.scene.tutorialPuzzle.firstWeight = null;
+      this.scene.tutorialPuzzle.twoTrueThings = null;
+      this.scene.tutorialPuzzle.trainRemembers = null;
     }
     this.objects.forEach((object) => object?.destroy?.());
     this.objects.length = 0;

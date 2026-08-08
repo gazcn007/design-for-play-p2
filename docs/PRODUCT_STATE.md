@@ -337,3 +337,48 @@ in scope); and surfacing `stage.lesson` as text — causality ships in the
 machinery or not at all.
 
 **Sections I, II, IV, V, and VI are not modified.**
+
+## Proposed 2026-08-07: Chapter 4 is a paper car you have to spend
+
+George set the premise directly: chapter 4 is a paper-ish world, and the mechanic
+is magical paint used to change parts of a mysterious train car, uncover hidden
+clues, collect important items and reveal the path to the next car. The reference
+image supplied with it is pencil-on-paper — folded planes, visible construction
+lines, hatching, bare paper — not finished watercolour.
+
+This lands on the Chapter 4 slot already locked in
+`docs/GAME_MASTER_V2_SIX_CHAPTERS.md` §8 (`THE PAINTED COUNTRY`,
+`paint/erase → reveal/change memory`). The locked core relationship, the
+two-material limit, the authored-brush-region rule and the cost twist all carry
+over. What changes is the stage: a carriage interior rather than an open
+landscape, with the Painted Country visible through the windows and painted on
+the long wall.
+
+The design is proposed, not accepted, in
+`docs/CHAPTER_04_PAINTED_COUNTRY_DESIGN_LOCK.md`. Its spine:
+
+- **Two verbs on one axis.** PAINT turns a pencil construction line into a real
+  surface. WASH turns a real surface back into a line and returns its pigment to
+  the brush. Nothing is hidden or inverted; every later rule is a consequence of
+  this axis plus the physical behaviour of three pigments.
+- **Pigment is finite and the world is the supply.** There is no paint source in
+  the car other than the three the player finds and the paint already on the
+  walls. Every plank the player stands on was taken out of a picture.
+- **The partner is an authored past action, not an NPC.** The car's level design
+  is a child's under-drawing — Mara's, at the age the archive stopped keeping
+  her. The thesis beat requires painting a door she drew *wrong*, on the ceiling;
+  a correct door takes no pigment at all, visibly. The archive can only make real
+  what was actually remembered.
+- **The cost twist is an application, not a punishment.** The last door needs one
+  brush load and the only paint left is the mural of Mara's home. The player
+  chooses which part to take, and the finished car keeps that scar permanently.
+- **Completion transformation.** The car takes full colour for three seconds as
+  the train accepts the witness link, then drains back to paper keeping only what
+  the player painted, scar included.
+- **Chapter 6 carry.** The `painted-country` slot receives which part of the
+  mural survived, as the registry's `world-rule` packet: the kept property is
+  what a painted action can make physical in the finale.
+
+Proposed first executable slice is Bay A only — the three teaching beats — as a
+standalone entry point named for identity rather than sequence order. Scope,
+non-goals and the rejected directions are in the design lock.

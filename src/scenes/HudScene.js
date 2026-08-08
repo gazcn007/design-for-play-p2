@@ -505,7 +505,20 @@ export default class HudScene extends Phaser.Scene {
     const inRelayRoom = game?.activeWorldIndex === 0
       && Boolean(game?.timetablePuzzle)
       && (game?.tutorialPuzzle?.stageIndex ?? -1) === 1;
-    const showCounters = !inRelayRoom && !this.openingCar;
+    // The IV–VI service table is a full theatrical cutaway, not a small HUD
+    // card.  Keep the world HUD out of its passenger-window band so health,
+    // lane and counters do not become accidental scenery or obscure the
+    // actor silhouette.  Reconcile every frame because QA warps and world
+    // events can force-show these objects after the panel has opened.
+    const inMechanicalTable = Boolean(
+      game?.timetablePuzzle?.mechanicalPanelMode?.startsWith?.('table-'),
+    );
+    const showWorldHud = !this.openingCar && !inMechanicalTable;
+    this.barFrame.setVisible(showWorldHud);
+    this.barFill.setVisible(showWorldHud);
+    this.laneText.setVisible(showWorldHud);
+    this.hint.setVisible(!inMechanicalTable);
+    const showCounters = showWorldHud && !inRelayRoom;
     this.scoreText.setVisible(showCounters);
     this.coinText.setVisible(showCounters);
   }

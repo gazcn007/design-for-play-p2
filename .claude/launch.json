@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5180
+    },
+    {
+      "name": "nightfall-prod",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "prod"],
+      "port": 5181
     }
   ]
 }

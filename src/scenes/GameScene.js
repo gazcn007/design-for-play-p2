@@ -9,6 +9,12 @@ import {
   SPRING_VELOCITY,
   BACKDROP,
 } from '../constants.js';
+import {
+  DEV_MODE,
+  devParams,
+  resolveChapterSpawn,
+  resolveDevChapterIndex,
+} from '../devMode.js';
 import { LEVEL } from '../level.js';
 import { PAL } from '../palette.js';
 import Player from '../Player.js';
@@ -18,9 +24,12 @@ import TutorialCarArt from '../art/tutorialCarArt.js';
 import TutorialTrainRoomsArt from '../art/tutorialTrainRoomsArt.js';
 import TimetablePuzzle from '../tutorial/TimetablePuzzle.js';
 import {
+  createPersistentUnderfloorState,
   createUnderfloorHintState,
   gateTutorialLaneInput,
   resolveUnderfloorLookDown,
+  stageUsesPersistentUnderfloorView,
+  updatePersistentUnderfloorState,
   updateUnderfloorHint as stepUnderfloorHint,
 } from '../tutorial/underfloorView.js';
 import {
@@ -54,7 +63,26 @@ export default class GameScene extends Phaser.Scene {
       && data.startWorldIndex < STORY_WORLDS.length
       ? data.startWorldIndex
       : null;
-    this.initialWorldIndex = requestedStartWorld ?? this.previewWorldIndex ?? 0;
+    // `?chapter=N` is the chapter select's route. Unlike `?world=N` — which
+    // only swaps the painting and then freezes the world index — this one
+    // starts the player inside that chapter's geometry and leaves normal world
+    // streaming switched on, so walking onward behaves like a real run.
+    this.devChapterIndex = resolveDevChapterIndex(STORY_WORLDS);
+    this.initialWorldIndex =
+      requestedStartWorld ?? this.previewWorldIndex ?? this.devChapterIndex ?? 0;
+    this.devSpawn =
+      requestedStartWorld === null
+        && this.devChapterIndex !== null
+        && this.devChapterIndex > 0
+        ? resolveChapterSpawn(
+            STORY_WORLDS,
+            this.devChapterIndex,
+            LEVEL.solids,
+            LANE_NEAR,
+            LEVEL.spawn.y,
+          )
+        : null;
+    this.skipPrologue = requestedStartWorld !== null || this.devSpawn !== null;
     this.worldAssetLoader = new WorldAssetLoader(this);
     this.backdropChunks = [];
     this.checkpointTaken = false;
@@ -63,6 +91,7 @@ export default class GameScene extends Phaser.Scene {
     this.prologueTransitionActive = false;
     this.departureScroll = 0;
     this.hitstopRestoreTimer = null;
+    this.persistentUnderfloorState = createPersistentUnderfloorState();
     this.tutorialPuzzle = {
       phase: 'idle',
       briefed: false,
@@ -118,7 +147,10 @@ export default class GameScene extends Phaser.Scene {
     this.registry.set('lives', 3);
     this.registry.set('lane', LANE_NEAR);
     this.registry.set('tutorialPowerState', 'off');
-    this.registry.set('tutorialPowerRestored', false);
+    // Starting inside a later chapter means the Prologue already happened.
+    // Without this the exit gate would trap a dev warp the moment it walked
+    // back toward car 01.
+    this.registry.set('tutorialPowerRestored', this.skipPrologue);
 
     this.physics.world.setBounds(0, -600, WORLD_W, 2200);
     this.cameras.main.setBounds(0, 0, WORLD_W, GAME_H);
@@ -147,17 +179,24 @@ export default class GameScene extends Phaser.Scene {
 
     this.solids.refresh();
 
-    const sceneSpawn = requestedStartWorld === null
-      ? LEVEL.spawn
-      : {
+    const sceneSpawn = requestedStartWorld !== null
+      ? {
           x: Number.isFinite(data.spawnX)
             ? data.spawnX
             : STORY_WORLDS[requestedStartWorld].startX + 24,
           y: Number.isFinite(data.spawnY) ? data.spawnY : LEVEL.spawn.y,
           lane: data.spawnLane ?? LEVEL.spawn.lane,
-        };
+        }
+      : this.devSpawn ?? LEVEL.spawn;
     this.player = new Player(this, sceneSpawn.x, sceneSpawn.y, sceneSpawn.lane);
     this.checkpoint = { ...sceneSpawn };
+    if (this.skipPrologue) {
+      // A warp past the Prologue must not leave its junctions reading as
+      // unsolved, or the objective arrow and the stage gates come along.
+      this.tutorialPuzzle.stageIndex = LEVEL.tutorialPuzzle.stages.length - 1;
+      this.tutorialPuzzle.stageComplete = LEVEL.tutorialPuzzle.stages.map(() => true);
+      this.tutorialPuzzle.briefed = true;
+    }
 
     // A single collider for every solid in the level; the process callback is
     // what enforces lane separation, so the player simply cannot touch
@@ -1152,6 +1191,20 @@ export default class GameScene extends Phaser.Scene {
     // (src/tutorial/underfloorView.js): III teaches via `underfloorView`
     // without relocating its hand-placed air circuit; IV/V/VI use the deep
     // `underfloor` machinery band.
+    const echoSnap = stage?.echoLoad ? this.tutorialPuzzle?.echoReplay?.snapshot() : null;
+    const echoObservation = Boolean(
+      stage?.echoLoad && echoSnap?.entered && echoSnap.observationLoop && !echoSnap.stageComplete,
+    );
+    const persistentLookDown = updatePersistentUnderfloorState(
+      this.persistentUnderfloorState,
+      {
+        stage,
+        playerX: this.player.x,
+        grounded: this.player.body.blocked.down,
+        lookDownPressed: input.lookDownPressed,
+        autoLookDown: echoObservation,
+      },
+    );
     let lookingDown = resolveUnderfloorLookDown({
       activeWorldIndex: this.activeWorldIndex,
       cameraLocked: this.tutorialCameraLocked,
@@ -1160,7 +1213,7 @@ export default class GameScene extends Phaser.Scene {
       stage,
       playerX: this.player.x,
       grounded: this.player.body.blocked.down,
-      lookDownHeld: input.lookDown,
+      lookDownHeld: stageUsesPersistentUnderfloorView(stage) ? persistentLookDown : input.lookDown,
       forceLookDown: this.tutorialForceLookDown,
     });
     // VISIBLE SYSTEM ARC CORRECTION §1.6: Phase VI's first observation loop
@@ -1168,10 +1221,6 @@ export default class GameScene extends Phaser.Scene {
     // the camera tilts down on its own and tracks the past self's trolley
     // through one full pass, then hands the follow back to the player (and
     // the freshly unlocked engage handle) as soon as loop 1 begins.
-    const echoSnap = stage?.echoLoad ? this.tutorialPuzzle?.echoReplay?.snapshot() : null;
-    const echoObservation = Boolean(
-      stage?.echoLoad && echoSnap?.entered && echoSnap.observationLoop && !echoSnap.stageComplete,
-    );
     if (echoObservation) {
       const rail = stage.echoLoad.echoRail;
       const echoX = rail.x0 + echoSnap.echoTrolleyX * (rail.x1 - rail.x0);
@@ -1197,10 +1246,12 @@ export default class GameScene extends Phaser.Scene {
   // -------------------------------------------------- [S] look-down hint --
   // Screen-anchored teaching prompt (VISIBLE SYSTEM ARC CORRECTION §1). The
   // pure state machine in src/tutorial/underfloorView.js decides visibility;
-  // this layer only owns the pixels. III/IV/V all get the same strong prompt:
+  // this layer only owns the pixels. III/IV use hold; V/VI use a persistent
+  // toggle and keep the inverse action visible:
   // >=20px legend on a high-contrast dark plate, breathing alpha in the
-  // 0.85-1 band with a slow sinking bob. VI gets none — its first loop is
-  // camera-led. No tutorial text panels — a keycap line and a chevron.
+  // 0.85-1 band with a slow sinking bob. VI's first loop is camera-led, then
+  // the persistent RETURN action remains explicit. No tutorial text panels —
+  // a keycap line and a chevron.
   buildUnderfloorHint() {
     // Same recipe as the world [E] prompt — white legend on the game's
     // standard chip colour — because that object stays legible over this
@@ -1235,7 +1286,12 @@ export default class GameScene extends Phaser.Scene {
   applyUnderfloorHintStyle(style) {
     const hint = this.underfloorHint;
     this.tweens.killTweensOf(hint);
-    const baseY = this.underfloorHintSafeY();
+    // While the player is already looking at the underfloor, the hint means
+    // "come back UP" — park it at the TOP of the viewport so it stops
+    // covering the machinery the phase asks you to watch, and let the bob
+    // press up toward the cab it names. Otherwise keep the bottom safe area.
+    const atTop = Boolean(this.tutorialLookingDown);
+    const baseY = atTop ? 48 : this.underfloorHintSafeY();
     hint.setY(baseY);
     // Strong only (the weak tier is abolished): a confident 0.85 -> 1 breath.
     hint.setAlpha(0.85);
@@ -1247,11 +1303,11 @@ export default class GameScene extends Phaser.Scene {
       repeat: -1,
       ease: 'Sine.easeInOut',
     });
-    // Slow sinking bob: the chevron presses DOWN toward the underfloor it
-    // names, so the motion itself teaches the direction of the verb.
+    // Slow bob: the chevron presses toward the place it names — DOWN toward
+    // the underfloor when inviting inspection, UP toward the cab on return.
     this.tweens.add({
       targets: hint,
-      y: baseY + 7,
+      y: atTop ? baseY - 7 : baseY + 7,
       duration: 780,
       yoyo: true,
       repeat: -1,
@@ -1274,10 +1330,24 @@ export default class GameScene extends Phaser.Scene {
       deltaMs: delta,
     });
     const prev = this._underfloorHintShown;
-    if (next.visible === prev.visible && next.style === prev.style) return;
+    if (
+      next.visible === prev.visible
+      && next.style === prev.style
+      && next.action === prev.action
+    ) return;
     this._underfloorHintShown = next;
     this.underfloorHint.setVisible(next.visible);
-    if (next.visible) this.applyUnderfloorHintStyle(next.style);
+    if (next.visible) {
+      const persistent = stageUsesPersistentUnderfloorView(stage);
+      this.underfloorHint.setText(
+        next.action === 'return'
+          ? '[S]  RETURN TO CAB  ▲'
+          : persistent
+            ? '[S]  INSPECT UNDERCARRIAGE  ▼'
+            : '[HOLD S]  INSPECT UNDERCARRIAGE  ▼',
+      );
+      this.applyUnderfloorHintStyle(next.style);
+    }
   }
 
   buildMarkers() {
@@ -1419,8 +1489,8 @@ export default class GameScene extends Phaser.Scene {
 
   setupTutorialQA() {
     if (LEVEL.tutorialPuzzle.mode === 'timetable' && this.timetablePuzzle?.setupQA()) return;
-    if (!import.meta.env.DEV || typeof window === 'undefined') return;
-    const qa = new URLSearchParams(window.location.search).get('qa');
+    if (!DEV_MODE || typeof window === 'undefined') return;
+    const qa = devParams().get('qa');
     if (
       ![
         'tutorial-power',
@@ -1517,6 +1587,8 @@ export default class GameScene extends Phaser.Scene {
     const JustDown = Phaser.Input.Keyboard.JustDown;
     const jumpTapped = JustDown(k.jump);
     const upTapped = JustDown(k.up);
+    const sTapped = JustDown(k.s);
+    const downTapped = JustDown(k.down);
     return {
       left: k.left.isDown || k.a.isDown,
       right: k.right.isDown || k.d.isDown,
@@ -1524,8 +1596,9 @@ export default class GameScene extends Phaser.Scene {
       jumpPressed: jumpTapped || upTapped,
       run: k.run.isDown,
       laneBack: JustDown(k.w),
-      laneFront: JustDown(k.s),
+      laneFront: sTapped,
       lookDown: k.s.isDown || k.down.isDown,
+      lookDownPressed: sTapped || downTapped,
       interact: JustDown(k.interact),
       // Held and released edges of the same key. Sections V and VI treat the
       // valve as an analogue control rather than a switch, so they need the
@@ -2933,6 +3006,10 @@ export default class GameScene extends Phaser.Scene {
     if (this.relayCloseupActive) {
       if (Phaser.Input.Keyboard.JustDown(this.keys.esc) || input.interact) {
         this.timetablePuzzle?.closeRelayCloseup();
+        // The same E edge must not fall through to updateInteractables() and
+        // immediately reopen the world device we just closed. ESC never had
+        // this problem, but the panel explicitly advertises both controls.
+        input.interact = false;
       }
     }
     // Section V reads the held state of E every frame, not just its edge.

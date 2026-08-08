@@ -35,6 +35,12 @@ function run(replay, totalMs, inputs = {}, stepMs = 25) {
   return events;
 }
 
+function routeToDrive(replay) {
+  assert.equal(replay.interact('route'), true);
+  assert.equal(replay.snapshot().loadRoute, 'rear');
+  replay.drainEvents();
+}
+
 test('invalid or missing trace degrades to the canonical fallback (lock §2.4)', () => {
   const replay = createEchoReplay({ trace: { garbage: true } });
   replay.enter();
@@ -67,6 +73,8 @@ test('loop 0 is observation-only: TEST bounces without spending an attempt', () 
   assert.equal(snap.motor.energized, false);
   assert.equal(snap.motor.wheelState, 'idle');
   assert.equal(snap.observationLoop, true);
+  assert.equal(replay.interact('route'), false);
+  assert.equal(replay.drainEvents()[0].reason, 'observe-first-loop');
 });
 
 test('echo position interpolates along the trace samples', () => {
@@ -130,6 +138,7 @@ test('stale rule: energizing outside the window cannot re-grip when load arrives
   const replay = createEchoReplay({});
   replay.enter();
   run(replay, 6000); // observation loop done
+  routeToDrive(replay);
   // energize early in loop 1, far outside the window
   replay.update(100, ALL_CLEAR);
   replay.drainEvents();
@@ -146,10 +155,28 @@ test('stale rule: energizing outside the window cannot re-grip when load arrives
   assert.ok(replay.snapshot().motor.current <= 0.35);
 });
 
+test('wrong load route is a readable local failure, not a timing failure', () => {
+  const replay = createEchoReplay({});
+  replay.enter();
+  run(replay, 6000);
+  run(replay, 2950, ALL_CLEAR);
+  assert.equal(replay.snapshot().windowActive, true);
+  assert.equal(replay.snapshot().loadRoute, 'front');
+  replay.interact('test');
+  const types = replay.drainEvents().map((event) => event.type);
+  assert.ok(types.includes('load-misrouted'));
+  run(replay, 1400, ALL_CLEAR);
+  assert.equal(replay.snapshot().stageComplete, false);
+  assert.equal(replay.snapshot().motor.wheelState, 'spinning');
+  replay.interact('test');
+  routeToDrive(replay);
+});
+
 test('aligned run: energize inside the window -> bite -> departure -> complete', () => {
   const replay = createEchoReplay({});
   replay.enter();
   run(replay, 6000); // observation
+  routeToDrive(replay);
   // advance into the arming window (opens ~2857)
   run(replay, 2950, ALL_CLEAR);
   assert.equal(replay.snapshot().windowActive, true);
@@ -188,6 +215,7 @@ test('no departure while the Phase V branch is not synced (condition 5)', () => 
   const replay = createEchoReplay({});
   replay.enter();
   run(replay, 6000);
+  routeToDrive(replay);
   run(replay, 2950, ALL_CLEAR);
   replay.interact('test');
   const events = run(replay, 2000, { ...ALL_CLEAR, bogiesSynced: false });
@@ -200,6 +228,7 @@ test('a late grab bites but breaks when the rhythm outruns the hold', () => {
   const replay = createEchoReplay({});
   replay.enter();
   run(replay, 6000);
+  routeToDrive(replay);
   // energize near the END of the arming window (~3600ms): bites, but the
   // hysteresis tail ends (~4398ms) before the 900ms hold completes.
   run(replay, 3600, ALL_CLEAR);
@@ -221,6 +250,7 @@ test('local progress survives failures across loops; retry completes', () => {
   const replay = createEchoReplay({});
   replay.enter();
   run(replay, 6000);
+  routeToDrive(replay);
   run(replay, 3600, ALL_CLEAR);
   replay.interact('test'); // late grab, will break
   run(replay, 1500, ALL_CLEAR);
@@ -238,6 +268,7 @@ test('reset restores the pre-entry state', () => {
   const replay = createEchoReplay({});
   replay.enter();
   run(replay, 6000);
+  routeToDrive(replay);
   run(replay, 2950, ALL_CLEAR);
   replay.interact('test');
   run(replay, 5000, ALL_CLEAR);

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>CHAPTER 03 // ECHO CITY 3D</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Georgia, "Times New Roman", serif;
+        background: #100908;
+        color: #f4e4c9;
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body, #city-3d {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      body { background: #100908; }
+
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        outline: none;
+        cursor: crosshair;
+      }
+
+      .topbar,
+      .legend,
+      .loading {
+        position: fixed;
+        z-index: 4;
+        pointer-events: none;
+        border: 1px solid #826141;
+        background: linear-gradient(180deg, #271811ec, #160d0ae8);
+        box-shadow: 0 10px 34px #0009;
+        backdrop-filter: blur(7px);
+      }
+
+      .topbar {
+        top: 16px;
+        left: 50%;
+        width: min(960px, calc(100vw - 32px));
+        min-height: 48px;
+        transform: translateX(-50%);
+        padding: 10px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+      }
+
+      .chapter {
+        color: #f7e6c6;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: .12em;
+        white-space: nowrap;
+      }
+
+      .mode {
+        color: #72d2c4;
+        font: 700 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+        letter-spacing: .1em;
+      }
+
+      .legend {
+        right: 18px;
+        bottom: 18px;
+        padding: 9px 12px;
+        color: #d1b995;
+        font-size: 12px;
+        line-height: 1.55;
+      }
+
+      .legend strong { color: #f4e4c9; }
+
+      .loading {
+        left: 18px;
+        bottom: 18px;
+        width: min(360px, calc(100vw - 36px));
+        padding: 10px 12px;
+        transition: opacity .35s ease;
+      }
+
+      .loading.done { opacity: 0; }
+
+      .loading-copy {
+        display: flex;
+        justify-content: space-between;
+        color: #dbc4a3;
+        font: 600 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      .loading-track {
+        height: 4px;
+        margin-top: 7px;
+        overflow: hidden;
+        background: #080504;
+      }
+
+      .loading-fill {
+        width: 0;
+        height: 100%;
+        background: linear-gradient(90deg, #a66a3c, #dfb36d, #5bcfc3);
+        transition: width .18s ease;
+      }
+
+      .vignette {
+        position: fixed;
+        inset: 0;
+        z-index: 3;
+        pointer-events: none;
+        box-shadow: inset 0 0 150px 30px #0904038f;
+        mix-blend-mode: multiply;
+      }
+
+      @media (max-width: 700px) {
+        .topbar { align-items: flex-start; }
+        .chapter { white-space: normal; }
+        .legend { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="city-3d" aria-label="Real-time 3D Echo City preview"></div>
+    <div class="topbar">
+      <span class="chapter">CHAPTER 03 · ECHO CITY</span>
+      <span class="mode" id="runtime-status">REAL-TIME GLB · LOADING</span>
+    </div>
+    <div class="legend">
+      <strong>Click</strong> walk on pale paving<br />
+      <strong>Right-drag</strong> inspect real depth<br />
+      <strong>Wheel</strong> zoom · <strong>R</strong> reset camera · <strong>F</strong> fullscreen
+    </div>
+    <div class="loading" id="loading-panel">
+      <div class="loading-copy">
+        <span id="loading-label">LOADING 3D CITY</span>
+        <span id="loading-count">0 / 17</span>
+      </div>
+      <div class="loading-track"><div class="loading-fill" id="loading-fill"></div></div>
+    </div>
+    <div class="vignette"></div>
+    <script type="module" src="/src/car03-3d-main.js"></script>
+  </body>
+</html>
