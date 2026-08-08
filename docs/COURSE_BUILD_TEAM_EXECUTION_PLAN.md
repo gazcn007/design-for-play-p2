@@ -261,8 +261,15 @@ Chapter 6 course-build structure:
 2. three-world overlap;
 3. automatic and player-controlled switching in separate authored beats;
 4. one continuous action carried across world changes;
-5. Archivist's forced six-choice structure;
-6. refusal of the choice, reunion with Mara, and world preservation as a consequence.
+5. a three-phase final boss against the Archivist's Compression Engine, using
+   only previously taught verbs and relationship packets;
+6. Archivist's forced six-choice structure after the engine is disabled;
+7. refusal of the choice, reunion with Mara, and world preservation as a consequence.
+
+The final boss is not conventional combat. It has no health bar or new attack
+input. Its three readable phases are expose the witness anchors, keep two
+contradictory world states active, and complete the shared circuit with Mara
+and the recorded past self. Failure rewinds only the current compression sweep.
 
 No six-item ability wheel. Spectacle transitions are automatic. Puzzle transitions expose at most two active world rules and use one switch input.
 
