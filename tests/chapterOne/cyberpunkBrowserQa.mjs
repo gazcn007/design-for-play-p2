@@ -26,7 +26,8 @@ socket.addEventListener('message', ({ data }) => {
     else resolve(message.result);
   }
   if (message.method === 'Runtime.exceptionThrown') {
-    pageErrors.push(message.params.exceptionDetails.text);
+    const details = message.params.exceptionDetails;
+    pageErrors.push(details.exception?.description ?? details.text);
   }
   if (message.method === 'Log.entryAdded' && message.params.entry.level === 'error') {
     const entry = message.params.entry;
@@ -345,6 +346,26 @@ for (const deadline = Date.now() + 12000; Date.now() < deadline;) {
 }
 if (!handoff) throw new Error('Prologue departure did not enter the cyberpunk parkour scene.');
 evidence['prologue-handoff'] = handoff;
+
+// The legacy direct Car 2 link remains useful for focused development after
+// the dev chapter-select merge. It must land in the same authored destination
+// as the parkour completion door, while production still gates the route.
+await send('Page.navigate', { url: `${baseUrl}/?car=2` });
+let directCarTwo = null;
+for (const deadline = Date.now() + 20000; Date.now() < deadline;) {
+  await delay(120);
+  const rendered = await evaluate('window.render_game_to_text?.() ?? null');
+  if (!rendered) continue;
+  const candidate = JSON.parse(rendered);
+  if (candidate.scene === 'Game' && candidate.world?.index === 2) {
+    directCarTwo = candidate;
+    break;
+  }
+}
+if (!directCarTwo || Math.abs(directCarTwo.player.x - 5291) > 80) {
+  throw new Error(`Direct Car 2 route did not reach its authored entrance: ${JSON.stringify(directCarTwo?.player ?? null)}`);
+}
+evidence['direct-car-2'] = directCarTwo;
 
 await writeFile(`${outputDir}/states.json`, `${JSON.stringify(evidence, null, 2)}\n`);
 socket.close();

@@ -657,3 +657,9 @@ chapter after what it is, not after the slot it currently occupies.
   rising, bay C's refusal beading off the correct door, the gravity flip landing
   the player upside down on the ceiling walkway, and the mural scar left behind
   by a wash. No console errors.
+
+## Chapter One merge onto the playable course build
+
+- 2026-08-08: Merged `origin/main` into the Chapter One cyberpunk parkour branch. The resolution retains main's dev/prod split and chapter-select system, registers the dedicated parkour scene in both boot configurations, routes Chapter 1 to that scene, and preserves the completion-door handoff into `THE CITY THAT REMEMBERS` through validated `GameScene` start data.
+- Restored the user-requested `?car=2` focused-development link as a dev-gated alias. Browser QA now covers both the natural parkour door handoff and the direct Car 2 entrance, and preserves full exception descriptions when Chrome reports an uncaught error.
+- Verification after the merge: 618/618 Node tests, all 10 panoramas and 30 textures, production build, full parkour browser route including Prologue handoff and direct Car 2 start, zero page-console errors, and clean whitespace validation.
