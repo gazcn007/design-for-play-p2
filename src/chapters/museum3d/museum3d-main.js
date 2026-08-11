@@ -1,0 +1,130 @@
+// Chapter 5 Dreamcore Museum P0 — standalone Three.js entry.
+// Independent of the Phaser prototypes and of the main Nightfall game.
+
+import { Museum3DApp } from './Museum3DApp.js';
+import { createInitialState } from './state/chapter05Model.js';
+import { installQaHooks } from './qa/museum3dQaState.js';
+import { DEBUG_BEATS } from './config.js';
+
+// Gate 1 debug routes: museum-3d.html?beat=corridor|echo|return starts at
+// that beat with the minimum legal preceding state already applied.
+function stateForBeat(beat) {
+  const s = createInitialState();
+  if (beat === 'corridor') {
+    s.ticket.inspected = true;
+    s.ticket.carried = true;
+    s.phase = 'corridor';
+  } else if (beat === 'echo') {
+    s.ticket.inspected = true;
+    s.ticket.carried = true;
+    s.phase = 'echo-city';
+    s.corridor.pass = 2;
+    s.corridor.guideStandSide = 'north';
+  } else if (beat === 'return') {
+    s.ticket.inspected = true;
+    s.ticket.returned = true;
+    s.phase = 'return';
+    s.corridor.pass = 2;
+    s.corridor.guideStandSide = 'north';
+    s.echoRecord = {
+      nightKitTaken: true,
+      marketPawlReleased: true,
+      marketShuttersLocked: true,
+      fountainGrateCleared: true,
+      fountainCirculationRestored: true,
+      archiveSlotUnlocked: true,
+      archiveLedgerReturned: true,
+      nightBadgeClaimed: true,
+      stationPanelOpened: true,
+      stationLampOn: true,
+      returnWalkStarted: true,
+      recordFiled: true,
+    };
+    s.lobby.deskReclassified = true;
+  }
+  return s;
+}
+
+const params = new URLSearchParams(window.location.search);
+const beat = params.get('beat');
+const initialState = beat && DEBUG_BEATS.includes(beat) ? stateForBeat(beat) : createInitialState();
+const captureMode = params.get('capture') === '1' || params.get('simlock') === '1';
+const standaloneDirectionId = beat === 'echo' ? 'echo-city' : null;
+
+const app = new Museum3DApp({
+  container: document.getElementById('app'),
+  lockOverlay: document.getElementById('lock-overlay'),
+  promptEl: document.getElementById('prompt'),
+  subtitleEl: document.getElementById('subtitle'),
+  minimapRoot: document.getElementById('echo-minimap'),
+  minimapCanvas: document.getElementById('echo-minimap-canvas'),
+  fadeEl: document.getElementById('fade'),
+  directionRoot: document.getElementById('direction-exhibit'),
+  directionFrame: document.getElementById('direction-frame'),
+  directionClose: document.getElementById('direction-close'),
+  directionTitle: document.getElementById('direction-title'),
+  directionStatus: document.getElementById('direction-status'),
+  initialState,
+  captureMode,
+  standaloneDirectionId,
+});
+
+installQaHooks(app);
+if (params.get('simlock') === '1') app.setSimulatedLock(true);
+app.start().then(() => {
+  const qaDirection = params.get('qa-direction');
+  const qaArtifact = params.get('qa-artifact');
+  if (captureMode && beat === 'echo' && params.get('qa-night') === 'complete') {
+    for (const type of [
+      'takeNightKit', 'openStationPanel', 'switchStationLamp',
+      'releaseMarketPawl', 'lockMarketShutters',
+      'clearFountainGrate', 'restoreFountainCirculation',
+      'unlockArchiveSlot', 'returnArchiveLedger', 'claimNightBadge',
+    ]) app.model.dispatch({ type });
+    app.directionProgress.dispatch({ type: 'artifact.take', id: 'echo-city' });
+    app._syncCarriedArtifact();
+    window.__qa.lookAt(0, 12, 0, 0, -0.04);
+  } else if (captureMode && beat === 'echo' && params.get('qa-night') === 'powered') {
+    for (const type of ['takeNightKit', 'openStationPanel', 'switchStationLamp']) {
+      app.model.dispatch({ type });
+    }
+    if (params.get('qa-market') === '1') {
+      for (const type of ['releaseMarketPawl', 'lockMarketShutters']) {
+        app.model.dispatch({ type });
+      }
+      window.__qa.lookAt(-25.5, 5.6, -20, 2.2, -0.08);
+    } else if (params.get('qa-fountain') === '1' || params.get('qa-pump') === '1') {
+      for (const type of [
+        'releaseMarketPawl', 'lockMarketShutters',
+        'clearFountainGrate', 'restoreFountainCirculation',
+      ]) {
+        app.model.dispatch({ type });
+      }
+      if (params.get('qa-pump') === '1') {
+        window.__qa.lookAt(28, 4.5, 28, 8.5, -0.04);
+      } else {
+        window.__qa.lookAt(25.5, 5.8, 20, 0, -0.08);
+      }
+    } else {
+      window.__qa.lookAt(0, 12, 0, 0, -0.04);
+    }
+  }
+  const qaDirectionX = {
+    labyrinth: 14,
+    'borrowed-grid': 22,
+    'echo-city': 30,
+    'painted-country': 38,
+  }[qaDirection];
+  if (captureMode && beat === 'corridor' && ['labyrinth', 'borrowed-grid', 'painted-country'].includes(qaArtifact)) {
+    app.directionProgress.dispatch({ type: 'artifact.take', id: qaArtifact });
+    app._syncCarriedArtifact();
+    const x = qaDirectionX ?? { labyrinth: 14, 'borrowed-grid': 22, 'painted-country': 38 }[qaArtifact];
+    window.__qa.lookAt(x, qaDirectionX ? -1.66 : 0, x, qaDirectionX ? -2 : 1.7, 0);
+  } else if (captureMode && beat === 'corridor' && qaDirection === 'lobby-return') {
+    window.__qa.lookAt(8.7, 0, 7.8, 0, 0);
+  } else if (captureMode && beat === 'corridor' && qaDirectionX) {
+    window.__qa.lookAt(qaDirectionX, 0, qaDirectionX, -1.66, 0);
+  }
+}).catch((error) => {
+  console.error('[Museum3D] startup failed', error);
+});

@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite';
+import { resolve } from 'node:path';
 
 // `command` and `mode` are the only two inputs that decide whether this build
 // may skip ahead. `npm run dev` serves in development mode and gets the
@@ -33,6 +34,12 @@ export default defineConfig(({ command, mode }) => {
       target: 'es2020',
       outDir: 'dist',
       assetsInlineLimit: 0,
+      rollupOptions: {
+        input: {
+          main: resolve(import.meta.dirname, 'index.html'),
+          chapter01Opening: resolve(import.meta.dirname, 'chapter01-opening.html'),
+        },
+      },
     },
   };
 });
