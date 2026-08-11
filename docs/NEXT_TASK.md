@@ -1,33 +1,140 @@
 # Next implementation task
 
-## Awaiting product accept — Chapter 4 `THE PAINTED COUNTRY` Bay A slice
+## BUILT — AWAITING GEORGE'S CALL — Chapter 4 `THE PAINTED COUNTRY` ink-displacement puzzle
 
-Status: `AWAITING PRODUCT ACCEPT` (not `READY` — do not start)
+Status: `BUILT, VERIFIED, AWAITING A DIFFICULTY CALL` — 2026-08-11
 
-Owner: unassigned
+Owner: `Claude Code` (designed and implemented directly at George's request; this
+is a deliberate step outside the usual product-lead-writes-the-task loop, taken
+because he asked for the change itself rather than for a task to hand to Codex)
 
-George set the premise on 2026-08-07: chapter 4 is a paper world, and the
-mechanic is magical paint used to change parts of a mysterious train car,
-uncover clues, collect materials and reveal the route to the next car. This
-matches the Chapter 4 slot already locked in
-`docs/GAME_MASTER_V2_SIX_CHAPTERS.md` §8 (`paint/erase → reveal/change memory`),
-re-sited from an open landscape into a carriage interior.
+## Product decision (2026-08-11, second decision of the day)
 
-Full design: `docs/CHAPTER_04_PAINTED_COUNTRY_DESIGN_LOCK.md`. The short
-version — two verbs on one axis (PAINT makes a drawn line real, WASH makes a real
-thing drawn again and returns its pigment), three found mineral pigments with two
-loadable at a time, and a finite pigment budget, so every surface the player
-builds is taken out of a picture. The car's level design is a child's
-under-drawing, mistakes included, and the chapter's thesis beat requires painting
-a *wrong* drawing rather than correcting it.
+George played the wash → paint → cross build and rejected it: *"it is just
+repeated wash and paint, there is no puzzle, no fun at all... make it more
+interesting, it has to challenge the IQ a bit."*
 
-Proposed first slice is **Bay A only** (design lock §14): beats 1–3, a standalone
-entry point named `painted-country.html` for identity rather than sequence order,
-one pure deterministic region/pigment module with focused tests, one art layer
-that owns no rules, full `render_game_to_text()` coverage, and a row in
-`STANDALONE_SLICES` so the dev chapter select can reach it.
+This does **not** reverse the morning's decision. Read together, the two
+rejections say something precise, and it is the design rule for this chapter:
 
-This does not become `READY` until George accepts or amends the design lock.
+> He rejected **bookkeeping**, not **thinking**.
+> The finite-pigment build was rejected for admin — collecting, budgeting,
+> filling to a threshold. The simplified build was rejected for having no
+> decision in it at all. So the input stays trivial and the *consequences*
+> carry the difficulty.
+
+Accordingly the verbs are unchanged and the following remain permanently out:
+pigment collection, brush slots, coverage thresholds, meters, counters, timers,
+precision aiming, twitch execution, and any punishment that is not undoable.
+
+## The one new rule
+
+> **Washing does not destroy ink. It moves it.**
+> Every washable mark has a drain channel drawn on the sheet. Wash it and its
+> ink travels that channel:
+> - ink that reaches a **hole** falls through and is gone;
+> - ink that reaches **paper** stands there as a new blot you must now deal with;
+> - ink that crosses a **bridge you already painted** dissolves it on the way past.
+
+Everything is visible from the first frame. Nothing is hidden, revealed, or
+remembered — a puzzle the player cannot see is a memory test, not a puzzle. The
+difficulty is entirely *which order you act in*, and the channel that is about to
+cross one of your own bridges turns red before you commit to the wash.
+
+## The three bays
+
+- **Bay A — teach.** The seal's channel runs away from the route into a floor
+  grate. The player watches ink travel and vanish. There is no wrong order here.
+- **Bay B — the trap.** The seal's ink lands as a blot between the player and the
+  trough. Washing the blot sends its ink into the trough — which is only open
+  while the bridge is unpainted. Paint first and you watch your own bridge go.
+- **Bay C — the exam.** Two seals with different channels: one drains the length
+  of the bay straight into the last hole, the other drops its ink at your feet.
+  Both must go through the hole *before* the last bridge is made.
+
+## In scope
+
+- The pure model owns every rule; the scene owns pixels, input and bodies only.
+- Blots are physically taller than a jump can clear, so ink is a problem to solve
+  rather than an obstacle to vault.
+- Keep the paper carriage, its windows, Mara's cyan thread, the standalone entry,
+  unlimited paint, and the restart/movement controls.
+
+## Out of scope
+
+- Any third verb, any second resource, any meter, counter or timer.
+- Changing the car order or the chapter's place in the journey. This slice is
+  named for identity, not sequence.
+- Touching another chapter's code, the shared Prologue, or the dev/prod split.
+- Story or dialogue authoring. The car must read through its own objects first.
+
+## Acceptance criteria
+
+1. The first screen shows every seal, every route, every basin and every drain
+   channel, with no hover required and nothing hidden.
+2. A player can predict where a wash sends its ink before committing to it, and
+   is warned when a channel is about to cross a bridge they made.
+3. Washing is never destructive of progress in a way that cannot be undone: every
+   wrong order costs a repeat, never a restart.
+4. Nothing that blocks the way can be jumped over, so the puzzle cannot be skipped.
+5. Every mark's visible state, physical collision, objective line and
+   `render_game_to_text()` state agree.
+6. Paint remains unlimited, with no inventory, counter or threshold anywhere.
+
+## QA route
+
+Run `npm run dev` and open `/painted-country.html`. Play with a real mouse — the
+wash verb is a **held** right-click and a synthetic click will not exercise it.
+
+1. Before touching anything, follow each dashed channel with your eye. Every
+   consequence in the car is already on the sheet.
+2. Bay A: wash the seal. The ink should run left and disappear down the grate.
+   Paint the bridge, walk across.
+3. Bay B: wash the seal. Its ink should *land*, standing in your way. Try to jump
+   it — you must not be able to. Wash the blot, watch it fall into the trough,
+   then paint and cross.
+4. Bay B, deliberately wrong: restart, wash the seal, paint the bridge **first**,
+   then wash the blot. The bridge must dissolve, and the objective must have
+   warned you before you washed. Repaint and continue — no restart required.
+5. Bay C: wash both seals, note their channels end in different places. Clear the
+   blot into the hole, then make the last bridge and reach the vestibule.
+6. Bay C, deliberately wrong: paint the last bridge while the blot still stands.
+7. Fall into a hole. Progress must survive.
+8. Reach the vestibule, then keep walking right — you must stop at the coupling.
+9. Press `R` and confirm the car returns to its opening state.
+
+## Verified 2026-08-11 (played in-browser, real held right- and left-click)
+
+- The clean solve completes: all nine actions land, car completes, zero falls,
+  no ink left standing.
+- Both traps fire and both recover with a single repaint.
+- Ink can no longer be jumped: a blot now stands 130px tall against a ~92px jump.
+  This was a real bug found in play — the first blots were vaultable, which made
+  the whole puzzle optional. Pinned by a test.
+- Walking past the coupling stops at x=2872 instead of throwing the player back
+  down the car.
+- 14 model tests pass, including an exhaustive search proving that **no ordering
+  of legal moves can strand the player**, and both Vite builds and the whitespace
+  check pass.
+
+### The three defects from the morning review are fixed
+
+1. Walking off the end of the world after completion — the sheet now has end walls.
+2. A washed seal leaving a slab and a blank plaque — a washed seal now leaves only
+   a damp ghost and a torn lip.
+3. A prompt on a target that is out of reach — labels are anchored to the end the
+   player walks up to, reach is measured to the label itself, and an unreachable
+   target reads `STEP CLOSER TO …` at half alpha instead of pretending to be a
+   button. The wrong mouse button and the dissolved bridge now both say so.
+
+### If this is still not hard enough — the next rung
+
+The cheapest way to add real difficulty without adding a rule is to make **holes
+saturate**: a hole swallows one lot of ink, after which the paper there is soaked
+and further ink stands on top. Sinks become scarce and the player must decide
+*which* ink goes *where*, routing one lot through a chain to a further hole. It is
+a genuine allocation puzzle and still has no counter, no inventory and no meter.
+Say the word and it is a small change to `deliver()` plus one flag per hole.
 
 ---
 

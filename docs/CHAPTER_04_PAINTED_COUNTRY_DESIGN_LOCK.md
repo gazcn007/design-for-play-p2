@@ -1,8 +1,18 @@
 # Chapter 4 // THE PAINTED COUNTRY — design lock
 
-Status: `PROPOSED` — awaiting George's accept/reject
+Status: `SUPERSEDED FOR PLAYABLE SLICE` — product decision 2026-08-11
 Product lead: Claude Code
 Date: 2026-08-07
+
+> **Replacement decision — 2026-08-11.** The paper-car setting, PAINT/WASH
+> vocabulary, made-real routes, paper barriers, Mara's under-drawing, and
+> carriage presentation remain in force. The finite pigment economy, coverage
+> filling, brush slots, material collection, water/float route, ceiling gravity,
+> wrong-door test, and mural cost do not. Paint is infinite and forgiving:
+> PAINT a labelled hidden path to make all of it real. WASH a labelled barrier
+> to remove it and reveal the next path. The runnable design is defined by the
+> READY task in `docs/NEXT_TASK.md`; this document remains as the superseded
+> exploration record.
 
 Extends the Chapter 4 entry in `docs/GAME_MASTER_V2_SIX_CHAPTERS.md` §8. The
 core relationship (`paint/erase → reveal/change memory`), the two-material
