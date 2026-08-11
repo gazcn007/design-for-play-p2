@@ -338,6 +338,41 @@ machinery or not at all.
 
 **Sections I, II, IV, V, and VI are not modified.**
 
+## Accepted 2026-08-11 (second decision): Chapter 4 is an ink-displacement puzzle
+
+George played the plain wash → paint → cross loop below and rejected it as having
+no puzzle in it. Read against his rejection of the finite-pigment build earlier
+the same day, the two together give the standing design rule for this chapter:
+
+**He rejects bookkeeping, not thinking.** Collecting, budgeting and filling to a
+threshold are out permanently. A decision with a consequence is what was missing.
+So the input stays trivial — two verbs, one click each, no precision, no
+inventory, no meters, no timers — and the difficulty lives in the consequences.
+
+The rule that carries the chapter: **washing does not destroy ink, it moves it.**
+Every washable mark has a drain channel drawn on the sheet. Ink that reaches a
+hole falls through and is gone; ink that reaches paper stands there as a new blot;
+ink that crosses a bridge the player has already painted dissolves it on the way
+past. Everything is visible from the first frame, so the puzzle is which order to
+act in — never what is hidden. Every wrong order costs a repeat, never a restart,
+and an exhaustive search over the reachable state space is kept in the test suite
+to prove no ordering can strand the player.
+
+Bay A teaches the rule with no way to fail it, bay B springs the trap, bay C is
+the exam. See `docs/NEXT_TASK.md` for the runnable scope, the QA route, and the
+one escalation lever held in reserve (saturating holes) if this proves too gentle.
+
+## Superseded 2026-08-11 (morning) — the plain wash/paint/cross loop
+
+Retained as history: this is the build George rejected as "just repeated wash and
+paint". The paper carriage remains Chapter 4's setting, but the proposed
+finite-pigment puzzle was replaced after play-testing. Paint is unlimited: a brief
+PAINT on a large, labelled hidden route makes that entire route real. WASH removes
+a large, labelled paper barrier and reveals the next route. The player repeats the
+visible loop — **wash barrier → paint path → cross** — rather than collecting or
+spending paint. The following 2026-08-07 record is retained only as superseded
+design history.
+
 ## Proposed 2026-08-07: Chapter 4 is a paper car you have to spend
 
 George set the premise directly: chapter 4 is a paper-ish world, and the mechanic

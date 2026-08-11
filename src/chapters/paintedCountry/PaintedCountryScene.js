@@ -1,28 +1,25 @@
 import Phaser from 'phaser';
 import {
   BAY_TITLES,
-  CEILING_WALK,
   CEILING_Y,
-  FLOAT,
+  DRAIN_PATHS,
   FLOOR_RUNS,
   FLOOR_Y,
   FOLDS,
   GAP_A,
   GAP_C,
-  GRAVITY,
-  INVERT_ZONE,
   JUMP_VELOCITY,
-  LEDGE_B,
   MOVE_SPEED,
   RACK_Y,
   REACH,
+  SUMP,
   TROUGH_B,
   VIEW,
   WAINSCOT_Y,
   WINDOWS,
   WORLD,
 } from './carLayout.js';
-import { createPaintedCar, PIGMENT, SLOT_CAPACITY, SOLID_AT } from './paintedCarModel.js';
+import { ACTION, ACTION_HOLD_SECONDS, KIND, createPaintedCar } from './paintedCarModel.js';
 import { PAPER } from './paperPalette.js';
 import {
   buildPaperGrain,
@@ -33,24 +30,15 @@ import {
   paintedFill,
 } from './paperSurface.js';
 
-// Chapter 4 // THE PAINTED COUNTRY — three bays, seven beats.
+// Chapter 4 // THE PAINTED COUNTRY — three bays, one readable route loop.
 //
 // The carriage is an unfinished draughtsman's drawing on warm off-white paper,
-// with the Painted Country folded out of the same sheet beyond the windows.
-// PAINT turns a drawn construction line into a surface that bears weight; WASH
-// turns a surface back into a line and returns its pigment to the brush. There
-// is only so much pigment, so every road the player builds is taken out of a
-// picture.
+// with the Painted Country folded out of the same sheet beyond the windows. A
+// WASH barrier hides a PAINT route. The player makes the route real, crosses it,
+// and repeats — no resource budget, precision fill, or inventory calculation.
 //
 // This file owns pixels and input only. Every rule lives in paintedCarModel.js,
 // which is pure and tested. If they disagree, the model is right.
-
-const PIGMENT_COLOR = {
-  [PIGMENT.BONE]: PAPER.boneBlack,
-  [PIGMENT.INDIGO]: PAPER.indigo,
-  [PIGMENT.VERDIGRIS]: PAPER.verdigris,
-  [PIGMENT.CLOTH]: PAPER.bookCloth,
-};
 
 const DEPTH = {
   SHEET: 0,
@@ -78,7 +66,6 @@ export class PaintedCountryScene extends Phaser.Scene {
     this.motes = [];
     this.boilTargets = [];
     this.car = createPaintedCar();
-    this.inverted = false;
 
     this.cameras.main.setBackgroundColor(PAPER.sheet);
     this.cameras.main.setBounds(0, 0, WORLD.w, WORLD.h);
@@ -101,6 +88,7 @@ export class PaintedCountryScene extends Phaser.Scene {
     this.regionInk = this.graphics(DEPTH.DRAWING + 1);
     this.waterLayer = this.graphics(DEPTH.WATER);
     this.brushCursor = this.graphics(DEPTH.CURSOR);
+    this.buildTargetLabels();
     this.input.mouse?.disableContextMenu();
 
     // Line boil on selected contours only, at 12fps over 60fps gameplay. Full
@@ -372,67 +360,67 @@ export class PaintedCountryScene extends Phaser.Scene {
   buildBayB() {
     const g = this.graphics(DEPTH.FIXTURE);
 
-    // The basin the panel was painted over.
+    // A washroom without a new mechanical sub-system: all its fixtures point
+    // toward the broad paper seal rather than asking the player to solve pipes.
     g.lineStyle(1.6, PAPER.graphite, 0.9);
     draftRect(g, this.rnd, 1032, 292, 112, 90, { overshoot: 6 });
     draftLine(g, this.rnd, 1032, 382, 1144, 382, { overshoot: 5 });
     draftLine(g, this.rnd, 1052, 382, 1052, FLOOR_Y, { overshoot: 4 });
     draftLine(g, this.rnd, 1124, 382, 1124, FLOOR_Y, { overshoot: 4 });
 
-    // The lamp the soot collects above.
+    // A hanging wash light gives the seal a stage-like pool of attention.
     g.lineStyle(1.4, PAPER.graphiteSoft, 0.9);
     draftLine(g, this.rnd, 1338, RACK_Y, 1338, 196, { overshoot: 4 });
     g.strokeCircle(1338, 208, 13);
 
-    // The supply pipe feeding the channel, and the channel's own bed.
-    g.lineStyle(1.5, PAPER.graphite, 0.85);
-    draftLine(g, this.rnd, 1144, 340, 1144, 404, { overshoot: 4 });
-    draftLine(g, this.rnd, 1144, 404, 1210, 404, { overshoot: 4 });
+    // Folded rails make the trough read as a deliberate missing strip of
+    // paper, with room for the bridge to become its clean completion.
+    g.lineStyle(1.5, PAPER.graphite, 0.82);
+    draftLine(g, this.rnd, 1280, 378, 1378, 414, { overshoot: 5 });
+    draftLine(g, this.rnd, 1606, 414, 1704, 378, { overshoot: 5 });
     g.lineStyle(1.2, PAPER.graphiteFaint, 0.85);
-    draftLine(g, this.rnd, 1210, 420, 1680, 424, { overshoot: 4, jitter: 1.1, segments: 12 });
+    draftLine(g, this.rnd, 1210, 420, 1770, 424, { overshoot: 4, jitter: 1.1, segments: 12 });
 
-    // The basin the water ends in, with the scuttle sitting on its floor.
+    // A paper laundry cart on the far side catches the eye after the crossing.
     g.lineStyle(1.5, PAPER.graphite, 0.85);
-    draftRect(g, this.rnd, 1640, 440, 130, 118, { overshoot: 5 });
-
-    // The vestibule ledge out of the bay: drawn, and already real — the child
-    // finished this one.
-    g.fillStyle(PAPER.sheetLow, 1);
-    g.fillRect(LEDGE_B.x, LEDGE_B.y, LEDGE_B.w, LEDGE_B.h);
-    g.lineStyle(1.7, PAPER.graphite, 0.9);
-    draftRect(g, this.rnd, LEDGE_B.x, LEDGE_B.y, LEDGE_B.w, LEDGE_B.h, { overshoot: 6 });
-    hatchRect(g, this.rnd, LEDGE_B.x, LEDGE_B.y + LEDGE_B.h, LEDGE_B.w, 22, { spacing: 8, alpha: 0.4 });
+    draftRect(g, this.rnd, 1690, 334, 124, 92, { overshoot: 6 });
+    draftLine(g, this.rnd, 1690, 364, 1814, 364, { overshoot: 4 });
+    [1714, 1790].forEach((x) => draftLine(g, this.rnd, x, 426, x, 444, { overshoot: 3 }));
   }
 
   buildBayC() {
     const g = this.graphics(DEPTH.FIXTURE);
 
-    // BEAT 6's decoy. It is the most carefully drawn thing in the bay, because
-    // the player has to want it before the paper is allowed to refuse it.
-    const cd = { x: 2120, y: 300, w: 64, h: 128 };
+    // A long-wall mural. It remains scenery now: the final route is a gift of
+    // the drawing, not something the player must cut out of a memory.
+    const cd = { x: 2070, y: 262, w: 136, h: 166 };
     g.lineStyle(1.5, PAPER.graphite, 0.8);
     draftRect(g, this.rnd, cd.x, cd.y, cd.w, cd.h, { overshoot: 6 });
-    draftRect(g, this.rnd, cd.x + 9, cd.y + 12, cd.w - 18, cd.h * 0.4, { overshoot: 3, jitter: 0.5 });
-    draftRect(g, this.rnd, cd.x + 9, cd.y + cd.h * 0.55, cd.w - 18, cd.h * 0.36, { overshoot: 3, jitter: 0.5 });
-    g.lineStyle(1.2, PAPER.graphiteSoft, 0.9);
-    g.strokeCircle(cd.x + cd.w - 14, cd.y + cd.h * 0.52, 3.4);
+    g.lineStyle(1.2, PAPER.graphiteSoft, 0.64);
+    draftLine(g, this.rnd, cd.x + 10, cd.y + 114, cd.x + 48, cd.y + 54, { overshoot: 3 });
+    draftLine(g, this.rnd, cd.x + 48, cd.y + 54, cd.x + 90, cd.y + 114, { overshoot: 3 });
+    draftLine(g, this.rnd, cd.x + 62, cd.y + 114, cd.x + 104, cd.y + 32, { overshoot: 3 });
+    draftLine(g, this.rnd, cd.x + 104, cd.y + 32, cd.x + 130, cd.y + 114, { overshoot: 3 });
 
-    // The mural's frame and the wall it is painted on. The picture itself is
-    // four regions, drawn from the model.
+    // The long wall's construction frame points toward the final paper seal.
     g.lineStyle(1.4, PAPER.graphiteSoft, 0.85);
-    draftRect(g, this.rnd, 2210, 190, 300, 250, { overshoot: 7 });
+    draftRect(g, this.rnd, 2180, 190, 300, 250, { overshoot: 7 });
+    hatchRect(g, this.rnd, 2200, 212, 260, 190, { spacing: 15, alpha: 0.13 });
 
-    // The ceiling door she drew up there, and the walkway it belongs to: both
-    // stay pencil until the player agrees to believe them.
-    g.lineStyle(1.2, PAPER.graphiteFaint, 0.9);
-    draftLine(g, this.rnd, CEILING_WALK.x, CEILING_WALK.y + CEILING_WALK.h, CEILING_WALK.x + CEILING_WALK.w, CEILING_WALK.y + CEILING_WALK.h, {
-      overshoot: 8,
-      jitter: 0.9,
-    });
-
-    // The coupling frame.
+    // The final vestibule is visible from the start of the bay, so reaching it
+    // reads as an arrival instead of an unexplained state change.
     g.lineStyle(1.7, PAPER.graphite, 0.9);
     draftRect(g, this.rnd, 2782, 292, 74, 146, { overshoot: 6 });
+    draftRect(g, this.rnd, 2794, 306, 50, 108, { overshoot: 3, jitter: 0.5 });
+    this.add
+      .text(2819, 270, 'VESTIBULE', {
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+        fontSize: '10px',
+        color: '#8d8579',
+        letterSpacing: 1.4,
+      })
+      .setOrigin(0.5, 0)
+      .setDepth(DEPTH.FIXTURE + 1);
   }
 
   buildThread() {
@@ -461,21 +449,25 @@ export class PaintedCountryScene extends Phaser.Scene {
       return object;
     };
 
-    this.staticSolids = [
-      ...FLOOR_RUNS.map((run) => solid(run.x, FLOOR_Y, run.w, 40)),
-      solid(LEDGE_B.x, LEDGE_B.y, LEDGE_B.w, LEDGE_B.h),
-    ];
+    this.staticSolids = FLOOR_RUNS.map((run) => solid(run.x, FLOOR_Y, run.w, 40));
 
-    // Bodies that exist only when the model says the paint bears weight.
-    this.paintedSolids = {};
-    ['beam-left', 'beam-right', 'trough-plank', 'ceiling-door'].forEach((id) => {
-      const region = this.car.byId(id);
-      this.paintedSolids[id] = solid(region.x, region.y, region.w, region.h);
+    // The two ends of the sheet are walls, not cliffs. Falling *through* the
+    // paper is a real move; walking off the end of the drawing is not, and it
+    // used to throw the player back down the car the instant they arrived.
+    this.staticSolids.push(
+      solid(-24, -400, 24, WORLD.h + 500),
+      solid(WORLD.w, -400, 24, WORLD.h + 500),
+    );
+
+    // Every mark that can ever be solid owns one body, switched on and off from
+    // the model each frame. A seal blocks until washed, a blot blocks whenever
+    // ink is standing in it, and a route bears weight once it has been painted.
+    // The grate is drawing only — the floor there is unbroken.
+    this.targetSolids = {};
+    this.car.state.regions.forEach((region) => {
+      if (region.kind === KIND.SUMP) return;
+      this.targetSolids[region.id] = solid(region.x, region.y, region.w, region.h);
     });
-    // The ceiling door is a doorway, not a floor; what you actually walk on up
-    // there is the walkway it belongs to.
-    this.ceilingWalk = solid(CEILING_WALK.x, CEILING_WALK.y, CEILING_WALK.w, CEILING_WALK.h);
-    this.floatBody = solid(FLOAT.x, FLOAT.raisedY, FLOAT.w, FLOAT.h);
   }
 
   buildPlayer() {
@@ -487,9 +479,7 @@ export class PaintedCountryScene extends Phaser.Scene {
     this.walker.body.setCollideWorldBounds(false);
     [
       ...this.staticSolids,
-      ...Object.values(this.paintedSolids),
-      this.ceilingWalk,
-      this.floatBody,
+      ...Object.values(this.targetSolids),
     ].forEach((object) => this.physics.add.collider(this.walker, object));
 
     this.figure = this.graphics(DEPTH.FIGURE);
@@ -540,11 +530,17 @@ export class PaintedCountryScene extends Phaser.Scene {
         .setDepth(DEPTH.HUD);
 
     fixed(26, 28, 'A / D  or  ← →   walk        SPACE   jump        R   start over', '#a49c8d');
-    fixed(26, 44, 'HOLD LEFT-CLICK   paint        HOLD RIGHT-CLICK   wash', '#a49c8d');
-    // The objective gets its own line. Sharing one with the controls meant the
-    // two collided the moment a sentence ran long.
+    fixed(26, 44, '∞ PAINT    LEFT-CLICK  make a bridge    RIGHT-CLICK  wash ink — it MOVES, it never vanishes', '#a49c8d');
+    // Every rule is visible before the player needs it. The objective states the
+    // rule they are up against, never the click to make next.
     this.objective = fixed(26, 68, '', '#5c574f', 12);
     this.bayLabel = fixed(VIEW.w - 26, 28, '', '#a49c8d', 11, 1);
+    // One transient line for the things that happen TO the player, so a
+    // dissolved bridge or a wrong button is never silent. It carries its own
+    // scrap of paper: the drawn ceiling rule runs straight through this line
+    // and would otherwise read as a strikethrough.
+    this.flash = fixed(26, 86, '', '#b4453a', 12);
+    this.flash.setPadding(7, 4, 7, 4).setBackgroundColor('#f7f4ec').setAlpha(0);
 
     // Bay names live in the world, painted on the carriage lining.
     BAY_TITLES.forEach(({ x, title }) =>
@@ -554,150 +550,296 @@ export class PaintedCountryScene extends Phaser.Scene {
     );
   }
 
+  // A route's label sits over the end the player walks up to, not the middle:
+  // the middle of a long bridge is further away than the arm can reach, and a
+  // prompt you cannot act on is worse than no prompt at all.
+  labelAnchor(region) {
+    if (region.kind === KIND.ROUTE) return { x: region.x + 78, y: region.y - 48 };
+    if (region.kind === KIND.BLOT) return { x: region.x + region.w / 2, y: region.y + region.h * 0.3 };
+    return { x: region.x + region.w / 2, y: region.y + region.h * 0.28 };
+  }
+
+  buildTargetLabels() {
+    const mono = 'ui-monospace, SFMono-Regular, Menlo, monospace';
+    this.targetLabels = {};
+    this.car.state.regions.forEach((region) => {
+      if (region.kind === KIND.SUMP) return;
+      const isRoute = region.kind === KIND.ROUTE;
+      const at = this.labelAnchor(region);
+      const text = this.add
+        .text(at.x, at.y, '', {
+          fontFamily: mono,
+          fontSize: isRoute ? '11px' : '10px',
+          color: isRoute ? '#2f8c9e' : '#f7f4ec',
+          align: 'center',
+          lineSpacing: 3,
+          letterSpacing: 1.4,
+        })
+        .setOrigin(0.5, 0)
+        .setDepth(DEPTH.GRAIN + 1);
+      this.targetLabels[region.id] = text;
+    });
+  }
+
+  updateTargetLabels() {
+    const pointer = this.input.activePointer;
+    const hovered = this.car.regionAt(pointer.worldX, pointer.worldY)?.id ?? null;
+    this.car.state.regions.forEach((region) => {
+      const label = this.targetLabels[region.id];
+      if (!label) return;
+
+      // A mark the player's verb would no longer change carries no prompt. A
+      // made bridge announces itself by being solid, and a dissolved one gets
+      // its label back — which is exactly the feedback that teaches the rule.
+      if (!this.car.isLive(region.id)) {
+        label.setVisible(false);
+        label.setScale(1);
+        return;
+      }
+
+      const active = hovered === region.id;
+      const inReach =
+        active && Phaser.Math.Distance.Between(this.walker.x, this.walker.y, pointer.worldX, pointer.worldY) <= REACH;
+
+      // A target the player cannot touch yet must never read as a button. The
+      // label says what is still needed instead, and dims, so "walk closer"
+      // is learned from the world rather than discovered by clicking nothing.
+      const isPaint = region.action === ACTION.PAINT;
+      const reachable = this.regionReachable(region);
+      label.setVisible(true);
+      label.setText(
+        reachable
+          ? `${isPaint ? 'LEFT-CLICK' : 'RIGHT-CLICK'}\n${region.prompt}`
+          : `STEP CLOSER TO\n${region.prompt}`,
+      );
+      label.setColor(isPaint ? '#2f8c9e' : '#f7f4ec');
+      label.setAlpha(reachable ? (inReach ? 1 : 0.92) : 0.5);
+      label.setScale(inReach ? 1.06 : 1);
+    });
+  }
+
+  // Measured to the label's own anchor, not to the nearest edge of the mark.
+  // The label is what the player aims at, so it must promise a click only when
+  // a click THERE would actually work. Erring the other way — saying "step
+  // closer" while a click at the very edge would have landed — costs nothing.
+  regionReachable(region) {
+    const at = this.labelAnchor(region);
+    return Phaser.Math.Distance.Between(this.walker.x, this.walker.y, at.x, at.y) <= REACH;
+  }
+
   // ================================================================= draw
 
   redraw() {
     const g = this.regionLayer;
     const ink = this.regionInk;
-    const water = this.waterLayer;
     g.clear();
     ink.clear();
-    water.clear();
+    this.waterLayer.clear();
     const rnd = makeRandom(0x31a9);
 
+    const pointer = this.input.activePointer;
+    const hovered = this.car.regionAt(pointer.worldX, pointer.worldY)?.id ?? null;
+
+    // Order matters: the grate and the channels lie under the marks they serve,
+    // so a mark can never hide its own consequence.
     this.car.state.regions.forEach((region) => {
-      if (region.hidden) return;
-      const color = PIGMENT_COLOR[region.pigment] ?? PAPER.boneBlack;
-      const solid = this.car.isSolid(region.id);
-
-      // Anything that can be built is always visible as construction line, so
-      // the player can see the plan before they can afford it.
-      if (region.paintable) {
-        ink.lineStyle(region.refusesPaint ? 1.1 : 1.6, region.refusesPaint ? PAPER.graphiteFaint : PAPER.graphite, region.refusesPaint ? 0.7 : 0.85);
-        draftRect(ink, rnd, region.x, region.y, region.w, region.h, { overshoot: 7, jitter: 0.9 });
-      }
-
-      if (region.coverage <= 0.01) return;
-
-      if (region.id === 'channel') {
-        this.drawWater(water, rnd, region);
-        return;
-      }
-      if (region.id === 'soot-spill' || region.id === 'settling-pan' || region.id === 'lamp-soot') {
-        g.fillStyle(color, 0.42 * region.coverage);
-        g.fillEllipse(region.x + region.w / 2, region.y + region.h * 0.6, region.w * (0.6 + region.coverage * 0.4), region.h * 0.7);
-        return;
-      }
-
-      if (region.mural) {
-        this.drawMuralPart(g, rnd, region, color);
-        return;
-      }
-      if (region.refusesPaint) return;
-
-      const filled = region.bearsWeight ? region.w * region.coverage : region.w;
-      const alpha = region.bearsWeight ? 0.6 + region.coverage * 0.33 : 0.9 * region.coverage;
-      paintedFill(g, rnd, region.x, region.y, filled, region.h, color, { alpha });
-
-      if (region.bearsWeight && region.coverage < 1) {
-        g.fillStyle(color, 0.3);
-        g.fillEllipse(region.x + filled + 4, region.y + region.h / 2, 20, region.h + 3);
-      }
-      // A painted surface casts a hatched shadow; a drawn line does not. That
-      // one difference is how the player learns what bears weight.
-      if (solid) {
-        hatchRect(ink, rnd, region.x + 2, region.y + region.h + 3, filled - 4, 22, { spacing: 7, alpha: 0.45 });
+      if (region.kind === KIND.SUMP) this.drawSump(g, ink, rnd, region);
+    });
+    this.car.state.regions.forEach((region) => {
+      if (region.drainsTo && this.car.isLive(region.id)) {
+        this.drawChannel(ink, rnd, region, hovered === region.id);
       }
     });
+    this.car.state.regions.forEach((region) => {
+      if (region.kind === KIND.SEAL) this.drawSeal(g, ink, rnd, region);
+      else if (region.kind === KIND.BLOT) this.drawBlot(g, ink, rnd, region);
+      else if (region.kind === KIND.ROUTE) this.drawRoute(g, ink, rnd, region);
+    });
 
-    // The float only exists once the basin has filled.
-    const up = this.car.floatUp();
-    this.floatBody.body.enable = up;
-    if (up) {
-      paintedFill(g, rnd, FLOAT.x, FLOAT.raisedY, FLOAT.w, FLOAT.h, PAPER.graphiteSoft, { alpha: 0.85 });
-      water.fillStyle(PAPER.indigo, 0.3);
-      water.fillRect(1640, FLOAT.raisedY + FLOAT.h, 130, 558 - FLOAT.raisedY - FLOAT.h);
+    Object.entries(this.targetSolids).forEach(([id, object]) => {
+      object.body.enable = this.car.isSolid(id) || this.car.isBlocking(id);
+    });
+    this.updateTargetLabels();
+  }
+
+  // The grate. Whatever reaches it is gone — the one place in the car that
+  // destroys ink outright, and the thing bay A exists to demonstrate.
+  drawSump(g, ink, rnd, region) {
+    g.fillStyle(PAPER.boneBlack, 0.5);
+    g.fillRect(region.x, region.y, region.w, region.h);
+    ink.lineStyle(1.4, PAPER.graphite, 0.9);
+    draftRect(ink, rnd, region.x, region.y, region.w, region.h, { overshoot: 3, jitter: 0.6 });
+    ink.lineStyle(1.6, PAPER.sheetLow, 0.85);
+    for (let x = region.x + 8; x < region.x + region.w - 4; x += 11) {
+      draftLine(ink, rnd, x, region.y + 2, x, region.y + region.h - 2, { overshoot: 0, jitter: 0.4, segments: 2 });
+    }
+  }
+
+  // The channel a mark's ink will travel the instant it is washed. Drawn as a
+  // dashed run on the sheet with a target at the far end, and lit up on hover,
+  // because the whole puzzle depends on the player seeing the consequence
+  // BEFORE they commit to the wash.
+  drawChannel(ink, rnd, region, lit) {
+    const path = DRAIN_PATHS[region.id];
+    if (!path || path.length < 2) return;
+    const target = this.car.byId(region.drainsTo);
+    const dissolves = target?.kind === KIND.ROUTE && target.painted;
+
+    // A channel that is about to cross a bridge the player has made turns to
+    // warning colour. Nothing is hidden and nothing is punished silently.
+    const color = dissolves ? PAPER.fault : lit ? PAPER.cyan : PAPER.indigo;
+    const alpha = lit || dissolves ? 0.85 : 0.34;
+    ink.lineStyle(lit || dissolves ? 2 : 1.4, color, alpha);
+
+    for (let i = 0; i < path.length - 1; i += 1) {
+      const [x1, y1] = path[i];
+      const [x2, y2] = path[i + 1];
+      const length = Math.hypot(x2 - x1, y2 - y1);
+      const steps = Math.max(1, Math.round(length / 13));
+      for (let s = 0; s < steps; s += 1) {
+        const a = s / steps;
+        const b = Math.min(1, (s + 0.55) / steps);
+        draftLine(
+          ink,
+          rnd,
+          x1 + (x2 - x1) * a,
+          y1 + (y2 - y1) * a,
+          x1 + (x2 - x1) * b,
+          y1 + (y2 - y1) * b,
+          { overshoot: 0, jitter: 0.5, segments: 1 },
+        );
+      }
     }
 
-    Object.entries(this.paintedSolids).forEach(([id, object]) => {
-      object.body.enable = this.car.isSolid(id);
-    });
-    this.ceilingWalk.body.enable = this.car.isSolid('ceiling-door');
-    if (this.ceilingWalk.body.enable) {
-      paintedFill(g, rnd, CEILING_WALK.x, CEILING_WALK.y, CEILING_WALK.w, CEILING_WALK.h, PAPER.boneBlack, {
+    // Where it lands.
+    const [ex, ey] = path[path.length - 1];
+    ink.lineStyle(lit || dissolves ? 2 : 1.4, color, alpha);
+    ink.strokeCircle(ex, ey, lit || dissolves ? 8 : 6);
+    draftLine(ink, rnd, ex - 5, ey - 9, ex, ey - 2, { overshoot: 0, jitter: 0.4, segments: 1 });
+    draftLine(ink, rnd, ex + 5, ey - 9, ex, ey - 2, { overshoot: 0, jitter: 0.4, segments: 1 });
+  }
+
+  // Ink standing where it landed. Taller than the player can jump, so it is a
+  // problem to be solved rather than an obstacle to be dodged.
+  drawBlot(g, ink, rnd, region) {
+    if (!region.inked) {
+      // The empty basin stays drawn, faintly. The player can see where this
+      // bay's ink would end up before any of it has moved.
+      ink.lineStyle(1.2, PAPER.graphiteFaint, 0.5);
+      draftRect(ink, rnd, region.x, region.y + region.h - 26, region.w, 26, { overshoot: 4, jitter: 1.1 });
+      return;
+    }
+
+    const remaining = Math.max(0, 1 - region.progress);
+    const wetY = region.y + region.h * region.progress;
+    g.fillStyle(PAPER.indigo, 0.12 + region.progress * 0.2);
+    g.fillRect(region.x - 5, region.y - 5, region.w + 10, region.h + 10);
+    if (remaining > 0.01) {
+      paintedFill(g, rnd, region.x + 2, wetY + 2, region.w - 4, region.h * remaining - 4, PAPER.boneBlack, {
         alpha: 0.9,
       });
     }
+    ink.lineStyle(2, PAPER.graphite, 0.9);
+    draftRect(ink, rnd, region.x, region.y, region.w, region.h, { overshoot: 5, jitter: 1.6 });
+    ink.lineStyle(2, PAPER.cyan, 0.66);
+    draftLine(ink, rnd, region.x - 10, wetY, region.x + region.w + 10, wetY, {
+      overshoot: 0,
+      jitter: 1.2,
+      segments: 5,
+    });
+
+    const at = this.labelAnchor(region);
+    g.fillStyle(PAPER.bookCloth, 0.94);
+    g.fillRoundedRect(region.x - 12, at.y - 5, region.w + 24, 44, 3);
+    ink.lineStyle(1.3, PAPER.sheetHigh, 0.88);
+    ink.strokeRoundedRect(region.x - 12, at.y - 5, region.w + 24, 44, 3);
   }
 
-  // The mural is a picture of the country the player has been watching through
-  // the windows all car. Each part is drawn as the thing it is, so washing one
-  // takes a recognisable piece of the memory away rather than clearing a
-  // rectangle.
-  drawMuralPart(g, rnd, region, color) {
-    const a = region.coverage;
-    const { x, y, w, h } = region;
-    g.fillStyle(color, 0.86 * a);
+  drawSeal(g, ink, rnd, region) {
+    const remaining = Math.max(0, 1 - region.progress);
+    const wetY = region.y + region.h * region.progress;
 
-    if (region.id === 'mural-hill') {
-      g.beginPath();
-      g.moveTo(x, y + h);
-      g.lineTo(x + w * 0.3, y + h * 0.16);
-      g.lineTo(x + w * 0.52, y + h);
-      g.closePath();
-      g.fillPath();
-      g.beginPath();
-      g.moveTo(x + w * 0.4, y + h);
-      g.lineTo(x + w * 0.72, y);
-      g.lineTo(x + w, y + h);
-      g.closePath();
-      g.fillPath();
+    // A washed seal is *gone*, not merely switched off. Leaving the slab and
+    // its now-empty label standing in the doorway made the car look blocked
+    // when it was open, which is the one thing this drawing must never do.
+    // What stays is a damp ghost and the torn lip the paper came away from.
+    if (region.washed) {
+      g.fillStyle(PAPER.indigo, 0.05);
+      g.fillRect(region.x, region.y, region.w, region.h);
+      ink.lineStyle(1.1, PAPER.deckle, 0.5);
+      [region.x, region.x + region.w].forEach((x) =>
+        draftLine(ink, rnd, x, region.y, x, region.y + region.h, {
+          overshoot: 0,
+          jitter: 2.4,
+          segments: 9,
+        }),
+      );
       return;
     }
-    if (region.id === 'mural-house') {
-      const roof = h * 0.34;
-      g.fillRect(x + w * 0.1, y + roof, w * 0.8, h - roof);
-      g.beginPath();
-      g.moveTo(x, y + roof);
-      g.lineTo(x + w * 0.5, y);
-      g.lineTo(x + w, y + roof);
-      g.closePath();
-      g.fillPath();
-      // The doorway she stood in, left as paper.
-      g.fillStyle(PAPER.sheetHigh, 0.8 * a);
-      g.fillRect(x + w * 0.38, y + h * 0.55, w * 0.24, h * 0.45);
-      return;
+
+    // The blue wet fringe means WASH before the player has ever pressed the
+    // button. The large dark sheet means physical obstruction, not decoration.
+    g.fillStyle(PAPER.indigo, 0.14 + region.progress * 0.24);
+    g.fillRect(region.x - 6, region.y - 6, region.w + 12, region.h + 12);
+    if (remaining > 0.01) {
+      paintedFill(g, rnd, region.x + 3, wetY + 2, region.w - 6, region.h * remaining - 4, PAPER.boneBlack, {
+        alpha: 0.88,
+      });
+      hatchRect(ink, rnd, region.x + 6, wetY + 6, region.w - 12, Math.max(4, region.h * remaining - 12), {
+        spacing: 10,
+        alpha: 0.36,
+        flip: true,
+      });
     }
-    if (region.id === 'mural-river') {
-      g.beginPath();
-      g.moveTo(x, y + h * 0.5);
-      for (let i = 0; i <= 8; i += 1) {
-        g.lineTo(x + (w * i) / 8, y + h * (0.34 + 0.2 * Math.sin(i * 1.2)));
-      }
-      g.lineTo(x + w, y + h);
-      g.lineTo(x, y + h);
-      g.closePath();
-      g.fillPath();
-      return;
-    }
-    // The figure standing in the doorway.
-    g.fillCircle(x + w * 0.5, y + h * 0.2, w * 0.16);
-    g.fillRect(x + w * 0.34, y + h * 0.3, w * 0.32, h * 0.42);
-    g.fillRect(x + w * 0.38, y + h * 0.7, w * 0.1, h * 0.3);
-    g.fillRect(x + w * 0.54, y + h * 0.7, w * 0.1, h * 0.3);
+    ink.lineStyle(2.2, PAPER.graphite, 0.92);
+    draftRect(ink, rnd, region.x, region.y, region.w, region.h, { overshoot: 6, jitter: 0.7 });
+    ink.lineStyle(2, PAPER.cyan, 0.68);
+    draftLine(ink, rnd, region.x - 12, wetY, region.x + region.w + 12, wetY, { overshoot: 0, jitter: 1.3, segments: 7 });
+
+    const tagY = region.y + region.h * 0.25;
+    g.fillStyle(PAPER.bookCloth, 0.94);
+    g.fillRoundedRect(region.x + 8, tagY, region.w - 16, 50, 3);
+    ink.lineStyle(1.3, PAPER.sheetHigh, 0.88);
+    ink.strokeRoundedRect(region.x + 8, tagY, region.w - 16, 50, 3);
   }
 
-  drawWater(g, rnd, region) {
-    const w = region.w * Math.min(1, region.coverage / SOLID_AT);
-    g.fillStyle(PAPER.indigo, 0.45);
-    g.fillRect(region.x, region.y, w, region.h);
-    g.lineStyle(1.4, PAPER.indigo, 0.7);
-    draftLine(g, rnd, region.x, region.y + 2, region.x + w, region.y + 2, { overshoot: 0, jitter: 1.4, segments: 12 });
-    if (!this.car.flowing()) return;
-    // Where the channel crosses the trough, the water falls.
-    g.fillStyle(PAPER.indigo, 0.32);
-    g.fillRect(TROUGH_B.x + 20, region.y + region.h, 12, 560 - region.y);
-    g.fillRect(1640, region.y + region.h, 10, 440 - region.y);
+  drawRoute(g, ink, rnd, region) {
+    const made = region.painted;
+    const progress = region.progress;
+    const pathY = region.y;
+
+    // A route starts as a conspicuous cyan blueprint, broad enough to see from
+    // across the bay. It is an invitation, never a needle-thin line to trace.
+    g.fillStyle(PAPER.sheetHigh, 0.64);
+    g.fillRect(region.x, pathY, region.w, region.h);
+    ink.lineStyle(2.3, made ? PAPER.indigo : PAPER.cyan, made ? 0.92 : 0.84);
+    draftRect(ink, rnd, region.x, pathY, region.w, region.h, { overshoot: 5, jitter: 0.55 });
+    for (let x = region.x + 10; x < region.x + region.w - 4; x += 28) {
+      ink.lineStyle(2, made ? PAPER.sheetHigh : PAPER.cyan, made ? 0.72 : 0.62);
+      draftLine(ink, rnd, x, pathY + 6, Math.min(x + 15, region.x + region.w - 5), pathY + 6, {
+        overshoot: 0,
+        jitter: 0.35,
+        segments: 2,
+      });
+    }
+
+    if (progress > 0) {
+      const wave = made ? region.w : Math.max(26, region.w * progress);
+      paintedFill(g, rnd, region.x, pathY, wave, region.h, PAPER.indigo, { alpha: 0.9 });
+      g.fillStyle(PAPER.cyan, 0.35);
+      g.fillRect(region.x, pathY + 3, wave, 4);
+    }
+    if (made) {
+      hatchRect(ink, rnd, region.x + 3, pathY + region.h + 3, region.w - 6, 22, { spacing: 8, alpha: 0.42 });
+    } else {
+      // The tag follows the label to the end the player walks up to.
+      const tagW = 196;
+      const tagX = this.labelAnchor(region).x - tagW / 2;
+      g.fillStyle(PAPER.sheetHigh, 0.94);
+      g.fillRoundedRect(tagX, pathY - 54, tagW, 43, 3);
+      ink.lineStyle(1.4, PAPER.cyan, 0.78);
+      ink.strokeRoundedRect(tagX, pathY - 54, tagW, 43, 3);
+    }
   }
 
   drawFigure() {
@@ -705,16 +847,10 @@ export class PaintedCountryScene extends Phaser.Scene {
     const x = Math.round(this.walker.x);
     g.clear();
 
-    // The figure is built in one local space measured UP from the feet, then
-    // the whole thing is flipped. Hand-flipping each rectangle is how the
-    // inverted player ended up drawn lying on their side.
-    const up = this.inverted ? -1 : 1;
-    const feetY = Math.round(this.walker.y + 29 * up);
-    const at = (dy) => feetY - dy * up;
-    const band = (lo, hi) => ({ y: up > 0 ? feetY - hi : feetY + lo, h: hi - lo });
-
-    const legs = band(0, 18);
-    const torso = band(18, 46);
+    const feetY = Math.round(this.walker.y + 29);
+    const at = (dy) => feetY - dy;
+    const legs = { y: feetY - 18, h: 18 };
+    const torso = { y: feetY - 46, h: 28 };
 
     g.fillStyle(PAPER.figure, 1);
     g.fillRect(x - 6, legs.y, 5, legs.h);
@@ -734,15 +870,12 @@ export class PaintedCountryScene extends Phaser.Scene {
     g.lineTo(tipX, tipY);
     g.strokePath();
 
-    // The two loaded pigments live on the ferrule, in world space. This chapter
-    // never opens a panel.
-    g.fillStyle(PAPER.graphiteFaint, 1);
+    // A single blue bead is the always-full brush. It stays visible even after
+    // several paths so the player never mistakes paint for a consumable.
+    g.fillStyle(PAPER.indigo, 0.95);
     g.fillCircle(tipX, tipY, 4.6);
-    this.car.state.brush.forEach((slot, i) => {
-      if (!slot.pigment || slot.load <= 0.01) return;
-      g.fillStyle(PIGMENT_COLOR[slot.pigment], 1);
-      g.fillCircle(tipX - Math.cos(angle) * (9 + i * 7), tipY - Math.sin(angle) * (9 + i * 7), 1.2 + (slot.load / SLOT_CAPACITY) * 3);
-    });
+    g.lineStyle(1.2, PAPER.sheetHigh, 0.8);
+    g.strokeCircle(tipX, tipY, 4.6);
   }
 
   drawCursor() {
@@ -753,9 +886,16 @@ export class PaintedCountryScene extends Phaser.Scene {
     if (!region) return;
     const inReach =
       Phaser.Math.Distance.Between(this.walker.x, this.walker.y, pointer.worldX, pointer.worldY) <= REACH;
-    const can = inReach && (region.paintable || region.washable);
-    g.lineStyle(1.4, can ? PAPER.cyan : PAPER.graphiteFaint, can ? 0.9 : 0.45);
-    g.strokeRect(region.x - 4, region.y - 4, region.w + 8, region.h + 8);
+    const color = region.action === ACTION.PAINT ? PAPER.cyan : PAPER.indigo;
+    g.fillStyle(color, inReach ? 0.1 : 0.035);
+    g.fillRect(region.x - 8, region.y - 8, region.w + 16, region.h + 16);
+    g.lineStyle(inReach ? 2.4 : 1.4, inReach ? color : PAPER.graphiteFaint, inReach ? 0.96 : 0.48);
+    g.strokeRect(region.x - 6, region.y - 6, region.w + 12, region.h + 12);
+    if (inReach) {
+      const radius = 11 + Math.sin(this.time.now / 90) * 1.5;
+      g.lineStyle(1.8, color, 0.9);
+      g.strokeCircle(pointer.worldX, pointer.worldY, radius);
+    }
     if (!inReach) {
       g.lineStyle(1, PAPER.graphiteFaint, 0.35);
       g.lineBetween(this.walker.x, this.walker.y, pointer.worldX, pointer.worldY);
@@ -783,36 +923,18 @@ export class PaintedCountryScene extends Phaser.Scene {
 
     body.setVelocityX(left && !right ? -MOVE_SPEED : right && !left ? MOVE_SPEED : 0);
 
-    // BEAT 6. Inside the band under the door she drew on the ceiling, and only
-    // once that door is real, the car has the drawing's gravity rather than the
-    // player's. You do not get to correct someone's memory to make it
-    // convenient; you get to walk on it.
-    const inZone =
-      this.car.isSolid('ceiling-door') &&
-      this.walker.x > INVERT_ZONE.x &&
-      this.walker.x < INVERT_ZONE.x + INVERT_ZONE.w;
-    if (inZone !== this.inverted) {
-      this.inverted = inZone;
-      body.setGravityY(inZone ? -2 * GRAVITY : 0);
-      body.setVelocityY(0);
-    }
+    if (jump && body.blocked.down) body.setVelocityY(JUMP_VELOCITY);
 
-    const grounded = this.inverted ? body.blocked.up : body.blocked.down;
-    if (jump && grounded) body.setVelocityY(this.inverted ? -JUMP_VELOCITY : JUMP_VELOCITY);
-
-    // Falling through the paper is not death. There is simply nothing drawn
-    // there, and the player is put back at the head of the bay still holding
-    // whatever pigment they had.
+    // Falling through the paper is not death and never erases a washed barrier
+    // or made bridge. The player returns to the start of the current bay.
     if (this.walker.y > VIEW.h + 90) {
       this.car.fell();
       const bay = this.walker.x > 1920 ? 1990 : this.walker.x > 960 ? 1000 : 250;
       this.walker.setPosition(bay, 340);
       body.setVelocity(0, 0);
-      if (this.inverted) {
-        this.inverted = false;
-        body.setGravityY(0);
-      }
     }
+
+    if (this.walker.x > 2824) this.car.enterExit();
   }
 
   playCompletion() {
@@ -839,35 +961,41 @@ export class PaintedCountryScene extends Phaser.Scene {
     return this.walker.x > 1920 ? 'C' : this.walker.x > 960 ? 'B' : 'A';
   }
 
+  flashMessage(text, color = '#b4453a') {
+    if (!this.flash) return;
+    this.tweens.killTweensOf(this.flash);
+    this.flash.setText(text).setColor(color).setAlpha(1);
+    this.tweens.add({ targets: this.flash, alpha: 0, delay: 1600, duration: 800 });
+  }
+
+  // The objective never names a click. It states the rule the player is
+  // currently up against, because the puzzle is which order to act in and a
+  // step-by-step instruction would simply solve it for them.
   objectiveText() {
     const car = this.car;
-    if (car.state.complete) return 'the way on is open. it cost you the ' + (car.state.keptMural ? 'rest' : 'picture') + '.';
+    if (car.state.complete) return 'THE VESTIBULE IS OPEN — YOU MADE THE ROUTE.';
+
     const bay = this.bayId();
+    const here = car.state.regions.filter((region) => region.bay === bay);
+    const standingInk = here.filter((region) => car.isBlocking(region.id));
+    const madeRouteAtRisk = car.state.regions.find(
+      (region) =>
+        region.kind === KIND.ROUTE &&
+        region.painted &&
+        car.state.regions.some(
+          (source) => source.drainsTo === region.id && car.isLive(source.id),
+        ),
+    );
 
-    if (bay === 'A') {
-      if (!car.isSolid('beam-left')) return 'you took too much. the plank will not hold — paint it back.';
-      if (car.isSolid('beam-right')) return 'cross to the washroom';
-      if (car.totalLoad() <= 0.01 && car.freePigment('A') <= 0.01) {
-        return 'the loose soot is gone. the only black left is under your feet.';
-      }
-      if (car.totalLoad() <= 0.01) return 'the brush is empty — wash pigment out of something';
-      return 'paint the drawn beam until it will bear weight';
-    }
+    // The single most useful thing the car can tell you, and only when it is
+    // actually true: something still holding ink will run over a bridge you made.
+    if (madeRouteAtRisk) return 'INK STILL TO MOVE WILL RUN ACROSS A BRIDGE YOU MADE.';
 
-    if (bay === 'B') {
-      if (car.byId('indigo-bottle').hidden) return 'something is painted over the basin';
-      if (car.floatUp()) return 'the scuttle is up. climb to the vestibule.';
-      if (car.flowing()) return 'the water is running. it is taking the plank apart.';
-      if (car.isSolid('trough-plank')) return 'cross first. then fill the channel.';
-      return 'the trough is too wide to jump';
-    }
+    if (standingInk.length) return 'INK IS IN THE WAY. WASH IT AND WATCH WHERE IT GOES.';
 
-    if (car.isDone('coupling-door')) return 'the coupling holds';
-    if (!car.isSolid('ceiling-door')) {
-      return 'the far end is unfinished. she drew a door up there, in the wrong place.';
-    }
-    if (car.totalLoad() <= 0.01) return 'the door needs one full brush. only the mural is left.';
-    return 'paint the coupling';
+    const route = here.find((region) => region.kind === KIND.ROUTE && !region.painted);
+    if (route) return 'THE HOLE IS EMPTY OF INK — MAKE THE BRIDGE AND CROSS.';
+    return 'WALK ON TOWARD THE VESTIBULE.';
   }
 
   update(time, delta) {
@@ -879,16 +1007,35 @@ export class PaintedCountryScene extends Phaser.Scene {
     }
 
     this.stepBrush(dt);
-    this.car.update(dt);
     this.stepPlayer();
     this.redraw();
     this.drawFigure();
     this.drawCursor();
 
+    // One wash can raise several events at once — ink crossing a made bridge
+    // both dissolves it and then drains away. Say the most important one, or
+    // the consequence the player most needs to see gets overwritten by
+    // bookkeeping in the same frame.
+    const SAY = {
+      'route-dissolved': ['THE INK TOOK YOUR BRIDGE WITH IT.', '#b4453a', 4],
+      'wrong-tool': [null, '#c8892f', 3],
+      'blot-formed': ['THE INK LANDED. IT IS STILL IN THE CAR.', '#46618c', 2],
+      'ink-drained': ['THE INK WENT THROUGH THE HOLE. GONE.', '#6f9c8b', 1],
+    };
+    let best = null;
     this.car.drainEvents().forEach((event) => {
-      if (event.type === 'bay-complete') this.playCompletion();
-      if (event.type === 'paint-refused') this.showRefusal();
+      if (event.type === 'car-complete') this.playCompletion();
+      const say = SAY[event.type];
+      if (!say) return;
+      const text =
+        event.type === 'wrong-tool'
+          ? event.expected === ACTION.WASH
+            ? 'THAT ONE IS INK — RIGHT-CLICK TO WASH IT.'
+            : 'THAT ONE IS A BRIDGE — LEFT-CLICK TO PAINT IT.'
+          : say[0];
+      if (!best || say[2] > best.rank) best = { text, color: say[1], rank: say[2] };
     });
+    if (best) this.flashMessage(best.text, best.color);
 
     this.objective.setText(this.objectiveText());
     this.bayLabel.setText(`BAY ${this.bayId()}`);
@@ -906,42 +1053,18 @@ export class PaintedCountryScene extends Phaser.Scene {
     }
   }
 
-  // The refusal has to be seen, not read: pigment beads on the correct door and
-  // runs off it, leaving the paper as blank as it started.
-  showRefusal() {
-    if (this.refusing) return;
-    this.refusing = true;
-    const region = this.car.byId('correct-door');
-    const bead = this.add
-      .circle(region.x + region.w / 2, region.y + 14, 4, PAPER.boneBlack, 0.85)
-      .setDepth(DEPTH.PAINT + 1);
-    this.tweens.add({
-      targets: bead,
-      y: region.y + region.h + 26,
-      alpha: { from: 0.85, to: 0 },
-      duration: 700,
-      ease: 'Quad.easeIn',
-      onComplete: () => {
-        bead.destroy();
-        this.refusing = false;
-      },
-    });
-  }
-
   textState() {
     const pointer = this.input.activePointer;
     return {
       scene: 'PaintedCountry',
       bay: this.bayId(),
       objective: this.objectiveText(),
-      solidAt: SOLID_AT,
-      slotCapacity: SLOT_CAPACITY,
-      inverted: this.inverted,
+      gestureSeconds: ACTION_HOLD_SECONDS,
       ...this.car.snapshot(),
       player: {
         x: Math.round(this.walker.x),
         y: Math.round(this.walker.y),
-        onGround: this.inverted ? this.walker.body.blocked.up : this.walker.body.blocked.down,
+        onGround: this.walker.body.blocked.down,
       },
       pointer: {
         x: Math.round(pointer.worldX),

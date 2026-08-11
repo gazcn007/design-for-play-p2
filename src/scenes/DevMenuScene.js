@@ -46,7 +46,7 @@ const STANDALONE_SLICES = [
   },
   {
     label: 'CHAPTER 4  //  THE PAINTED COUNTRY',
-    detail: 'Playable. Bay A: paint a drawn beam solid, and find out where the pigment comes from.',
+    detail: 'Playable. Washed ink does not vanish, it moves — drain it before you build the bridge.',
     href: '/painted-country.html',
   },
 ];
