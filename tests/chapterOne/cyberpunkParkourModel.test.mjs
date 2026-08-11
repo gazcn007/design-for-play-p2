@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  FLYING_CAR_DEFS,
   MOVABLE_DEFS,
+  PARKOUR_WIDTH,
+  activateCheckpoint,
   beginDrag,
+  canActivateCheckpoint,
   canCompleteGoal,
   completeGoal,
   createParkourState,
@@ -20,6 +24,23 @@ test('first movable ladder spans the intentionally unaided-jump-proof ascent', (
   assert.equal(ladder.height, 180);
   assert.equal(ladder.y - ladder.height / 2, 170);
   assert.equal(ladder.y + ladder.height / 2, 350);
+});
+
+test('the existing route is preserved and the second act extends the course', () => {
+  assert.equal(PARKOUR_WIDTH, 8100);
+  assert.deepEqual(
+    MOVABLE_DEFS.slice(0, 4).map(({ id }) => id),
+    ['ladder-a', 'block-a', 'ladder-b', 'block-b'],
+  );
+  assert.deepEqual(
+    MOVABLE_DEFS.slice(4).map(({ id }) => id),
+    ['ladder-c', 'block-c', 'ladder-d', 'block-d'],
+  );
+  assert.deepEqual(
+    FLYING_CAR_DEFS.map(({ id }) => id),
+    ['car-a', 'car-b', 'car-c', 'car-d'],
+  );
+  assert.equal(MOVABLE_DEFS.find(({ id }) => id === 'ladder-d').y, 170);
 });
 
 test('legal horizontal placement commits and updates the traversable position', () => {
@@ -58,20 +79,47 @@ test('flying cars move autonomously, expose phase, and reverse at authored bound
   assert.equal(car.phase, 1);
 });
 
-test('goal requires both movable kinds and rides on both authored flying cars', () => {
+test('goal requires every old and new movable plus all four flying cars', () => {
   const state = createParkourState();
-  for (const [id, x] of [['ladder-a', 735], ['block-a', 420]]) {
+  for (const movable of state.movables) {
+    const x = movable.startX === movable.maxX ? movable.minX : movable.maxX;
+    const target = Math.abs(x - movable.startX) >= 12 ? x : movable.minX + 20;
+    const id = movable.id;
     beginDrag(state, id);
-    previewDrag(state, x);
+    previewDrag(state, target);
     finishDrag(state);
   }
   assert.equal(canCompleteGoal(state), false);
   assert.equal(completeGoal(state), false);
-  recordCarRide(state, 'car-a');
-  assert.equal(canCompleteGoal(state), false);
-  recordCarRide(state, 'car-b');
+  for (const id of ['car-a', 'car-b', 'car-c']) recordCarRide(state, id);
+  assert.equal(canCompleteGoal(state), false, 'the final new car remains mandatory');
+  recordCarRide(state, 'car-d');
   assert.equal(canCompleteGoal(state), true);
   assert.equal(completeGoal(state), true);
+});
+
+test('physically reaching the midpoint always activates it and preserves it after failure', () => {
+  const state = createParkourState();
+  assert.equal(canActivateCheckpoint(state), true);
+  assert.equal(activateCheckpoint(state), true);
+  assert.equal(canActivateCheckpoint(state), false);
+  assert.deepEqual(state.movedMovables, ['ladder-a', 'block-a', 'ladder-b', 'block-b']);
+  assert.deepEqual(state.riddenCars, ['car-a', 'car-b']);
+
+  beginDrag(state, 'block-c');
+  previewDrag(state, 5850);
+  finishDrag(state);
+  recordCarRide(state, 'car-c');
+  resetParkourState(state, 'spikes');
+  assert.equal(state.checkpointReached, true);
+  assert.deepEqual(state.movedMovables, ['ladder-a', 'block-a', 'ladder-b', 'block-b']);
+  assert.deepEqual(state.riddenCars, ['car-a', 'car-b']);
+  assert.equal(movableById(state, 'block-c').x, 5580);
+
+  resetParkourState(state, 'manual');
+  assert.equal(state.checkpointReached, false);
+  assert.deepEqual(state.movedMovables, []);
+  assert.deepEqual(state.riddenCars, []);
 });
 
 test('failure and manual reset restore movable collision positions and platform timing', () => {

@@ -1,6 +1,6 @@
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
-export const PARKOUR_WIDTH = 4300;
+export const PARKOUR_WIDTH = 8100;
 export const PARKOUR_HEIGHT = 720;
 
 export const MOVABLE_DEFS = Object.freeze([
@@ -46,6 +46,48 @@ export const MOVABLE_DEFS = Object.freeze([
     minX: 4040,
     maxX: 4145,
   },
+  {
+    id: 'ladder-c',
+    kind: 'ladder',
+    startX: 4380,
+    y: 270,
+    width: 48,
+    height: 180,
+    minX: 4380,
+    maxX: 4690,
+    dismountDirection: 1,
+  },
+  {
+    id: 'block-c',
+    kind: 'block',
+    startX: 5580,
+    y: 229,
+    width: 62,
+    height: 62,
+    minX: 5580,
+    maxX: 5850,
+  },
+  {
+    id: 'ladder-d',
+    kind: 'ladder',
+    startX: 6680,
+    y: 170,
+    width: 48,
+    height: 180,
+    minX: 6680,
+    maxX: 6950,
+    dismountDirection: 1,
+  },
+  {
+    id: 'block-d',
+    kind: 'block',
+    startX: 7420,
+    y: 329,
+    width: 62,
+    height: 62,
+    minX: 7420,
+    maxX: 7710,
+  },
 ]);
 
 export const FLYING_CAR_DEFS = Object.freeze([
@@ -71,10 +113,37 @@ export const FLYING_CAR_DEFS = Object.freeze([
     speed: 76,
     startDirection: 1,
   },
+  {
+    id: 'car-c',
+    minX: 5020,
+    maxX: 5470,
+    startX: 5020,
+    y: 205,
+    width: 132,
+    height: 30,
+    speed: 84,
+    startDirection: 1,
+  },
+  {
+    id: 'car-d',
+    minX: 6200,
+    maxX: 6550,
+    startX: 6200,
+    y: 105,
+    width: 132,
+    height: 30,
+    speed: 78,
+    startDirection: 1,
+  },
 ]);
 
 export const ROUTE_REQUIREMENTS = Object.freeze({
-  movableKinds: ['ladder', 'block'],
+  movables: MOVABLE_DEFS.map(({ id }) => id),
+  flyingCars: FLYING_CAR_DEFS.map(({ id }) => id),
+});
+
+export const MIDPOINT_REQUIREMENTS = Object.freeze({
+  movables: ['ladder-a', 'block-a', 'ladder-b', 'block-b'],
   flyingCars: ['car-a', 'car-b'],
 });
 
@@ -100,10 +169,12 @@ export function createParkourState() {
     flyingCars: FLYING_CAR_DEFS.map(makeFlyingCar),
     activeDragId: null,
     movedKinds: [],
+    movedMovables: [],
     riddenCars: [],
     resetting: false,
     resetCount: 0,
     lastFailure: null,
+    checkpointReached: false,
     goalComplete: false,
   };
 }
@@ -142,6 +213,9 @@ export function finishDrag(state, commit = true) {
     if (movable.moved && !state.movedKinds.includes(movable.kind)) {
       state.movedKinds.push(movable.kind);
     }
+    if (movable.moved && !state.movedMovables.includes(movable.id)) {
+      state.movedMovables.push(movable.id);
+    }
   } else {
     movable.x = movable.committedX;
   }
@@ -174,8 +248,30 @@ export function recordCarRide(state, id) {
 }
 
 export function canCompleteGoal(state) {
-  return ROUTE_REQUIREMENTS.movableKinds.every((kind) => state.movedKinds.includes(kind))
+  return ROUTE_REQUIREMENTS.movables.every((id) => state.movedMovables.includes(id))
     && ROUTE_REQUIREMENTS.flyingCars.every((id) => state.riddenCars.includes(id));
+}
+
+export function canActivateCheckpoint(state) {
+  return !state.checkpointReached;
+}
+
+export function activateCheckpoint(state) {
+  if (!canActivateCheckpoint(state)) return false;
+  // Reaching the physical midpoint is the proof that act one was completed.
+  // Normalize its route requirements here so an optional/unused obstacle from
+  // the opening half cannot silently prevent the checkpoint or final door.
+  state.movedKinds = [...new Set([...state.movedKinds, 'ladder', 'block'])];
+  state.movedMovables = [...new Set([
+    ...state.movedMovables,
+    ...MIDPOINT_REQUIREMENTS.movables,
+  ])];
+  state.riddenCars = [...new Set([
+    ...state.riddenCars,
+    ...MIDPOINT_REQUIREMENTS.flyingCars,
+  ])];
+  state.checkpointReached = true;
+  return true;
 }
 
 export function completeGoal(state) {
@@ -186,11 +282,27 @@ export function completeGoal(state) {
 
 export function resetParkourState(state, failure = 'manual') {
   const resetCount = state.resetCount + 1;
+  const restoreCheckpoint = failure !== 'manual' && state.checkpointReached;
+  const checkpointMovables = restoreCheckpoint
+    ? state.movables
+      .filter(({ id }) => MIDPOINT_REQUIREMENTS.movables.includes(id))
+      .map((movable) => ({ ...movable }))
+    : [];
   const fresh = createParkourState();
   Object.assign(state, fresh, {
     resetCount,
     lastFailure: failure,
   });
+  if (restoreCheckpoint) {
+    checkpointMovables.forEach((saved) => {
+      const movable = movableById(state, saved.id);
+      Object.assign(movable, saved, { dragging: false, previewLegal: true });
+    });
+    state.movedKinds = ['ladder', 'block'];
+    state.movedMovables = [...MIDPOINT_REQUIREMENTS.movables];
+    state.riddenCars = [...MIDPOINT_REQUIREMENTS.flyingCars];
+    state.checkpointReached = true;
+  }
   return state;
 }
 
@@ -217,10 +329,12 @@ export function parkourSnapshot(state) {
       phase: Number(car.phase.toFixed(3)),
     })),
     movedKinds: [...state.movedKinds],
+    movedMovables: [...state.movedMovables],
     riddenCars: [...state.riddenCars],
     resetting: state.resetting,
     resetCount: state.resetCount,
     lastFailure: state.lastFailure,
+    checkpointReached: state.checkpointReached,
     goalReady: canCompleteGoal(state),
     goalComplete: state.goalComplete,
   };

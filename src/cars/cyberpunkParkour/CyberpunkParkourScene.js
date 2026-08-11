@@ -6,6 +6,7 @@ import { WorldAssetLoader, getWorldAsset, queueWorldAsset } from '../../worlds/w
 import {
   PARKOUR_HEIGHT,
   PARKOUR_WIDTH,
+  activateCheckpoint,
   beginDrag,
   canCompleteGoal,
   completeGoal,
@@ -28,7 +29,12 @@ const RED = 0xff435f;
 const STEEL = 0x111522;
 const DEEP_STEEL = 0x060811;
 const VIOLET_STEEL = 0x25142d;
-const LEVEL_NEXT_AREA_SPAWN_Y = 400;
+const TRAIN_RETURN_X = 4700;
+const TRAIN_RETURN_Y = 400;
+const MIDPOINT_X = 4230;
+const MIDPOINT_ROOF_Y = 120;
+const FINAL_GOAL_X = 8040;
+const FINAL_GOAL_ROOF_Y = 180;
 
 const PLATFORM_DEFS = [
   { x: 0, y: 540, w: 460, h: 180, accent: CYAN, sign: 'START' },
@@ -45,12 +51,24 @@ const PLATFORM_DEFS = [
   { x: 3800, y: 500, w: 200, h: 220, accent: AMBER, sign: 'RETURN' },
   { x: 4000, y: 300, w: 300, h: 420, accent: CYAN, sign: 'POWER' },
   { x: 4180, y: 120, w: 120, h: 600, accent: PINK, sign: 'TOP' },
+  { x: 4300, y: 360, w: 420, h: 360, accent: AMBER, sign: 'CHECKPOINT' },
+  { x: 4720, y: 180, w: 360, h: 540, accent: CYAN, sign: 'SKYLINE' },
+  { x: 5080, y: 500, w: 440, h: 220, accent: AMBER, sign: 'RETURN' },
+  { x: 5520, y: 260, w: 360, h: 460, accent: PINK, sign: 'SIGNAL' },
+  { x: 5880, y: 80, w: 360, h: 640, accent: CYAN, sign: 'OVERRIDE' },
+  { x: 6240, y: 500, w: 360, h: 220, accent: AMBER, sign: 'RETURN' },
+  { x: 6600, y: 260, w: 380, h: 460, accent: PINK, sign: 'AIR LANE' },
+  { x: 6980, y: 80, w: 360, h: 640, accent: CYAN, sign: 'NIGHT GRID' },
+  { x: 7340, y: 360, w: 400, h: 360, accent: AMBER, sign: 'LAST STEP' },
+  { x: 7740, y: 180, w: 360, h: 540, accent: PINK, sign: 'EXIT' },
 ];
 
 const RECOVERY_LADDER_DEFS = [
   { id: 'recovery-a', x: 1210, y: 317.5, width: 48, height: 295, dismountDirection: -1 },
   { id: 'recovery-b', x: 2790, y: 445, width: 48, height: 110, dismountDirection: -1 },
   { id: 'recovery-c', x: 3820, y: 430, width: 48, height: 140, dismountDirection: -1 },
+  { id: 'recovery-d', x: 5100, y: 340, width: 48, height: 320, dismountDirection: -1 },
+  { id: 'recovery-e', x: 6260, y: 290, width: 48, height: 420, dismountDirection: -1 },
 ];
 
 const HAZARD_DEFS = [
@@ -58,6 +76,9 @@ const HAZARD_DEFS = [
   { x: 2040, y: 620, w: 160, h: 32, label: 'electrified-fall' },
   { x: 2380, y: 365, w: 96, h: 25, label: 'spikes' },
   { x: 3450, y: 620, w: 350, h: 32, label: 'electrified-fall' },
+  { x: 4840, y: 155, w: 72, h: 25, label: 'spikes' },
+  { x: 5620, y: 235, w: 96, h: 25, label: 'spikes' },
+  { x: 7160, y: 55, w: 72, h: 25, label: 'spikes' },
 ];
 
 export default class CyberpunkParkourScene extends Phaser.Scene {
@@ -81,7 +102,9 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     this.carViews = new Map();
     this.nextAreaLoader = new WorldAssetLoader(this);
 
-    this.physics.world.setBounds(0, 0, PARKOUR_WIDTH, PARKOUR_HEIGHT);
+    // Keep the camera on the authored composition while allowing high jumps
+    // to travel above the visible frame without hitting an invisible ceiling.
+    this.physics.world.setBounds(0, -600, PARKOUR_WIDTH, PARKOUR_HEIGHT + 600);
     this.cameras.main.setBounds(0, 0, PARKOUR_WIDTH, GAME_H);
 
     this.buildBackdrop();
@@ -92,6 +115,7 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     this.buildMovables();
     this.buildRecoveryLadders();
     this.buildFlyingCars();
+    this.buildMidpointCheckpoint();
     this.buildGoal();
     this.buildHud();
 
@@ -99,12 +123,19 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     this.player.clearTint().setTint(0xd7eaff).setDepth(50);
     this.player.body.setMaxVelocity(300, 1500);
 
-    this.physics.add.collider(this.player, this.fixedSolids);
+    this.platformCollider = this.physics.add.collider(
+      this.player,
+      this.fixedSolids,
+      null,
+      () => !this.climbing,
+      this,
+    );
     this.physics.add.collider(this.player, this.blockGroup);
     this.physics.add.collider(this.player, this.carGroup);
     this.physics.add.overlap(this.player, this.hazardGroup, (_player, hazard) => {
       this.failAndReset(hazard.failureLabel ?? 'hazard');
     });
+    this.physics.add.overlap(this.player, this.checkpointZone, () => this.tryActivateCheckpoint());
     this.physics.add.overlap(this.player, this.goalZone, () => this.tryCompleteGoal());
 
     this.cameras.main.startFollow(this.player, true, 0.1, 0.12);
@@ -227,6 +258,11 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
       { x: 2490, y: 358, w: 62, h: 32 },
       { x: 2850, y: 188, w: 54, h: 32 },
       { x: 4050, y: 268, w: 48, h: 32 },
+      { x: 4380, y: 328, w: 52, h: 32 },
+      { x: 5710, y: 228, w: 54, h: 32 },
+      { x: 6060, y: 48, w: 58, h: 32 },
+      { x: 6750, y: 228, w: 52, h: 32 },
+      { x: 7500, y: 328, w: 58, h: 32 },
     ].forEach((prop, index) => {
       this.add.rectangle(prop.x, prop.y, prop.w, prop.h, 0x100d19, 1)
         .setOrigin(0).setDepth(27).setStrokeStyle(2, index % 2 ? CYAN : PINK, 0.45);
@@ -241,6 +277,10 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
       { x: 1650, y: 210 },
       { x: 3180, y: 160 },
       { x: 4190, y: 120 },
+      { x: 4750, y: 180 },
+      { x: 5910, y: 80 },
+      { x: 7010, y: 80 },
+      { x: 7765, y: 180 },
     ].forEach(({ x, y }) => {
       for (let railX = x; railX < x + 94; railX += 30) {
         this.add.rectangle(railX, y - 27, 3, 27, 0x925b8c, 0.72).setOrigin(0).setDepth(24);
@@ -447,26 +487,38 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     g.destroy();
   }
 
-  buildGoal() {
-    this.add.rectangle(4230, 62, 88, 118, 0x090712, 1)
+  buildGate(x, roofY, label, labelColor) {
+    const doorY = roofY - 58;
+    const railY = roofY - 95;
+    this.add.rectangle(x, doorY, 88, 118, 0x090712, 1)
       .setDepth(26)
       .setStrokeStyle(3, PINK, 1);
-    this.add.rectangle(4230, 65, 52, 92, 0x471059, 0.72)
+    this.add.rectangle(x, doorY + 3, 52, 92, 0x471059, 0.72)
       .setDepth(27)
       .setStrokeStyle(2, 0xc571ff, 0.9);
-    this.add.rectangle(4230, 65, 15, 84, 0xc53cff, 0.25).setDepth(28);
-    this.add.circle(4247, 67, 3, CYAN, 0.95).setDepth(29);
-    this.add.rectangle(4163, 25, 134, 2, PINK, 0.55).setDepth(27);
-    [4165, 4198, 4231, 4264, 4297].forEach((x) => {
-      this.add.rectangle(x, 25, 2, 37, 0x9a478d, 0.68).setOrigin(0.5, 0).setDepth(27);
+    this.add.rectangle(x, doorY + 3, 15, 84, 0xc53cff, 0.25).setDepth(28);
+    this.add.circle(x + 17, doorY + 5, 3, CYAN, 0.95).setDepth(29);
+    this.add.rectangle(x - 67, railY, 134, 2, PINK, 0.55).setDepth(27);
+    [x - 65, x - 32, x + 1, x + 34, x + 67].forEach((railX) => {
+      this.add.rectangle(railX, railY, 2, 37, 0x9a478d, 0.68).setOrigin(0.5, 0).setDepth(27);
     });
-    this.add.text(4230, 171, 'GOAL  //  TOP BALCONY', {
+    this.add.text(x, roofY + 51, label, {
       fontFamily: MONO,
       fontSize: '12px',
-      color: '#45ff65',
+      color: labelColor,
       letterSpacing: 2,
     }).setOrigin(0.5).setDepth(28);
-    this.goalZone = this.add.zone(4230, 81, 96, 128);
+  }
+
+  buildMidpointCheckpoint() {
+    this.buildGate(MIDPOINT_X, MIDPOINT_ROOF_Y, 'CHECKPOINT  //  ROUTE CONTINUES', '#25e6ff');
+    this.checkpointZone = this.add.zone(MIDPOINT_X, MIDPOINT_ROOF_Y - 39, 96, 128);
+    this.physics.add.existing(this.checkpointZone, true);
+  }
+
+  buildGoal() {
+    this.buildGate(FINAL_GOAL_X, FINAL_GOAL_ROOF_Y, 'GOAL  //  FINAL BALCONY', '#45ff65');
+    this.goalZone = this.add.zone(FINAL_GOAL_X, FINAL_GOAL_ROOF_Y - 39, 96, 128);
     this.physics.add.existing(this.goalZone, true);
   }
 
@@ -479,7 +531,7 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
       backgroundColor: '#03050bdd',
       padding: { x: 9, y: 6 },
     }).setScrollFactor(0).setDepth(100);
-    this.objectiveText = this.add.text(GAME_W - 22, 18, 'REACH THE TOP BALCONY', {
+    this.objectiveText = this.add.text(GAME_W - 22, 18, 'REACH THE FINAL BALCONY', {
       fontFamily: MONO,
       fontSize: '11px',
       color: '#45ff65',
@@ -605,34 +657,35 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     const up = this.keys.up.isDown || this.keys.w.isDown;
     const down = this.keys.down.isDown || this.keys.s.isDown;
     const ladder = this.nearbyLadder();
-    if (!this.climbing && ladder && (up || down)) this.climbing = true;
-    if (this.climbing && !ladder) this.climbing = false;
+    if (!this.climbing && ladder && (up || down)) {
+      this.climbing = true;
+      this.platformCollider.active = false;
+    }
+    if (this.climbing && !ladder) {
+      this.climbing = false;
+      this.platformCollider.active = true;
+    }
 
     if (this.climbing && ladder) {
+      const velocityX = (right ? 110 : 0) - (left ? 110 : 0);
+      const velocityY = (down ? 145 : 0) - (up ? 145 : 0);
       this.player.body.setGravityY(-GRAVITY);
       this.player.setAcceleration(0, 0);
-      this.player.setVelocity((right ? 110 : 0) - (left ? 110 : 0), (down ? 145 : 0) - (up ? 145 : 0));
-      const top = ladder.y - ladder.height / 2;
+      this.player.setVelocity(velocityX, velocityY);
       const bottom = ladder.y + ladder.height / 2;
-      if (this.player.y <= top - 14) {
-        this.player.y = top - 22;
-        // Puzzle ladders mount the roof on their authored side. Recovery
-        // ladders can therefore return from a lower wrong-choice platform
-        // without pushing the player back into the same dead end.
-        const dismountX = ladder.x + (ladder.dismountDirection ?? 1) * (ladder.width / 2 + 10);
-        this.player.x = ladder.dismountDirection === -1
-          ? Math.min(this.player.x, dismountX)
-          : Math.max(this.player.x, dismountX);
-        this.player.body.updateFromGameObject();
+      // Ladder tops do not snap the player to an authored position. Horizontal
+      // input remains live, so the player steps naturally onto either roof.
+      if (this.player.y >= bottom + 12) {
         this.climbing = false;
-      } else if (this.player.y >= bottom + 12) {
-        this.climbing = false;
+        this.platformCollider.active = true;
       }
       this.player.updateVisualAnimation(false);
       this.player.applyScale();
       return;
     }
 
+    this.player.body.moves = true;
+    this.platformCollider.active = true;
     this.player.body.setGravityY(0);
     if (this.currentRideId) {
       // A confirmed flying car is real ground for movement feel and jump
@@ -661,7 +714,10 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     ];
     return ladders.find((movable) =>
       Math.abs(this.player.x - movable.x) <= movable.width / 2 + 18
-      && this.player.y >= movable.y - movable.height / 2 - 42
+      // Keep the ladder engaged above the roof long enough to clear its side
+      // collider and make a deliberate horizontal step. This replaces the old
+      // instantaneous x/y dismount snap with continuous movement.
+      && this.player.y >= movable.y - movable.height / 2 - 120
       && this.player.y <= movable.y + movable.height / 2 + 28) ?? null;
   }
 
@@ -744,14 +800,43 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     this.player.body.moves = true;
     this.player.body.allowGravity = true;
     this.player.body.setGravityY(0);
-    this.player.resetTo(70, 490, LANE_NEAR);
+    const respawn = this.state.checkpointReached
+      ? { x: MIDPOINT_X, y: MIDPOINT_ROOF_Y - 50 }
+      : { x: 70, y: 490 };
+    this.player.resetTo(respawn.x, respawn.y, LANE_NEAR);
     this.player.clearTint().setTint(0xd7eaff).setDepth(50);
     this.climbing = false;
+    this.player.body.enable = true;
+    this.platformCollider.active = true;
     this.currentRideId = null;
     this.lastRideId = null;
     this.finished = false;
+    this.objectiveText.setText(this.state.checkpointReached
+      ? 'CHECKPOINT ACTIVE  //  REACH FINAL BALCONY'
+      : 'REACH THE FINAL BALCONY');
     this.cameras.main.flash(180, 37, 230, 255);
-    this.showFeedback(reason === 'manual' ? 'LEVEL RESET' : 'CHECKPOINT RESTORED', '#25e6ff');
+    this.showFeedback(
+      reason === 'manual'
+        ? 'LEVEL RESET'
+        : this.state.checkpointReached
+          ? 'MIDPOINT RESTORED'
+          : 'CHECKPOINT RESTORED',
+      '#25e6ff',
+    );
+  }
+
+  tryActivateCheckpoint() {
+    if (this.state.checkpointReached || this.finished) return;
+    if (!activateCheckpoint(this.state)) {
+      if ((this.midpointRejectedUntil ?? 0) <= this.time.now) {
+        this.midpointRejectedUntil = this.time.now + 900;
+        this.showFeedback('FIRST ROUTE INCOMPLETE', '#ffbf26');
+      }
+      return;
+    }
+    this.objectiveText.setText('CHECKPOINT ACTIVE  //  REACH FINAL BALCONY');
+    this.showFeedback('MIDPOINT SAVED  //  ROUTE EXTENDED', '#25e6ff');
+    this.cameras.main.flash(260, 37, 230, 255);
   }
 
   tryCompleteGoal() {
@@ -776,11 +861,11 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
   beginNextAreaTransition() {
     if (this.transitioningToNextArea) return;
     this.transitioningToNextArea = true;
-    const nextWorldIndex = 2;
-    const nextWorld = STORY_WORLDS[nextWorldIndex];
-    if (!nextWorld) {
+    const trainWorldIndex = 0;
+    const trainWorld = STORY_WORLDS[trainWorldIndex];
+    if (!trainWorld) {
       this.transitioningToNextArea = false;
-      this.showFeedback('NEXT AREA UNAVAILABLE', '#ff435f');
+      this.showFeedback('TRAIN UNAVAILABLE', '#ff435f');
       return;
     }
 
@@ -788,20 +873,20 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
       this.time.delayedCall(850, resolve);
     });
     Promise.all([
-      this.nextAreaLoader.load(nextWorld.texture),
+      this.nextAreaLoader.load(trainWorld.texture),
       minimumSuccessHold,
     ]).then(() => {
       if (!this.sys.isActive()) return;
       this.scene.start('Game', {
-        startWorldIndex: nextWorldIndex,
-        spawnX: nextWorld.startX + 24,
-        spawnY: LEVEL_NEXT_AREA_SPAWN_Y,
+        startWorldIndex: trainWorldIndex,
+        spawnX: TRAIN_RETURN_X,
+        spawnY: TRAIN_RETURN_Y,
         spawnLane: LANE_NEAR,
       });
     }).catch((error) => {
       console.error(error);
       this.transitioningToNextArea = false;
-      this.showFeedback('NEXT AREA FAILED TO LOAD', '#ff435f');
+      this.showFeedback('TRAIN RETURN FAILED', '#ff435f');
     });
   }
 
@@ -815,6 +900,24 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     if (!import.meta.env.DEV) return;
     const qa = new URLSearchParams(window.location.search).get('qa');
     if (!qa?.startsWith('parkour-')) return;
+    const seedMovables = (ids) => {
+      ids.forEach((id) => {
+        const movable = movableById(this.state, id);
+        if (!movable) return;
+        movable.moved = true;
+        if (!this.state.movedMovables.includes(id)) this.state.movedMovables.push(id);
+        if (!this.state.movedKinds.includes(movable.kind)) this.state.movedKinds.push(movable.kind);
+      });
+    };
+    const seedFirstAct = () => {
+      seedMovables(['ladder-a', 'block-a', 'ladder-b', 'block-b']);
+      recordCarRide(this.state, 'car-a');
+      recordCarRide(this.state, 'car-b');
+    };
+    const seedMidpoint = () => {
+      seedFirstAct();
+      activateCheckpoint(this.state);
+    };
     if (qa === 'parkour-drag') {
       beginDrag(this.state, 'ladder-a');
       previewDrag(this.state, 40);
@@ -835,6 +938,30 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
       this.player.body.reset(3820, 465);
     } else if (qa === 'parkour-spikes') {
       this.player.body.reset(2260, 330);
+    } else if (qa === 'parkour-extension') {
+      // Do not seed route-use flags here: reaching the physical gate itself
+      // must activate the checkpoint even when an optional obstacle was unused.
+      this.player.body.reset(MIDPOINT_X - 40, MIDPOINT_ROOF_Y - 50);
+    } else if (qa === 'parkour-car-c') {
+      seedMidpoint();
+      const car = this.state.flyingCars.find(({ id }) => id === 'car-c');
+      this.player.body.reset(car.x, car.y - 38);
+    } else if (qa === 'parkour-car-d') {
+      seedMidpoint();
+      const car = this.state.flyingCars.find(({ id }) => id === 'car-d');
+      this.player.body.reset(car.x, car.y - 38);
+    } else if (qa === 'parkour-extension-drag') {
+      seedMidpoint();
+      this.player.body.reset(5480, 210);
+    } else if (qa === 'parkour-recovery-car-d') {
+      seedMidpoint();
+      this.player.body.reset(6260, 465);
+    } else if (qa === 'parkour-extension-spikes') {
+      seedMidpoint();
+      this.player.body.reset(4770, 130);
+    } else if (qa === 'parkour-high-spikes') {
+      seedMidpoint();
+      this.player.body.reset(7005, 30);
     } else if (qa === 'parkour-reset') {
       const ladder = movableById(this.state, 'ladder-a');
       beginDrag(this.state, ladder.id);
@@ -842,13 +969,18 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
       finishDrag(this.state, true);
       this.syncMovableView(ladder);
       this.resetParkour('spikes');
+    } else if (qa === 'parkour-final-approach') {
+      seedMovables(this.state.movables.map(({ id }) => id));
+      this.state.flyingCars.forEach(({ id }) => recordCarRide(this.state, id));
+      this.state.checkpointReached = true;
+      this.player.body.reset(FINAL_GOAL_X - 140, FINAL_GOAL_ROOF_Y - 50);
     } else if (qa === 'parkour-goal') {
-      this.state.movedKinds.push('ladder', 'block');
-      recordCarRide(this.state, 'car-a');
+      seedMovables(this.state.movables.map(({ id }) => id));
+      this.state.flyingCars.forEach(({ id }) => recordCarRide(this.state, id));
+      this.state.checkpointReached = true;
       // Leave the final ten metres live: browser QA walks through the actual
       // goal overlap instead of directly mutating completion state.
-      recordCarRide(this.state, 'car-b');
-      this.player.body.reset(4190, 70);
+      this.player.body.reset(FINAL_GOAL_X - 40, FINAL_GOAL_ROOF_Y - 50);
     }
   }
 
@@ -871,7 +1003,7 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     });
     return {
       id: 'chapter-one-cyberpunk-parkour',
-      objective: this.state.goalComplete ? 'goal balcony reached' : 'reach the top balcony',
+      objective: this.state.goalComplete ? 'goal balcony reached' : 'reach the final balcony',
       player: {
         x: Math.round(this.player.x),
         y: Math.round(this.player.y),
@@ -880,6 +1012,9 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
         state: this.climbing ? 'climbing' : this.currentRideId ? 'riding' : this.player.visualState,
         ridingCar: this.currentRideId,
         frozen: Boolean(this.player.frozen),
+        blockedUp: Boolean(this.player.body?.blocked.up),
+        bodyEnabled: Boolean(this.player.body?.enable),
+        platformCollisionActive: Boolean(this.platformCollider?.active),
       },
       recoveryLadders: (this.recoveryLadders ?? []).map((ladder) => ({
         id: ladder.id,
@@ -889,13 +1024,19 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
         dismountDirection: ladder.dismountDirection,
       })),
       lastPointerEvent: this.lastPointerEvent ?? null,
+      course: {
+        width: PARKOUR_WIDTH,
+        midpointX: MIDPOINT_X,
+        finalGoalX: FINAL_GOAL_X,
+      },
       transitioningToNextArea: this.transitioningToNextArea,
-      nextArea: STORY_WORLDS[2]
-        ? { index: 2, title: STORY_WORLDS[2].title, startX: STORY_WORLDS[2].startX }
+      nextArea: STORY_WORLDS[0]
+        ? { index: 0, title: STORY_WORLDS[0].title, startX: TRAIN_RETURN_X }
         : null,
       hazards: HAZARD_DEFS.map((hazard) => ({
         label: hazard.label,
         x: hazard.x,
+        y: hazard.y,
         width: hazard.w,
         visualSegments: Math.ceil(hazard.w / 24),
       })),

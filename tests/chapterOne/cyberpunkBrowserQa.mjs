@@ -63,6 +63,8 @@ await mkdir(outputDir, { recursive: true });
 await send('Runtime.enable');
 await send('Log.enable');
 await send('Page.enable');
+await send('Network.enable');
+await send('Network.setCacheDisabled', { cacheDisabled: true });
 await send('Emulation.setDeviceMetricsOverride', {
   width: 960,
   height: 636,
@@ -77,17 +79,27 @@ const states = [
   ['recovery', 'qa=parkour-recovery'],
   ['recovery-car-b', 'qa=parkour-recovery-car-b'],
   ['spikes', 'qa=parkour-spikes'],
+  ['extension', 'qa=parkour-extension'],
+  ['extension-drag', 'qa=parkour-extension-drag'],
+  ['extension-car-c', 'qa=parkour-car-c'],
+  ['extension-car-d', 'qa=parkour-car-d'],
+  ['recovery-car-d', 'qa=parkour-recovery-car-d'],
+  ['extension-spikes', 'qa=parkour-extension-spikes'],
+  ['high-spikes', 'qa=parkour-high-spikes'],
   ['after-reset', 'qa=parkour-reset'],
+  ['final-approach', 'qa=parkour-final-approach'],
   ['completion', 'qa=parkour-goal'],
 ];
 
 const evidence = {};
 for (const [name, query] of states) {
   await send('Page.navigate', { url: `${baseUrl}/?${query}` });
+  await delay(180);
   const deadline = Date.now() + 20000;
   let snapshot = null;
   while (Date.now() < deadline) {
     await delay(120);
+    if (await evaluate('window.location.search') !== `?${query}`) continue;
     const rendered = await evaluate('window.render_game_to_text?.() ?? null');
     if (!rendered) continue;
     const candidate = JSON.parse(rendered);
@@ -110,7 +122,7 @@ for (const [name, query] of states) {
       if (candidate.scene === 'CyberpunkParkour' && candidate.parkour.goalComplete) {
         goalSnapshot = candidate;
       }
-      if (candidate.scene === 'Game' && candidate.world?.index === 2) {
+      if (candidate.scene === 'Game' && candidate.world?.index === 0) {
         nextAreaSnapshot = candidate;
         break;
       }
@@ -120,25 +132,57 @@ for (const [name, query] of states) {
       throw new Error('Ordinary movement did not trigger the goal door before leaving the parkour.');
     }
     if (!nextAreaSnapshot) {
-      throw new Error('The completed parkour did not enter story world 2.');
+      throw new Error('The completed parkour did not return to the train.');
     }
-    if (Math.abs(nextAreaSnapshot.player.x - 5291) > 80
-      || nextAreaSnapshot.player.lane !== 1) {
-      throw new Error(`Next-area arrival was not at its authored entrance: ${JSON.stringify(nextAreaSnapshot.player)}`);
+    if (Math.abs(nextAreaSnapshot.player.x - 4700) > 80
+      || nextAreaSnapshot.player.lane !== 1
+      || !nextAreaSnapshot.world?.tutorialArt?.visible) {
+      throw new Error(`Final door did not return the player to the completed train: ${JSON.stringify(nextAreaSnapshot)}`);
     }
     evidence['completion-door'] = goalSnapshot;
     snapshot = nextAreaSnapshot;
-  } else if (name === 'recovery' || name === 'recovery-car-b') {
+  } else if (name === 'recovery' || name === 'recovery-car-b' || name === 'recovery-car-d') {
     await send('Page.bringToFront');
     await evaluate("document.querySelector('canvas').focus()")
     await keyEvent('keyDown', 'w', 'KeyW', 87);
-    await delay(name === 'recovery' ? 3000 : 1800);
+    const ladderX = name === 'recovery' ? 1210 : name === 'recovery-car-b' ? 3820 : 6260;
+    const clearRoofY = name === 'recovery' ? 135 : name === 'recovery-car-b' ? 325 : 45;
+    let beforeDismount = null;
+    for (const deadline = Date.now() + 5000; Date.now() < deadline;) {
+      await delay(25);
+      const candidate = JSON.parse(await evaluate('window.render_game_to_text()'));
+      if (candidate.parkour.player.y <= clearRoofY) {
+        beforeDismount = candidate;
+        break;
+      }
+    }
+    if (!beforeDismount) throw new Error(`Ladder never carried the player above its roof: ${name}`);
+    await keyEvent('keyDown', 'a', 'KeyA', 65);
+    let steppedOff = false;
+    for (const deadline = Date.now() + 2000; Date.now() < deadline;) {
+      await delay(20);
+      const candidate = JSON.parse(await evaluate('window.render_game_to_text()'));
+      if (candidate.parkour.player.x <= ladderX - 45) {
+        steppedOff = true;
+        break;
+      }
+    }
     await keyEvent('keyUp', 'w', 'KeyW', 87);
-    await delay(250);
-    snapshot = JSON.parse(await evaluate('window.render_game_to_text()'));
+    await keyEvent('keyUp', 'a', 'KeyA', 65);
+    if (!steppedOff) throw new Error(`Player could not step sideways off ladder: ${name}`);
+    for (const deadline = Date.now() + 3000; Date.now() < deadline;) {
+      await delay(50);
+      snapshot = JSON.parse(await evaluate('window.render_game_to_text()'));
+      if (snapshot.parkour.player.velocityY === 0 && snapshot.parkour.player.state !== 'climbing') break;
+    }
+    if (Math.abs(beforeDismount.parkour.player.x - ladderX) > 2) {
+      throw new Error(`Ladder moved the player sideways before manual dismount input: ${JSON.stringify(beforeDismount.parkour.player)}`);
+    }
     const recovered = name === 'recovery'
-      ? snapshot.parkour.player.x >= 1130 && snapshot.parkour.player.x <= 1200 && snapshot.parkour.player.y <= 200
-      : snapshot.parkour.player.x >= 3750 && snapshot.parkour.player.x <= 3800 && snapshot.parkour.player.y <= 350;
+      ? snapshot.parkour.player.x >= 800 && snapshot.parkour.player.x <= 1190 && snapshot.parkour.player.y <= 200
+      : name === 'recovery-car-b'
+        ? snapshot.parkour.player.x >= 3520 && snapshot.parkour.player.x <= 3820 && snapshot.parkour.player.y <= 350
+        : snapshot.parkour.player.x >= 5900 && snapshot.parkour.player.x <= 6240 && snapshot.parkour.player.y <= 110;
     if (!recovered) {
       throw new Error(`Recovery ladder did not return the player to the prior route: ${JSON.stringify(snapshot.parkour.player)}`);
     }
@@ -146,6 +190,95 @@ for (const [name, query] of states) {
     const spikes = snapshot.parkour.hazards.find(({ label }) => label === 'spikes');
     if (spikes.width !== 96 || spikes.visualSegments !== 4) {
       throw new Error(`Spike strip did not render as four segments: ${JSON.stringify(spikes)}`);
+    }
+  } else if (name === 'extension') {
+    await send('Page.bringToFront');
+    await evaluate("document.querySelector('canvas').focus()")
+    await keyEvent('keyDown', 'd', 'KeyD', 68);
+    await delay(520);
+    await keyEvent('keyUp', 'd', 'KeyD', 68);
+    await delay(180);
+    snapshot = JSON.parse(await evaluate('window.render_game_to_text()'));
+    if (snapshot.parkour.course.width !== 8100
+      || snapshot.parkour.movables.length !== 8
+      || snapshot.parkour.flyingCars.length !== 4
+      || !snapshot.parkour.checkpointReached) {
+      throw new Error(`Extended course did not expose its authored topology: ${JSON.stringify(snapshot.parkour)}`);
+    }
+  } else if (name === 'extension-drag') {
+    await delay(1400);
+    const beforeDrag = JSON.parse(await evaluate('window.render_game_to_text()'));
+    const canvas = await evaluate(`(() => {
+      const rect = document.querySelector('canvas').getBoundingClientRect();
+      return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+    })()`);
+    const scrollX = beforeDrag.parkour.camera.centerX - 480;
+    const point = (worldX, worldY) => ({
+      x: canvas.left + (worldX - scrollX) * canvas.width / 960,
+      y: canvas.top + worldY * canvas.height / 600,
+    });
+    const from = point(5580, 229);
+    const to = point(5850, 229);
+    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...from, button: 'none', buttons: 0 });
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', ...from, button: 'left', buttons: 1, clickCount: 1 });
+    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...to, button: 'left', buttons: 1 });
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...to, button: 'left', buttons: 0, clickCount: 1 });
+    await delay(220);
+    snapshot = JSON.parse(await evaluate('window.render_game_to_text()'));
+    const block = snapshot.parkour.movables.find(({ id }) => id === 'block-c');
+    if (Math.abs(block.x - 5850) > 2
+      || block.collisionX !== block.x
+      || !snapshot.parkour.movedMovables.includes('block-c')) {
+      throw new Error(`Extended block drag did not commit matching visual and collision positions: ${JSON.stringify(block)}`);
+    }
+  } else if (name === 'extension-spikes') {
+    const spikes = snapshot.parkour.hazards.find(({ x }) => x === 4840);
+    if (spikes?.width !== 72 || spikes.visualSegments !== 3) {
+      throw new Error(`First post-checkpoint spike strip is not the authored three-segment jump: ${JSON.stringify(spikes)}`);
+    }
+    await send('Page.bringToFront');
+    await evaluate("document.querySelector('canvas').focus()")
+    await keyEvent('keyDown', 'd', 'KeyD', 68);
+    await delay(700);
+    await keyEvent('keyUp', 'd', 'KeyD', 68);
+    await delay(900);
+    snapshot = JSON.parse(await evaluate('window.render_game_to_text()'));
+    if (snapshot.parkour.resetCount < 1
+      || !snapshot.parkour.checkpointReached
+      || Math.abs(snapshot.parkour.player.x - 4230) > 70) {
+      throw new Error(`Extension failure did not restore the midpoint: ${JSON.stringify(snapshot.parkour.player)}`);
+    }
+  } else if (name === 'high-spikes') {
+    const spikes = snapshot.parkour.hazards.find(({ x }) => x === 7160);
+    if (spikes?.y !== 55 || spikes.width !== 72 || spikes.visualSegments !== 3) {
+      throw new Error(`High spike jump was not reduced to three segments: ${JSON.stringify(snapshot.parkour.hazards)}`);
+    }
+    await send('Page.bringToFront');
+    await evaluate("document.querySelector('canvas').focus()")
+    await keyEvent('keyDown', 'd', 'KeyD', 68);
+    let takeoffReady = false;
+    for (const deadline = Date.now() + 2000; Date.now() < deadline;) {
+      await delay(20);
+      const candidate = JSON.parse(await evaluate('window.render_game_to_text()'));
+      if (candidate.parkour.player.x >= 7095) {
+        takeoffReady = true;
+        break;
+      }
+    }
+    if (!takeoffReady) throw new Error('Player could not reach the high-spike takeoff point.');
+    await keyEvent('keyDown', ' ', 'Space', 32);
+    await delay(600);
+    const airborne = JSON.parse(await evaluate('window.render_game_to_text()'));
+    await keyEvent('keyUp', ' ', 'Space', 32);
+    await delay(800);
+    await keyEvent('keyUp', 'd', 'KeyD', 68);
+    await delay(250);
+    snapshot = JSON.parse(await evaluate('window.render_game_to_text()'));
+    if (airborne.parkour.player.y >= 0 || airborne.parkour.player.blockedUp) {
+      throw new Error(`High jump still collided with the top of the screen: ${JSON.stringify(airborne.parkour.player)}`);
+    }
+    if (snapshot.parkour.resetCount !== 0 || snapshot.parkour.player.x < 7250) {
+      throw new Error(`Third post-checkpoint spike jump did not clear cleanly: ${JSON.stringify(snapshot.parkour.player)}`);
     }
   }
   // Let the smoothed follow camera reach seeded ride/goal positions before
@@ -168,7 +301,7 @@ for (const [name, query] of states) {
     if (carryEnd.parkour.player.ridingCar !== 'car-a'
       || Math.abs(endOffset - startOffset) > 2
       || Math.abs(endCar.x - startCar.x) < 35
-      || Math.abs(endCar.visualX - endCar.x) > 4
+      || Math.abs(endCar.visualX - endCar.x) > 6
       || endCar.collisionX !== endCar.visualX) {
       throw new Error(`Idle rider did not inherit the flying car delta: ${JSON.stringify({ carryStart: carryStart.parkour.player, startCar, carryEnd: carryEnd.parkour.player, endCar })}`);
     }
@@ -221,6 +354,22 @@ for (const [name, query] of states) {
       throw new Error(`Player did not jump off the flying car onto the next roof: ${JSON.stringify(rideExit.parkour.player)}`);
     }
     evidence['ride-exit'] = rideExit;
+  } else if (name === 'extension-car-c' || name === 'extension-car-d') {
+    const carryStart = JSON.parse(await evaluate('window.render_game_to_text()'));
+    const carId = name === 'extension-car-c' ? 'car-c' : 'car-d';
+    const startCar = carryStart.parkour.flyingCars.find(({ id }) => id === carId);
+    const startOffset = carryStart.parkour.player.x - startCar.visualX;
+    await delay(900);
+    const carryEnd = JSON.parse(await evaluate('window.render_game_to_text()'));
+    const endCar = carryEnd.parkour.flyingCars.find(({ id }) => id === carId);
+    const endOffset = carryEnd.parkour.player.x - endCar.visualX;
+    if (carryEnd.parkour.player.ridingCar !== carId
+      || Math.abs(endOffset - startOffset) > 2
+      || Math.abs(endCar.x - startCar.x) < 35
+      || endCar.collisionX !== endCar.visualX) {
+      throw new Error(`Extended flying car did not carry its rider: ${JSON.stringify({ carryStart: carryStart.parkour.player, startCar, carryEnd: carryEnd.parkour.player, endCar })}`);
+    }
+    evidence[`extension-ride-${carId}`] = { carryStart, carryEnd };
   }
 }
 

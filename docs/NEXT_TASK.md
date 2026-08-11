@@ -1,5 +1,58 @@
 # Next implementation task
 
+## READY — Chapter One cyberpunk parkour extension
+
+Status: `READY`
+
+Owner: `Codex`
+
+Product decision (2026-08-09): Preserve the complete existing Chapter One
+cyberpunk parkour route and extend it in the same visual and mechanical
+language. The former top-balcony finish becomes a midpoint checkpoint; the
+actual completion door moves to the end of the new route.
+
+In scope:
+
+- extend the existing 4,300px course rather than replacing or compressing it;
+- add more authored jumps, horizontally draggable ladders and blocks,
+  autonomous side-to-side flying cars, spike strips, and readable recovery
+  ladders/platforms;
+- require the new movable geometry and cars before the final door accepts the
+  route;
+- preserve the current obstacle behavior, cyberpunk presentation, removal of
+  green solution arrows, and the door handoff into the next area;
+- make post-midpoint failure return to the midpoint while manual `R` remains a
+  complete level reset;
+- extend deterministic model and browser QA through the new finish.
+
+Acceptance criteria:
+
+1. Every existing platform and obstacle remains in the opening route.
+2. At least two new movable obstacles, two new flying-car traversals, and two
+   new spike jumps appear after the former goal.
+3. A missed new car has a recovery path that does not bypass that car.
+4. Visual and collision positions remain aligned after new obstacle dragging
+   and moving-platform travel.
+5. The final door transitions to the same next area only after the extended
+   route requirements are satisfied.
+6. Model tests, browser QA, asset verification, production build, and
+   whitespace validation pass.
+
+User correction (2026-08-09): crossing the physical midpoint gate must always
+activate the checkpoint; it must not be rejected because the player did not use
+an optional opening obstacle. The first spike jump after that checkpoint is
+three segments wide.
+
+User correction (2026-08-09): the visible top of the screen is not a physics
+ceiling, ladder tops use continuous player-controlled dismounting instead of a
+position snap, and the high third post-checkpoint spike jump must clear normally.
+That high strip is reduced to three segments and moved right to provide a proper
+jump runway.
+
+User correction (2026-08-09): AIR LANE and NIGHT GRID plus the props, ladder,
+rail and spikes resting on them move down together by 30px. The final door
+returns the player to the completed train instead of entering the next city.
+
 ## Awaiting product accept — Chapter 4 `THE PAINTED COUNTRY` Bay A slice
 
 Status: `AWAITING PRODUCT ACCEPT` (not `READY` — do not start)
