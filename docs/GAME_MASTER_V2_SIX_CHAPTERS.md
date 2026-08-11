@@ -440,9 +440,35 @@ Mara is on one side and the engine witness valve is on the other. The player:
 No new input is introduced. Music, camera, line motion and environmental
 transformation carry the escalation.
 
+### Act IV — Final Boss: The Compression Engine
+
+The Archivist does not step out as a conventional combatant. It locks itself
+into the terminal's compression engine and begins forcing the five active
+worlds into one internally consistent record. The boss is the machine plus the
+Archivist's doctrine: anything that cannot fit one answer is being erased.
+
+The encounter lasts roughly 6–8 minutes and reuses only verbs already taught:
+
+1. **Expose:** survive three clearly telegraphed compression sweeps while using
+   Night Service isolation and Borrowed Grid power routing to expose the three
+   witness anchors feeding the engine.
+2. **Contradict:** carry Echo City's behavior cycle through a Painted Country
+   boundary so two incompatible terminal layouts remain active at once. Each
+   stable contradiction removes one layer of the Archivist's single-answer
+   shield.
+3. **Witness:** place the Museum interpretation in the incomplete display while
+   Mara and the recorded past self hold the other two anchors. The player moves
+   between the remaining links and completes one continuous shared circuit.
+
+Failure is local and readable: a broken link rewinds only the current sweep,
+shows which relationship collapsed, and leaves previously exposed anchors
+intact. There is no health bar, damage race, new attack button or full-chapter
+restart. The Archivist is defeated when compression becomes impossible, not
+when a body is killed.
+
 ### Final choice through action
 
-The Archivist offers one clean world by closing four witness links. Instead of
+With the Compression Engine disabled, the Archivist offers one clean world by closing four witness links. Instead of
 selecting a dialogue response, the player either lets the links close or keeps
 moving between them to maintain the shared circuit. The authored main ending
 rewards synthesis: Mara, the train and the player's past echo each hold one

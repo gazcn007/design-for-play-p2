@@ -51,5 +51,10 @@ The five independent chapter input slots and their exact packet contract are now
 2. Connect each real chapter packet as it becomes ready; the order no longer matters.
 3. Add a second pairwise beat, ideally **Museum ↔ Train**, with one interpretation changing a moving route.
 4. Add the three-world overlap only after each pairwise carry contract is represented as named serializable state.
-5. Integrate only through the shared chapter lifecycle owned by Codex. Do not attach this standalone slice to the main route yet.
-6. Add Chapter 1 echo and Mara action only when their runtime event contracts are available; never mock them as a second directly controlled player.
+5. Build the **Compression Engine final-boss shell** after the three-world
+   overlap is readable. It consumes the same five registered packets across
+   three phases: expose witness anchors, sustain contradictory world states,
+   and complete the final shared circuit. Do not add health, attacks or a new
+   boss-only input.
+6. Integrate only through the shared chapter lifecycle owned by Codex. Do not attach this standalone slice to the main route yet.
+7. Add Chapter 1 echo and Mara action only when their runtime event contracts are available; never mock them as a second directly controlled player.

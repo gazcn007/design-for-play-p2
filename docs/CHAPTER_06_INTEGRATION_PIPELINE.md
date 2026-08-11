@@ -68,7 +68,10 @@ At runtime, the integration owner calls `AllWorldsScene.connectChapterOutput(cha
 3. **Second pair:** Museum ↔ Night Service, using interpretation to change a mechanical route.
 4. **Three-world overlap:** add Echo City's behavior cycle to a pair already proven readable.
 5. **Final continuity beat:** controlled and authored automatic cuts share the same five registered packets.
-6. **Main-route integration:** only after all five slots report `readyForFinale: true` and the full run has human keyboard QA.
+6. **Compression Engine boss:** use those packets in three checkpointed sweeps
+   (expose anchors → sustain contradiction → shared witness circuit). A failed
+   sweep resets only itself; packet readiness and exposed anchors persist.
+7. **Main-route integration:** only after all five slots report `readyForFinale: true` and the full run, boss, and ending have human keyboard QA.
 
 ## Ownership boundary
 

@@ -1,14 +1,12 @@
 import Phaser from 'phaser';
 import { C, CAR } from './colors.js';
+import { RETRO_TRANSIT } from './retroTransitTheme.js';
 
-const COLORS = [
-  { shell: C(CAR.GLASS_DARK), trim: C(CAR.STEEL_MID), accent: C(CAR.BRASS_MID) },
-  { shell: C(CAR.GLASS_DARK), trim: C(CAR.STEEL_MID), accent: C(CAR.STEEL_HI) },
-  { shell: C(CAR.GLASS_DARK), trim: C(CAR.STEEL_MID), accent: C(CAR.BRASS_MID) },
-  { shell: C(CAR.GLASS_DARK), trim: C(CAR.STEEL_MID), accent: C(CAR.BRASS_MID) },
-  { shell: C(CAR.VOID_LIFT), trim: C(CAR.STEEL_MID), accent: C(CAR.STEEL_HI) },
-  { shell: C(CAR.GLASS_DARK), trim: C(CAR.STEEL_MID), accent: C(CAR.BRASS_MID) },
-];
+const COLORS = Array.from({ length: 6 }, () => ({
+  shell: RETRO_TRANSIT.ivory,
+  trim: RETRO_TRANSIT.silverDark,
+  accent: RETRO_TRANSIT.orange,
+}));
 
 /** World-space train interiors for the six Prologue sections. */
 export default class TutorialTrainRoomsArt {
@@ -50,24 +48,29 @@ export default class TutorialTrainRoomsArt {
       shell.fillStyle(C(CAR.VOID), 1);
       shell.fillRect(x, 0, width, 150);
       shell.fillRect(x, 328, width, 272);
+      // Approved late-1970s/early-1980s transit skin: a dark structural cap,
+      // warm ivory window surrounds and a safety-orange lower body. The
+      // exterior panorama is a separate layer and remains untouched.
+      shell.fillStyle(RETRO_TRANSIT.charcoalDeep, 1);
+      shell.fillRect(x, 14, width, 108);
       shell.fillStyle(color.shell, 1);
-      shell.fillRect(x, 14, width, 128);
+      shell.fillRect(x, 122, width, 20);
       shell.fillRect(x, 334, width, 266);
       shell.fillRect(x + 6, 138, 22, 204);
       shell.fillRect(stage.endX - 28, 138, 22, 204);
       shell.fillRect(x + width / 2 - gap / 2, 138, gap, 204);
       shell.fillStyle(C(CAR.VOID), 1);
       shell.fillRect(x + 20, 492, width - 40, 108);
-      // The interior belongs to the same damp twilight railway as the view:
-      // blue-grey painted steel, oxidized aluminium, wine vinyl and tarnished brass.
-      shell.fillStyle(C(CAR.ENAMEL_DARK), 0.72);
+      shell.fillStyle(color.accent, 0.92);
       shell.fillRoundedRect(x + 34, 358, width - 68, 116, 5);
-      shell.fillStyle(C(CAR.ENAMEL_DARK), 0.78);
+      shell.fillStyle(RETRO_TRANSIT.charcoal, 0.94);
       shell.fillRoundedRect(x + 42, 438, width - 84, 18, 6);
       shell.fillStyle(C(CAR.VOID), 0.58);
       shell.fillRect(x + 42, 454, width - 84, 18);
-      shell.fillStyle(color.accent, 0.28);
-      shell.fillRect(x + 20, 348, width - 40, 3);
+      shell.fillStyle(color.shell, 0.98);
+      shell.fillRect(x + 20, 346, width - 40, 7);
+      shell.fillStyle(RETRO_TRANSIT.orangeShadow, 0.64);
+      shell.fillRect(x + 38, 426, width - 76, 3);
 
       windows.forEach((window, windowIndex) => {
         glass.fillStyle(C(CAR.STEEL_HI), 0.045 + windowIndex * 0.012);
@@ -87,7 +90,7 @@ export default class TutorialTrainRoomsArt {
         trim.strokeRoundedRect(window.x + 5, window.y + 5, window.w - 10, window.h - 10, 8);
       });
 
-      details.fillStyle(color.accent, 0.72);
+      details.fillStyle(color.shell, 0.82);
       details.fillRect(x + 74, 101, width - 148, 5);
       details.lineStyle(2, color.trim, 0.7);
       details.lineBetween(x + 48, 60, stage.endX - 48, 60);
@@ -109,7 +112,7 @@ export default class TutorialTrainRoomsArt {
         details.fillCircle(rivetX, 350, 1.5);
         details.fillCircle(rivetX, 482, 1.5);
       }
-      details.lineStyle(2, C(CAR.BRASS_DARK), 0.16);
+      details.lineStyle(2, RETRO_TRANSIT.orangeShadow, 0.24);
       details.lineBetween(x + 52, 468, stage.endX - 52, 468);
       // Chunky, deterministic pixel wear and planar shading keep the train
       // in the same low-poly/low-pixel language as the downsampled exterior.
@@ -261,13 +264,15 @@ export default class TutorialTrainRoomsArt {
         shell.fillRect(doorX - 42, 462, 94, 138);
         shell.fillRect(doorX - 42, 246, 25, 216);
         shell.fillRect(doorX + 17, 246, 35, 216);
-        shell.fillStyle(C(CAR.VOID), 1);
+        shell.fillStyle(color.accent, 1);
         shell.fillRect(doorX - 17, 246, 34, 216);
-        trim.lineStyle(4, color.trim, 0.95);
+        shell.fillStyle(RETRO_TRANSIT.charcoalDeep, 1);
+        shell.fillRect(doorX - 11, 252, 22, 204);
+        trim.lineStyle(4, RETRO_TRANSIT.orangeShadow, 0.95);
         trim.strokeRect(doorX - 19, 244, 38, 220);
-        details.fillStyle(color.accent, 0.55);
-        details.fillRect(doorX - 9, 265, 18, 3);
-        details.fillRect(doorX - 9, 438, 18, 3);
+        details.fillStyle(color.shell, 0.9);
+        details.fillRect(doorX - 9, 265, 18, 4);
+        details.fillRect(doorX - 9, 437, 18, 4);
       } else {
         // The Prologue ends in a sealed driver's cab, not in naked adjacency
         // with Chapter One. It remains behind the final partition during the
@@ -275,9 +280,9 @@ export default class TutorialTrainRoomsArt {
         const cabX = stage.endX;
         shell.fillStyle(C(CAR.VOID), 1);
         shell.fillRect(cabX - 8, 0, 252, 600);
-        shell.fillStyle(C(CAR.GLASS_DARK), 1);
+        shell.fillStyle(color.shell, 1);
         shell.fillRect(cabX + 12, 28, 188, 404);
-        shell.fillStyle(C(CAR.VOID_LIFT), 1);
+        shell.fillStyle(color.accent, 1);
         shell.fillTriangle(cabX + 200, 28, cabX + 244, 96, cabX + 200, 432);
         glass.fillStyle(C(CAR.ENAMEL_MID), 0.96);
         glass.fillRect(cabX + 38, 118, 136, 126);
@@ -285,11 +290,11 @@ export default class TutorialTrainRoomsArt {
         glass.fillTriangle(cabX + 42, 122, cabX + 96, 122, cabX + 42, 206);
         trim.lineStyle(6, C(CAR.STEEL_MID), 0.95);
         trim.strokeRect(cabX + 34, 114, 144, 134);
-        details.fillStyle(C(CAR.ENAMEL_DARK), 1);
+        details.fillStyle(RETRO_TRANSIT.charcoal, 1);
         details.fillRect(cabX + 24, 322, 174, 82);
-        details.fillStyle(C(CAR.ENAMEL_DARK), 0.86);
+        details.fillStyle(RETRO_TRANSIT.orange, 0.86);
         details.fillRect(cabX + 24, 398, 174, 24);
-        details.lineStyle(3, C(CAR.BRASS_MID), 0.7);
+        details.lineStyle(3, RETRO_TRANSIT.orange, 0.7);
         details.lineBetween(cabX + 48, 360, cabX + 174, 360);
         [66, 104, 142].forEach((offset, gaugeIndex) => {
           details.fillStyle(C(CAR.VOID), 1);
