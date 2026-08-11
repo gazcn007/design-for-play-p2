@@ -21,7 +21,7 @@ export const DEV_MODE = typeof __DEV_MODE__ === 'undefined' ? false : __DEV_MODE
 // Every query key that can move the game away from a clean run. Reading them
 // all through devParams() below means production has exactly one kill switch
 // instead of one per call site.
-export const DEV_ROUTE_PARAMS = ['chapter', 'world', 'qa', 'state', 'artState'];
+export const DEV_ROUTE_PARAMS = ['chapter', 'car', 'world', 'qa', 'state', 'artState'];
 
 function currentSearch(explicit) {
   if (typeof explicit === 'string') return explicit;

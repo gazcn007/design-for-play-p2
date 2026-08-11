@@ -1,5 +1,86 @@
 # Next implementation task
 
+## READY — Chapter One cyberpunk parkour extension
+
+Status: `READY`
+
+Owner: `Codex`
+
+Product decision (2026-08-09): Preserve the complete existing Chapter One
+cyberpunk parkour route and extend it in the same visual and mechanical
+language. The former top-balcony finish becomes a midpoint checkpoint; the
+actual completion door moves to the end of the new route.
+
+In scope:
+
+- extend the existing 4,300px course rather than replacing or compressing it;
+- add more authored jumps, horizontally draggable ladders and blocks,
+  autonomous side-to-side flying cars, spike strips, and readable recovery
+  ladders/platforms;
+- require the new movable geometry and cars before the final door accepts the
+  route;
+- preserve the current obstacle behavior, cyberpunk presentation, removal of
+  green solution arrows, and the door handoff into the next area;
+- make post-midpoint failure return to the midpoint while manual `R` remains a
+  complete level reset;
+- extend deterministic model and browser QA through the new finish.
+
+Acceptance criteria:
+
+1. Every existing platform and obstacle remains in the opening route.
+2. At least two new movable obstacles, two new flying-car traversals, and two
+   new spike jumps appear after the former goal.
+3. A missed new car has a recovery path that does not bypass that car.
+4. Visual and collision positions remain aligned after new obstacle dragging
+   and moving-platform travel.
+5. The final door transitions to the same next area only after the extended
+   route requirements are satisfied.
+6. Model tests, browser QA, asset verification, production build, and
+   whitespace validation pass.
+
+User correction (2026-08-09): crossing the physical midpoint gate must always
+activate the checkpoint; it must not be rejected because the player did not use
+an optional opening obstacle. The first spike jump after that checkpoint is
+three segments wide.
+
+User correction (2026-08-09): the visible top of the screen is not a physics
+ceiling, ladder tops use continuous player-controlled dismounting instead of a
+position snap, and the high third post-checkpoint spike jump must clear normally.
+That high strip is reduced to three segments and moved right to provide a proper
+jump runway.
+
+User correction (2026-08-09): AIR LANE and NIGHT GRID plus the props, ladder,
+rail and spikes resting on them move down together by 30px. The final door
+returns the player to the completed train instead of entering the next city.
+
+## Awaiting product accept — Chapter 4 `THE PAINTED COUNTRY` Bay A slice
+
+Status: `AWAITING PRODUCT ACCEPT` (not `READY` — do not start)
+
+Owner: unassigned
+
+George set the premise on 2026-08-07: chapter 4 is a paper world, and the
+mechanic is magical paint used to change parts of a mysterious train car,
+uncover clues, collect materials and reveal the route to the next car. This
+matches the Chapter 4 slot already locked in
+`docs/GAME_MASTER_V2_SIX_CHAPTERS.md` §8 (`paint/erase → reveal/change memory`),
+re-sited from an open landscape into a carriage interior.
+
+Full design: `docs/CHAPTER_04_PAINTED_COUNTRY_DESIGN_LOCK.md`. The short
+version — two verbs on one axis (PAINT makes a drawn line real, WASH makes a real
+thing drawn again and returns its pigment), three found mineral pigments with two
+loadable at a time, and a finite pigment budget, so every surface the player
+builds is taken out of a picture. The car's level design is a child's
+under-drawing, mistakes included, and the chapter's thesis beat requires painting
+a *wrong* drawing rather than correcting it.
+
+Proposed first slice is **Bay A only** (design lock §14): beats 1–3, a standalone
+entry point named `painted-country.html` for identity rather than sequence order,
+one pure deterministic region/pigment module with focused tests, one art layer
+that owns no rules, full `render_game_to_text()` coverage, and a row in
+`STANDALONE_SLICES` so the dev chapter select can reach it.
+
+This does not become `READY` until George accepts or amends the design lock.
 ## BUILT — AWAITING GEORGE'S CALL — Chapter 4 `THE PAINTED COUNTRY` ink-displacement puzzle
 
 Status: `BUILT, VERIFIED, AWAITING A DIFFICULTY CALL` — 2026-08-11

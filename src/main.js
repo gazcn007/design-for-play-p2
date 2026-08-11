@@ -5,6 +5,7 @@ import BootScene from './scenes/BootScene.js';
 import DevMenuScene from './scenes/DevMenuScene.js';
 import GameScene from './scenes/GameScene.js';
 import HudScene from './scenes/HudScene.js';
+import CyberpunkParkourScene from './cars/cyberpunkParkour/CyberpunkParkourScene.js';
 
 // Phaser starts the first scene in the array. The chapter select is added only
 // for `npm run dev`, and only when the URL does not already name a starting
@@ -13,8 +14,8 @@ import HudScene from './scenes/HudScene.js';
 // registered at all.
 const chapterSelect = DEV_MODE && !hasDevRoute();
 const scenes = chapterSelect
-  ? [DevMenuScene, BootScene, GameScene, HudScene]
-  : [BootScene, GameScene, HudScene];
+  ? [DevMenuScene, BootScene, GameScene, HudScene, CyberpunkParkourScene]
+  : [BootScene, GameScene, HudScene, CyberpunkParkourScene];
 
 const config = {
   type: Phaser.AUTO,
@@ -70,6 +71,18 @@ window.game = game;
 // Read-only diagnostics for automated smoke tests and content-pipeline QA.
 // This does not advance or mutate gameplay state.
 const renderGameToText = () => {
+  const cyberpunkScene = game.scene.getScene('CyberpunkParkour');
+  if (cyberpunkScene?.sys?.isActive()) {
+    return JSON.stringify({
+      coordinateSystem: 'origin top-left; +x right; +y down; world units are pixels',
+      scene: 'CyberpunkParkour',
+      parkour: cyberpunkScene.getTextState(),
+      performance: {
+        fps: Math.round(game.loop.actualFps || 0),
+        timeScale: cyberpunkScene.time?.timeScale ?? 1,
+      },
+    });
+  }
   const scene = game.scene.getScene('Game');
   const player = scene?.player;
   const devMenu = game.scene.getScene('DevMenu');

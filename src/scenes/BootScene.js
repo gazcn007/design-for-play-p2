@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_W, GAME_H } from '../constants.js';
+import { devParams, resolveDevChapterIndex } from '../devMode.js';
 import { buildAnimations, buildTextures } from '../textures.js';
 import { STORY_WORLDS } from '../story.js';
 import { queueWorldAsset, resolvePreviewWorldIndex } from '../worlds/worldAssets.js';
@@ -37,8 +38,14 @@ export default class BootScene extends Phaser.Scene {
       label.destroy();
     });
 
+    const params = devParams();
+    const directCarIndex = params.get('car') === '2' ? 2 : null;
+    const chapterIndex = resolveDevChapterIndex(STORY_WORLDS);
+    const parkourPreview = chapterIndex === 1
+      || params.get('chapter') === 'cyberpunk'
+      || params.get('qa')?.startsWith('parkour-');
     const previewIndex = resolvePreviewWorldIndex(STORY_WORLDS);
-    const initialWorld = STORY_WORLDS[previewIndex ?? 0];
+    const initialWorld = STORY_WORLDS[directCarIndex ?? (parkourPreview ? 1 : previewIndex ?? 0)];
     queueWorldAsset(this.load, initialWorld.texture);
     this.load.image('mechanical-table-base', mechanicalTableBaseUrl);
     this.load.spritesheet('mechanical-pipe-parts', mechanicalPipeUrl, {
@@ -50,6 +57,14 @@ export default class BootScene extends Phaser.Scene {
   create() {
     buildTextures(this);
     buildAnimations(this);
-    this.scene.start('Game');
+    const params = devParams();
+    if (params.get('car') === '2') {
+      this.scene.start('Game', { startWorldIndex: 2 });
+      return;
+    }
+    const chapterPreview = resolveDevChapterIndex(STORY_WORLDS) === 1
+      || params.get('chapter') === 'cyberpunk'
+      || params.get('qa')?.startsWith('parkour-');
+    this.scene.start(chapterPreview ? 'CyberpunkParkour' : 'Game');
   }
 }

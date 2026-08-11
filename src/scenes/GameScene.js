@@ -47,10 +47,7 @@ export default class GameScene extends Phaser.Scene {
     super('Game');
   }
 
-  preload() {
-  }
-
-  create() {
+  create(data = {}) {
     this.finished = false;
     this.activeInteractable = null;
     this.activeNPC = null;
@@ -61,14 +58,22 @@ export default class GameScene extends Phaser.Scene {
     this.activeWorldIndex = -1;
     this.requestedWorldIndex = -1;
     this.previewWorldIndex = resolvePreviewWorldIndex(STORY_WORLDS);
+    const requestedStartWorld = Number.isInteger(data.startWorldIndex)
+      && data.startWorldIndex >= 0
+      && data.startWorldIndex < STORY_WORLDS.length
+      ? data.startWorldIndex
+      : null;
     // `?chapter=N` is the chapter select's route. Unlike `?world=N` — which
     // only swaps the painting and then freezes the world index — this one
     // starts the player inside that chapter's geometry and leaves normal world
     // streaming switched on, so walking onward behaves like a real run.
     this.devChapterIndex = resolveDevChapterIndex(STORY_WORLDS);
-    this.initialWorldIndex = this.previewWorldIndex ?? this.devChapterIndex ?? 0;
+    this.initialWorldIndex =
+      requestedStartWorld ?? this.previewWorldIndex ?? this.devChapterIndex ?? 0;
     this.devSpawn =
-      this.devChapterIndex !== null && this.devChapterIndex > 0
+      requestedStartWorld === null
+        && this.devChapterIndex !== null
+        && this.devChapterIndex > 0
         ? resolveChapterSpawn(
             STORY_WORLDS,
             this.devChapterIndex,
@@ -77,6 +82,7 @@ export default class GameScene extends Phaser.Scene {
             LEVEL.spawn.y,
           )
         : null;
+    this.skipPrologue = requestedStartWorld !== null || this.devSpawn !== null;
     this.worldAssetLoader = new WorldAssetLoader(this);
     this.backdropChunks = [];
     this.checkpointTaken = false;
@@ -144,7 +150,7 @@ export default class GameScene extends Phaser.Scene {
     // Starting inside a later chapter means the Prologue already happened.
     // Without this the exit gate would trap a dev warp the moment it walked
     // back toward car 01.
-    this.registry.set('tutorialPowerRestored', this.devSpawn !== null);
+    this.registry.set('tutorialPowerRestored', this.skipPrologue);
 
     this.physics.world.setBounds(0, -600, WORLD_W, 2200);
     this.cameras.main.setBounds(0, 0, WORLD_W, GAME_H);
@@ -173,10 +179,18 @@ export default class GameScene extends Phaser.Scene {
 
     this.solids.refresh();
 
-    const spawn = this.devSpawn ?? LEVEL.spawn;
-    this.player = new Player(this, spawn.x, spawn.y, spawn.lane);
-    this.checkpoint = { ...spawn };
-    if (this.devSpawn) {
+    const sceneSpawn = requestedStartWorld !== null
+      ? {
+          x: Number.isFinite(data.spawnX)
+            ? data.spawnX
+            : STORY_WORLDS[requestedStartWorld].startX + 24,
+          y: Number.isFinite(data.spawnY) ? data.spawnY : LEVEL.spawn.y,
+          lane: data.spawnLane ?? LEVEL.spawn.lane,
+        }
+      : this.devSpawn ?? LEVEL.spawn;
+    this.player = new Player(this, sceneSpawn.x, sceneSpawn.y, sceneSpawn.lane);
+    this.checkpoint = { ...sceneSpawn };
+    if (this.skipPrologue) {
       // A warp past the Prologue must not leave its junctions reading as
       // unsolved, or the objective arrow and the stage gates come along.
       this.tutorialPuzzle.stageIndex = LEVEL.tutorialPuzzle.stages.length - 1;
@@ -1430,35 +1444,19 @@ export default class GameScene extends Phaser.Scene {
     // Change scenery only after the HUD has faded fully to black.
     this.time.delayedCall(3500, () => {
       this.registry.set('tutorialPowerRestored', true);
-      this.switchWorld(1, false);
-      // The inherited second-world floor begins 120px after its backdrop
-      // threshold; land beyond that gap so the cinematic cannot respawn the
-      // player back into the prologue while the screen is black.
-      this.player.body.reset((STORY_WORLDS[1]?.startX ?? 4800) + 155, 400);
-      // The landing strip sits inside a world-1 enemy patrol (4940–5220) whose
-      // contact reach covers EVERY standable pixel of it — there is no safe
-      // landing x. Arrival protection therefore holds until the player takes
-      // control (first movement input, cleared in update()) with a 10s safety
-      // cap, instead of letting the patrol farm a helpless arrival.
-      this.player.invulnUntil = Number.POSITIVE_INFINITY;
-      this.prologueArrivalGrace = true;
+      // Stream the approved Chapter One panorama behind the opaque chapter
+      // card. The dedicated scene starts only after the card has cleared, so
+      // the frozen Prologue never shares collision or camera state with the
+      // parkour car.
+      this.worldAssetLoader.load('backdrop-cyberpunk').catch((error) => console.error(error));
       this.departureStreaks.forEach((streak) => streak.setVisible(false));
       this.departureScroll = 0;
     });
 
     this.time.delayedCall(7000, () => {
       this.prologueTransitionActive = false;
-      this.player.frozen = false;
-      this.tutorialExitBlockedNotified = false;
-      // Safety cap on the arrival grace: an idle player loses protection 10s
-      // after the hand-off rather than standing invulnerable forever.
-      this.time.delayedCall(10000, () => {
-        if (this.prologueArrivalGrace) {
-          this.prologueArrivalGrace = false;
-          this.player.invulnUntil = this.time.now;
-        }
-      });
       onComplete();
+      this.scene.start('CyberpunkParkour');
     });
   }
 
