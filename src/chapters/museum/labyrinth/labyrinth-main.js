@@ -2,6 +2,9 @@ import Phaser from 'phaser';
 import { LabyrinthScene } from './LabyrinthScene.js';
 import { VIEW } from './labyrinthData.js';
 import { LABYRINTH_CHAPTER05_CONTRACT } from './chapter05LabyrinthContract.js';
+import { installDevMenuReturnControl } from '../../../devMenuReturn.js';
+
+installDevMenuReturnControl();
 
 const config = {
   type: Phaser.AUTO,

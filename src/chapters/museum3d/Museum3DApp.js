@@ -16,10 +16,27 @@ import { EchoCityMinimap } from './systems/EchoCityMinimap.js';
 import { Chapter05DirectionProgress } from './state/chapter05DirectionProgress.js';
 import { CHAPTER05_DIRECTIONS, PLAYABLE_DIRECTION_ORDER } from './directions/directionRegistry.js';
 import { animateReturnArtifact, createReturnArtifact } from './assets/ReturnArtifacts.js';
+import { createMuseumMaterialLibrary } from './assets/MuseumMaterials.js';
 import { ServiceLobby } from './scenes/ServiceLobby.js';
 import { ArchiveCorridor } from './scenes/ArchiveCorridor.js';
 import { ECHO_CITY_ENTRY, EchoCityWalkingSim, NIGHT_ROUND_STOPS } from './scenes/EchoCityWalkingSim.js';
 import { getEchoWorkFeedback } from './systems/EchoCityWorkFeedback.js';
+import {
+  COLLAPSE_BLACK_HOLD_MS,
+  COLLAPSE_CHAPTER06_DELAY_MS,
+  COLLAPSE_CHAPTER06_ROUTE,
+  COLLAPSE_ENTRY,
+  COLLAPSE_STRINGS,
+} from './state/collapseGauntlet.js';
+import { preloadChapter } from '../../shell/chapterPreloader.js';
+import { music } from '../../shared/musicDirector.js';
+
+const CHAPTER5_SCORE = Object.freeze({
+  lobby: { id: 'ch5-gallery', src: '/assets/music/ch5/5.2_faure_pie_jesu.mp3', volume: 0.32, fade: 4.5 },
+  corridor: { id: 'ch5-promenade', src: '/assets/music/ch5/5.1_mussorgsky_promenade.mp3', volume: 0.34, fade: 4 },
+  echo: { id: 'ch5-old-castle', src: '/assets/music/ch5/5.3_mussorgsky_old_castle.mp3', volume: 0.3, fade: 4.5 },
+  collapse: { id: 'ch5-dies-irae', src: '/assets/music/ch5/5.7_verdi_dies_irae.mp3', volume: 0.42, fade: 1.2 },
+});
 
 function buildCarriedNightKit() {
   const root = new THREE.Group();
@@ -65,6 +82,32 @@ function buildCarriedLevRadio() {
   return root;
 }
 
+function buildLabyrinthKeyRing(materials) {
+  const root = new THREE.Group();
+  root.name = 'first-person-labyrinth-eight-key-ring';
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.23, 0.027, 8, 28), materials.brass);
+  ring.rotation.x = Math.PI / 2;
+  root.add(ring);
+  root.userData.keys = [];
+  for (let index = 0; index < 8; index += 1) {
+    const angle = (index / 8) * Math.PI * 2;
+    const key = new THREE.Group();
+    key.name = `labyrinth-key-${index + 1}`;
+    key.position.set(Math.cos(angle) * 0.2, Math.sin(angle) * 0.12 - 0.13, 0);
+    key.rotation.z = angle - Math.PI / 2;
+    const stone = new THREE.MeshStandardMaterial({ color: 0x25222a, roughness: 0.9, metalness: 0.08 });
+    const head = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.016, 7, 14), stone);
+    const stem = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.19, 0.025), stone);
+    stem.position.y = -0.12;
+    const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.03, 0.025), stone);
+    tooth.position.set(0.02, -0.21, 0);
+    key.add(head, stem, tooth);
+    root.add(key);
+    root.userData.keys.push(key);
+  }
+  return root;
+}
+
 export class Museum3DApp {
   constructor({ container, lockOverlay, promptEl, subtitleEl, minimapRoot, minimapCanvas, fadeEl, directionRoot, directionFrame, directionClose, directionTitle, directionStatus, initialState, captureMode = false, standaloneDirectionId = null }) {
     this.container = container;
@@ -75,6 +118,7 @@ export class Museum3DApp {
     this.model = new Chapter05Model(initialState ?? createInitialState());
     this.directionProgress = new Chapter05DirectionProgress({
       completed: {
+        [CHAPTER05_DIRECTIONS.LABYRINTH]: initialState?.collapse?.started === true,
         [CHAPTER05_DIRECTIONS.ECHO_CITY]: initialState?.ticket?.returned === true,
       },
     });
@@ -110,6 +154,12 @@ export class Museum3DApp {
     this.carriedArtifactRoot.rotation.set(-0.12, 0.2, 0.04);
     this.camera.add(this.carriedArtifactRoot);
     this._carriedArtifactId = null;
+    this.collapseKeyRing = buildLabyrinthKeyRing(createMuseumMaterialLibrary());
+    this.collapseKeyRing.position.set(-0.05, -0.06, 0);
+    this.collapseKeyRing.rotation.set(-0.1, 0.12, 0.16);
+    this.collapseKeyRing.scale.setScalar(0.44);
+    this.collapseKeyRing.visible = false;
+    this.carriedArtifactRoot.add(this.collapseKeyRing);
     this.echoCarryRoot = new THREE.Group();
     this.echoCarryRoot.name = 'echo-city-first-person-equipment';
     this.echoCarryRoot.position.set(0.47, -0.40, -0.78);
@@ -153,7 +203,7 @@ export class Museum3DApp {
           ? 'CLICK TO RETURN — PLACE WHAT YOU BROUGHT BACK'
           : completed ? 'CLICK TO RETURN TO THE ARCHIVE — DIRECTION COMPLETE' : 'CLICK TO RETURN TO THE ARCHIVE';
         this._showLockOverlay(message);
-        if (completed) this._maybeUnlockFinale(directionId);
+        if (completed) this._maybeStartCollapse(directionId);
       },
     });
     // Compatibility for the existing QA text hook while the dedicated
@@ -184,6 +234,8 @@ export class Museum3DApp {
         openDirection: (directionId) => this.openDirection(directionId),
         displayArtifact: (directionId) => this.displayArtifact(directionId),
         syncCarriedArtifact: () => this._syncCarriedArtifact(),
+        isInteractHeld: () => this._interactHeld === true || this._mouseInteractHeld === true,
+        completeCollapse: () => this.completeCollapse(),
       };
       ctl.build(ctx);
       ctl.collisionWorld = collisionWorld;
@@ -196,6 +248,8 @@ export class Museum3DApp {
     // ---- input routing ---------------------------------------------------------
     this._simulatedLock = false; // QA/headless drive mode; never set by gameplay
     this._hasEnteredMuseum = false;
+    this._interactHeld = false;
+    this._mouseInteractHeld = false;
     window.addEventListener('keydown', (e) => {
       if (this.directionExhibit.opened) return;
       if (e.code === 'Space') e.preventDefault();
@@ -205,10 +259,32 @@ export class Museum3DApp {
         return;
       }
       if (e.code === 'KeyE' || e.code === 'Enter') {
+        this._interactHeld = true;
+        if (e.repeat) return;
         if (!this.controller.isActive && !this._simulatedLock) return;
         if (this.dialogue.isPlaying) this.dialogue.advance();
         else this.interaction.activate();
       }
+    });
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'KeyE' || e.code === 'Enter') this._interactHeld = false;
+    });
+    window.addEventListener('blur', () => {
+      this._interactHeld = false;
+      this._mouseInteractHeld = false;
+    });
+
+    // Pointer lock consumes the first click as the entry gesture. Once inside,
+    // holding the primary mouse button mirrors holding E so browser shells that
+    // collapse keydown/keyup into one event can still operate the Final Archive.
+    this.renderer.domElement.addEventListener('mousedown', (event) => {
+      if (event.button !== 0 || (!this.controller.isActive && !this._simulatedLock) || this.directionExhibit.opened) return;
+      this._mouseInteractHeld = true;
+      if (this.dialogue.isPlaying) this.dialogue.advance();
+      else this.interaction.activate();
+    });
+    window.addEventListener('mouseup', (event) => {
+      if (event.button === 0) this._mouseInteractHeld = false;
     });
 
     this.controller.onLockChange((locked) => {
@@ -225,6 +301,7 @@ export class Museum3DApp {
     this.interaction.enabled = false;
 
     lockOverlay.addEventListener('click', () => {
+      this.audioGuide.resume();
       this.controller.lock();
     });
 
@@ -242,7 +319,9 @@ export class Museum3DApp {
   _syncCarriedArtifact() {
     const id = this.directionProgress.getSnapshot().carriedArtifact;
     if (id === this._carriedArtifactId) return;
-    this.carriedArtifactRoot.clear();
+    for (const child of [...this.carriedArtifactRoot.children]) {
+      if (child !== this.collapseKeyRing) this.carriedArtifactRoot.remove(child);
+    }
     this._carriedArtifactId = id;
     if (!id) return;
     const artifact = createReturnArtifact(id);
@@ -251,6 +330,18 @@ export class Museum3DApp {
     artifact.rotation.y = id === 'painted-country' ? -0.25 : id === 'echo-city' ? Math.PI + 0.15 : 0.15;
     if (id === 'echo-city') artifact.rotation.z = -0.12;
     this.carriedArtifactRoot.add(artifact);
+  }
+
+  _syncCollapseKeyRing(snapshot) {
+    const collapse = snapshot.collapse;
+    this.collapseKeyRing.visible = snapshot.phase === 'collapse' && collapse.labyrinthKeys > 0;
+    this.collapseKeyRing.userData.keys?.forEach((key, index) => {
+      key.visible = index < collapse.labyrinthKeys;
+    });
+    if (this.collapseKeyRing.visible) {
+      const swing = Math.sin(this.clock.elapsedTime * (this.controller.isMoving ? 7.5 : 1.4));
+      this.collapseKeyRing.rotation.z = 0.16 + swing * (this.controller.isMoving ? 0.07 : 0.018);
+    }
   }
 
   _syncEchoWorkFeedback(snapshot, dt) {
@@ -317,10 +408,27 @@ export class Museum3DApp {
     this.scene.add(next.root);
     this.scene.background = next.background;
     this.scene.fog = next.root.userData.fog ?? null;
+    this.scene.environment = Object.hasOwn(next.root.userData, 'environment')
+      ? next.root.userData.environment
+      : this._environmentTexture;
     this.renderer.toneMappingExposure = next.root.userData.rendererExposure ?? 0.92;
     this.controller.collisionWorld = next.collisionWorld;
     this.interaction.clear();
     next.registerInteractions();
+    this._syncChapterScore();
+  }
+
+  _syncChapterScore() {
+    const phase = this.model.getSnapshot().phase;
+    const key = phase === 'collapse'
+      ? 'collapse'
+      : this.activeSceneName === 'echo'
+        ? 'echo'
+        : this.activeSceneName === 'corridor'
+          ? 'corridor'
+          : 'lobby';
+    const cue = CHAPTER5_SCORE[key];
+    music.play(cue.id, { ...cue, loop: true, outFade: key === 'collapse' ? 1.2 : 4, dialogueDuckDb: -7 });
   }
 
   // ---- route actions (the only doorways between spaces) -----------------------
@@ -424,6 +532,10 @@ export class Museum3DApp {
   }
 
   openDirection(directionId) {
+    // Door 4 is the last long playable stretch before the collapse. Begin the
+    // Boss warm-up here so normal play has the entire Labyrinth plus collapse
+    // runtime to fill the cache; _maybeStartCollapse safely reuses this job.
+    if (directionId === CHAPTER05_DIRECTIONS.LABYRINTH) preloadChapter('chapter6');
     return this.directionExhibit.open(directionId);
   }
 
@@ -431,25 +543,45 @@ export class Museum3DApp {
     const result = this.directionProgress.dispatch({ type: 'artifact.display', id: directionId });
     if (result.state.completed[directionId] !== true) return false;
     this._syncCarriedArtifact();
-    this._maybeUnlockFinale(directionId);
+    this._maybeStartCollapse(directionId);
     return true;
   }
 
-  async _maybeUnlockFinale() {
+  async _maybeStartCollapse(directionId) {
+    if (directionId !== CHAPTER05_DIRECTIONS.LABYRINTH) return false;
     if (!this.directionProgress.getSnapshot().allComplete) return false;
     if (this.model.getSnapshot().phase !== 'corridor' || this.director.isBusy) return false;
-    const ok = await this.director.transition(this, 'lobby', {
-      fromPhase: 'corridor',
-      toPhase: 'return',
-      action: { type: 'unlockFinale' },
-      spawn: { x: 6.8, z: 0, yaw: Math.PI / 2 },
-    });
-    if (ok) {
-      this.dialogue.play([
-        { speaker: null, text: 'The Labyrinth and Chapter 2 remain two separate directions. Records 3 and 4 stay outside this museum route.' },
-      ]);
+    const result = this.model.dispatch({ type: 'labyrinthComplete' });
+    if (!result.changed) return false;
+    preloadChapter('chapter6');
+    this.getActiveScene()?.enter(this.model.getSnapshot());
+    this.controller.setPose(COLLAPSE_ENTRY.x, COLLAPSE_ENTRY.z, COLLAPSE_ENTRY.yaw);
+    this._syncCollapseKeyRing(this.model.getSnapshot());
+    return true;
+  }
+
+  async completeCollapse() {
+    if (this._chapterComplete || this.model.getSnapshot().phase !== 'collapse') return false;
+    const result = this.model.dispatch({ type: 'collapseJump' });
+    if (!result.changed) return false;
+    this._chapterComplete = true;
+    this._interactHeld = false;
+    this._mouseInteractHeld = false;
+    this.audioGuide.stopCollapseScore();
+    this.controller.enabled = false;
+    this.interaction.enabled = false;
+    this.dialogue.clear();
+    const completion = this.director.fadeEl.querySelector('.chapter-completion');
+    await this.director.fade(true);
+    await new Promise((resolve) => window.setTimeout(resolve, COLLAPSE_BLACK_HOLD_MS));
+    if (completion) {
+      completion.innerHTML = `<div>${COLLAPSE_STRINGS.completeLine}</div><strong>${COLLAPSE_STRINGS.chapterComplete}</strong><small>“The archive does not issue duplicates.”</small>`;
+      completion.classList.add('visible');
     }
-    return ok;
+    if (new URLSearchParams(window.location.search).get('qa-no-redirect') !== '1') {
+      window.setTimeout(() => { window.location.assign(COLLAPSE_CHAPTER06_ROUTE); }, COLLAPSE_CHAPTER06_DELAY_MS);
+    }
+    return true;
   }
 
   // The corridor's one repetition — an in-space loop, not a scene change.
@@ -481,11 +613,17 @@ export class Museum3DApp {
 
     this.renderer.setAnimationLoop(() => {
       const dt = Math.min(this.clock.getDelta(), 0.05);
+      if (globalThis.NIGHTFALL_PAUSED) {
+        this.renderer.render(this.scene, this.camera);
+        return;
+      }
       const snapshot = this.model.getSnapshot();
+      this._syncChapterScore();
       this.controller.update(dt);
       const active = this.getActiveScene();
       if (active) active.update(dt, snapshot);
       this._syncEchoWorkFeedback(snapshot, dt);
+      this._syncCollapseKeyRing(snapshot);
       const minimapState = active?.getMinimapState?.() ?? {};
       this.minimap.update({
         active: this.activeSceneName === 'echo' && !this.directionExhibit.opened,
@@ -496,6 +634,7 @@ export class Museum3DApp {
       });
       this.interaction.update();
       this.dialogue.update(dt);
+      music.setDialogueActive(this.dialogue.isPlaying);
       animateReturnArtifact(this.carriedArtifactRoot.children[0], this.clock.elapsedTime, { carried: true });
       this.renderer.render(this.scene, this.camera);
     });
@@ -503,7 +642,7 @@ export class Museum3DApp {
 
   _initialSceneName() {
     const phase = this.model.getSnapshot().phase;
-    if (phase === 'corridor') return 'corridor';
+    if (phase === 'corridor' || phase === 'collapse') return 'corridor';
     if (phase === 'echo-city') return 'echo';
     return 'lobby';
   }
@@ -511,6 +650,7 @@ export class Museum3DApp {
   _applyInitialSpawn() {
     const s = this.model.getSnapshot();
     if (s.phase === 'corridor') this.controller.setPose(9.5, 0, -Math.PI / 2);
+    else if (s.phase === 'collapse') this.controller.setPose(COLLAPSE_ENTRY.x, COLLAPSE_ENTRY.z, COLLAPSE_ENTRY.yaw);
     else if (s.phase === 'echo-city') {
       const { x, z, yaw } = ECHO_CITY_ENTRY.spawn;
       this.controller.setPose(x, z, yaw);

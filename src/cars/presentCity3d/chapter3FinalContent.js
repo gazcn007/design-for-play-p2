@@ -53,8 +53,8 @@ export function daroMenu(asked = []) {
   if (!asked.includes('position')) choices.push({ id: 'daro-position', label: 'Establish Daro’s exact position and sightline.' });
   if (!asked.includes('sequence')) choices.push({ id: 'daro-sequence', label: 'Have him describe Mara’s route in order.' });
   if (!asked.includes('limits')) choices.push({ id: 'daro-limits', label: 'Ask what the window could not show.' });
-  choices.push({ id: 'daro-done', label: 'Record only what the sightline proves.' });
-  return { speaker: 'BUTCH', text: 'Test the window account.', choices };
+  choices.push({ id: 'daro-done', label: 'Record only what the sightline proves. (Continue)' });
+  return { speaker: 'CHOOSE', text: 'Test the window account.', choices };
 }
 
 export const EVIDENCE_TABLE_OPENING = Object.freeze([
@@ -116,14 +116,25 @@ export function finalTheoryMenu(tested = []) {
     'mara-coerced': 'Mara performed the route under coercion.',
   };
   for (const [id, label] of Object.entries(labels)) if (!tested.includes(id)) choices.push({ id: `final-${id}`, label });
-  choices.push({ id: 'final-done', label: 'State the only explanation that survives.' });
-  return { speaker: 'BUTCH', text: 'Test the remaining explanation.', choices };
+  choices.push({ id: 'final-done', label: 'State the only explanation that survives. (Continue)' });
+  return { speaker: 'CHOOSE', text: 'Test the remaining explanation.', choices };
 }
 
 export const SLEEP_DIALOGUE = Object.freeze([
   { speaker: 'NARRATION', text: 'Lev leaves the records in three piles: known, unsupported, and still testable. Butch lies down without undressing.' },
   { speaker: 'BUTCH', text: 'The next train is in the morning. Nothing useful happens before morning.' },
   { speaker: 'NARRATION', text: 'Hours later, light moves across the ceiling. Then comes the smell of lamp oil.' },
+]);
+
+// Butch surfaces from the nightmare into a room that is much darker than the
+// one he fell asleep in. He talks himself into checking the street before the
+// hotel-night interactions unlock.
+export const NIGHT_WAKE_DIALOGUE = Object.freeze([
+  { speaker: 'BUTCH', text: 'The lamp is out. The wick is still warm.' },
+  { speaker: 'BUTCH', text: 'A dream, then. Paving grooves, fire, my name in the old feed channel.' },
+  { speaker: 'BUTCH', text: 'No dream I have ever kept smelled of lamp oil.' },
+  { speaker: 'BUTCH', text: 'It felt assembled. Like the records. Like someone wanted me to stand in that exact spot.' },
+  { speaker: 'BUTCH', text: 'If the square is really burning, the street will say so. Get up. Look.' },
 ]);
 
 export const NIGHT_FIRST_LINE = Object.freeze([
@@ -245,7 +256,7 @@ export const CAMPFIRE_RADA_DIALOGUE = Object.freeze([
 ]);
 
 export const CAMPFIRE_MIRO_DIALOGUE = Object.freeze([
-  { speaker: 'MIRO', text: 'Detective, settle something. If a tram loses a wheel at noon and management files the report at four, when did the tram lose the wheel?' },
+  { speaker: 'MIRO', text: 'Traveler, settle something. If a tram loses a wheel at noon and management files the report at four, when did the tram lose the wheel?' },
   { speaker: 'BUTCH', text: 'At noon.' },
   { speaker: 'MIRO', text: 'Wrong. According to management, nothing happens before the form exists.' },
   { speaker: 'SELINE', text: 'That joke was old when the tram still had its wheel.' },
@@ -285,8 +296,8 @@ export function morningEvidenceMenu(observed = []) {
   if (!observed.includes('scorch')) choices.push({ id: 'morning-scorch', label: 'Compare both rows of scorch marks.' });
   if (!observed.includes('connector')) choices.push({ id: 'morning-connector', label: 'Inspect the feed pressed into the clamp.' });
   if (!observed.includes('ash')) choices.push({ id: 'morning-ash', label: 'Touch the loose ash at the edge.' });
-  choices.push({ id: 'morning-done', label: 'Record what the morning evidence proves.' });
-  return { speaker: 'BUTCH', text: 'Confirm the physical traces.', choices };
+  choices.push({ id: 'morning-done', label: 'Record what the morning evidence proves. (Continue)' });
+  return { speaker: 'CHOOSE', text: 'Confirm the physical traces.', choices };
 }
 
 export const LEV_FINAL_OPENING = Object.freeze([
@@ -326,15 +337,15 @@ export function levFinalMenu(asked = []) {
   if (!asked.includes('message')) choices.push({ id: 'lev-final-message', label: 'State exactly what the fire message proves.' });
   if (!asked.includes('methods')) choices.push({ id: 'lev-final-methods', label: 'Explain how Mara used the city without accomplices.' });
   if (!asked.includes('eastbound')) choices.push({ id: 'lev-final-eastbound', label: 'Test the eastbound direction.' });
-  choices.push({ id: 'lev-final-done', label: 'State the final timeline.' });
-  return { speaker: 'BUTCH', text: 'Reconstruct the surviving timeline.', choices };
+  choices.push({ id: 'lev-final-done', label: 'State the final timeline. (Continue)' });
+  return { speaker: 'CHOOSE', text: 'Reconstruct the surviving timeline.', choices };
 }
 
 export const CONTINUATION_CHOICES = Object.freeze([
-  { speaker: 'BUTCH', text: 'Why continue?', choices: [
-    { id: 'continue-need-reason', label: '“I need to know why she left.”' },
-    { id: 'continue-safety', label: '“Choice does not guarantee she is still safe.”' },
-    { id: 'continue-cannot-stop', label: '“I do not know how to stop looking yet.”' },
+  { speaker: 'CHOOSE', text: 'Why continue?', choices: [
+    { id: 'continue-need-reason', label: '“I need to know why she left.” (Continue)' },
+    { id: 'continue-safety', label: '“Choice does not guarantee she is still safe.” (Continue)' },
+    { id: 'continue-cannot-stop', label: '“I do not know how to stop looking yet.” (Continue)' },
   ] },
 ]);
 

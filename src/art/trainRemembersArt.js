@@ -11,16 +11,13 @@ export default class TrainRemembersArt {
     this.layout = stage.trainRemembers;
     this.graphics = scene.add.graphics().setDepth(57);
     this.glow = scene.add.graphics().setDepth(59).setBlendMode(Phaser.BlendModes.ADD);
-    this.caption = scene.add.text(stage.startX + 40, 303, 'DEPARTURE HOLD / TRAIN MEMORY', {
-      fontFamily: 'ui-monospace, Menlo, monospace', fontSize: '9px', color: '#8fa0a7', letterSpacing: 1,
-    }).setDepth(58);
     this.pastLabel = scene.add.text(this.layout.rail.left, 284, 'PAST / PUNCHED RECORD', {
       fontFamily: 'ui-monospace, Menlo, monospace', fontSize: '9px', color: '#c8a86c', letterSpacing: 1,
     }).setOrigin(0.5).setDepth(60);
     this.presentLabel = scene.add.text(this.layout.rail.left, 427, 'PRESENT / YOUR WEIGHT', {
       fontFamily: 'ui-monospace, Menlo, monospace', fontSize: '9px', color: '#91a4aa', letterSpacing: 1,
     }).setOrigin(0.5).setDepth(60);
-    this.objects = [this.graphics, this.glow, this.caption, this.pastLabel, this.presentLabel];
+    this.objects = [this.graphics, this.glow, this.pastLabel, this.presentLabel];
     this.visible = true;
     this.lastSnapshot = null;
   }
@@ -78,14 +75,6 @@ export default class TrainRemembersArt {
     [-20, 0, 20].forEach((dx) => { g.beginPath(); g.moveTo(x + dx, y - h / 2 + 4); g.lineTo(x + dx, y + h / 2 - 4); g.strokePath(); });
   }
 
-  drawArchivist(g, snapshot) {
-    const x = this.layout.catchX + 86;
-    g.fillStyle(C(CAR.VOID), 0.95); g.fillRoundedRect(x - 38, 337, 76, 118, 8);
-    g.lineStyle(3, C(CAR.SKY_RIM), snapshot.redactionProgress > 0 ? 0.9 : 0.42); g.strokeRoundedRect(x - 38, 337, 76, 118, 8);
-    g.fillStyle(C(CAR.STEEL_MID), 0.9); g.fillRect(x - 22, 352, 44, 13); g.fillRect(x - 22, 410, 44, 13);
-    g.fillStyle(C(CAR.SKY_RIM), 0.75); g.fillTriangle(x - 20, 382, x + 20, 382, x, 405);
-  }
-
   applySnapshot(snapshot) {
     this.lastSnapshot = snapshot;
     const g = this.graphics;
@@ -127,8 +116,6 @@ export default class TrainRemembersArt {
       this.drawCase(g, echoX, 327, { echo: true, alpha: Phaser.Math.Clamp(0.58 - snapshot.redactionProgress * 0.48, 0.08, 0.58) });
     }
     this.drawCase(g, presentX, snapshot.grabbed ? 372 : 386, { grabbed: snapshot.grabbed });
-    this.drawArchivist(g, snapshot);
-
     if (snapshot.redactionProgress > 0) {
       const fallP = snapshot.redactionProgress;
       const catchX = this.layout.catchX;

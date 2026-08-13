@@ -31,8 +31,11 @@ const echoWalking = read('../../src/chapters/museum3d/scenes/EchoCityWalkingSim.
 const directionBridge = read('../../src/chapters/museum3d/systems/EmbeddedDirectionExhibit.js');
 const returnArtifacts = read('../../src/chapters/museum3d/assets/ReturnArtifacts.js');
 
-test('the archive uses environmental storytelling and four numbered doors', () => {
-  for (const number of [1, 2, 3, 4]) assert.match(corridor, new RegExp(`['\"]${number}['\"]|number: ${number}`));
+test('the archive uses one Labyrinth door, three pre-display bays, and one eight-lock exit', () => {
+  assert.match(corridor, /number: '4'/);
+  assert.match(corridor, /RECORD SEALED/);
+  assert.match(corridor, /final-archive-eight-keyholes/);
+  assert.match(corridor, /exitDoorPlaqueLocked/);
   for (const verboseLabel of [
     'ARCHIVE WING — FOUR DIRECTIONS',
     'CHAPTER 2 — THE BORROWED GRID',
@@ -65,7 +68,7 @@ test('Door 2 exposes one formal Chapter 5 route, message, and artifact contract'
   assert.match(chapter2Entry, /BORROWED_GRID_CHAPTER05_CONTRACT\.exitMessage/);
 });
 
-test('Door 2 completion returns its coil through the real Museum exhibit bridge', () => {
+test('Door 2 stays directly buildable but cannot open inside the V02 museum route', () => {
   const previousWindow = globalThis.window;
   const parentWindow = {};
   let messageListener = null;
@@ -96,22 +99,13 @@ test('Door 2 completion returns its coil through the real Museum exhibit bridge'
       progress,
     });
 
-    assert.equal(exhibit.open(CHAPTER05_DIRECTIONS.BORROWED_GRID), true);
-    assert.equal(iframe.src, BORROWED_GRID_CHAPTER05_CONTRACT.embeddedSrc);
-    messageListener({
-      origin: globalThis.window.location.origin,
-      source: parentWindow,
-      data: { type: BORROWED_GRID_CHAPTER05_CONTRACT.completeMessage },
-    });
-
-    let snapshot = progress.getSnapshot();
+    assert.equal(exhibit.open(CHAPTER05_DIRECTIONS.BORROWED_GRID), false);
+    assert.equal(iframe.src, '');
+    const snapshot = progress.getSnapshot();
     assert.equal(exhibit.opened, false);
-    assert.equal(snapshot.carriedArtifact, BORROWED_GRID_CHAPTER05_CONTRACT.artifactId);
-    assert.equal(snapshot.completed[BORROWED_GRID_CHAPTER05_CONTRACT.id], false);
-    progress.dispatch({ type: 'artifact.display', id: BORROWED_GRID_CHAPTER05_CONTRACT.artifactId });
-    snapshot = progress.getSnapshot();
     assert.equal(snapshot.carriedArtifact, null);
-    assert.equal(snapshot.completed[BORROWED_GRID_CHAPTER05_CONTRACT.id], true);
+    assert.equal(snapshot.completed[BORROWED_GRID_CHAPTER05_CONTRACT.id], false);
+    assert.equal(snapshot.artifacts[BORROWED_GRID_CHAPTER05_CONTRACT.artifactId].displayed, true);
   } finally {
     globalThis.window = previousWindow;
   }
@@ -123,7 +117,7 @@ test('the two framed playable echoes use one forgiving doorway-sized interaction
   assert.match(corridor, /name: `\$\{id\}-interaction-proxy`/);
 });
 
-test('all four numbers retain a doorway band while Doors 3–4 have no museum interaction', () => {
+test('all four numbers retain a doorway band while Door 4 is the only museum interaction', () => {
   assert.equal(DIRECTION_DOORWAYS.length, 4);
   for (const zone of DIRECTION_DOORWAYS) {
     assert.equal(directionAtDoorway({
@@ -135,46 +129,30 @@ test('all four numbers retain a doorway band while Doors 3–4 have no museum in
   assert.doesNotMatch(corridor, /registerDirection\(CHAPTER05_DIRECTIONS\.ECHO_CITY/);
   assert.doesNotMatch(corridor, /registerDirection\(CHAPTER05_DIRECTIONS\.PAINTED_COUNTRY/);
   assert.match(corridor, /id: 'echo-city'/);
-  assert.match(corridor, /id: 'painted-country'/);
   assert.doesNotMatch(corridor, /echo-city-interaction-proxy/);
   assert.doesNotMatch(corridor, /echo-case/);
   assert.match(corridor, /if \(!isDirectionPlayable\(id\)\) return false/);
-  assert.match(corridor, /this\._enterDirection\(doorwayDirection\)/);
   assert.deepEqual(DIRECTION_DOORWAYS.map(({ id }) => id), [
-    CHAPTER05_DIRECTIONS.LABYRINTH,
+    'sealed-record-1',
     CHAPTER05_DIRECTIONS.BORROWED_GRID,
     CHAPTER05_DIRECTIONS.ECHO_CITY,
-    CHAPTER05_DIRECTIONS.PAINTED_COUNTRY,
+    CHAPTER05_DIRECTIONS.LABYRINTH,
   ]);
 });
 
-test('a carried artifact is filed instead of silently disabling the playable doors', () => {
-  let carriedArtifact = CHAPTER05_DIRECTIONS.LABYRINTH;
+test('sealed bays cannot open and the Labyrinth remains the only embedded route', () => {
   const calls = [];
   const corridorHarness = {
     ctx: {
-      directionProgress: {
-        getSnapshot: () => ({ carriedArtifact, allComplete: false }),
-      },
-      displayArtifact: (id) => {
-        calls.push(['display', id]);
-        carriedArtifact = null;
-        return true;
-      },
       openDirection: (id) => calls.push(['open', id]),
-      goToEchoCity: () => calls.push(['echo']),
     },
-    _syncArtifacts: () => calls.push(['sync']),
   };
 
   ArchiveCorridor.prototype._enterDirection.call(corridorHarness, CHAPTER05_DIRECTIONS.BORROWED_GRID);
+  ArchiveCorridor.prototype._enterDirection.call(corridorHarness, CHAPTER05_DIRECTIONS.LABYRINTH);
 
-  assert.deepEqual(calls, [
-    ['display', CHAPTER05_DIRECTIONS.LABYRINTH],
-    ['sync'],
-    ['open', CHAPTER05_DIRECTIONS.BORROWED_GRID],
-  ]);
-  assert.doesNotMatch(corridor, /phase === 'corridor' && !this\.ctx\.directionProgress\.getSnapshot\(\)\.carriedArtifact/);
+  assert.deepEqual(calls, [['open', CHAPTER05_DIRECTIONS.LABYRINTH]]);
+  assert.deepEqual(PLAYABLE_DIRECTION_ORDER, [CHAPTER05_DIRECTIONS.LABYRINTH]);
 });
 
 test('doors 2 and 4 revisit their original worlds from new roles while door 1 preserves the first full maze run', () => {
@@ -331,12 +309,12 @@ test('doors 2 and 4 contain multi-beat play, embedded narrative, and held comple
   assert.match(parallelArtLedger, /night-shift-theatrical-2d-v1/);
 });
 
-test('doors 1, 2 and 4 return physical artifacts that must be displayed in the corridor', () => {
-  assert.match(directionProgress, /artifact\.take/);
-  assert.match(directionProgress, /artifact\.display/);
-  assert.match(directionProgress, /carriedArtifact/);
-  assert.match(directionBridge, /type: 'artifact\.take'/);
-  assert.match(corridor, /display-artifact-\$\{id\}/);
+test('all four artifacts are pre-displayed and the Labyrinth returns the eight-key route instead', () => {
+  assert.match(directionProgress, /displayed: true/);
+  assert.match(directionProgress, /gallery artifacts are pre-displayed/);
+  assert.doesNotMatch(directionBridge, /type: 'artifact\.take'/);
+  assert.match(directionBridge, /type: 'direction\.complete'/);
+  assert.match(corridor, /gallery-artifact-\$\{id\}/);
   assert.match(corridor, /createReturnArtifact/);
   assert.match(returnArtifacts, /artifact-looking-fragment/);
   assert.match(returnArtifacts, /artifact-three-district-bypass-coil/);
@@ -380,10 +358,11 @@ test('the combined Museum build owns all four direction entry pages', () => {
   assert.match(vite, /BORROWED_GRID_CHAPTER05_CONTRACT\.entryHtml/);
 });
 
-test('Echo remains directly runnable but does not return its badge into the museum route', () => {
+test('Echo remains directly runnable while its cassette is only a pre-display inside the museum', () => {
   assert.match(directionProgress, /CHAPTER05_DIRECTIONS\.ECHO_CITY/);
   assert.match(echoWalking, /artifact\.take', id: CHAPTER05_DIRECTIONS\.ECHO_CITY/);
-  assert.doesNotMatch(corridor, /\[CHAPTER05_DIRECTIONS\.ECHO_CITY, 30\]/);
+  assert.match(corridor, /\[CHAPTER05_DIRECTIONS\.ECHO_CITY, 30\]/);
+  assert.doesNotMatch(corridor, /registerDirection\(CHAPTER05_DIRECTIONS\.ECHO_CITY/);
   assert.match(app, /this\.standaloneDirectionId === CHAPTER05_DIRECTIONS\.ECHO_CITY/);
   assert.match(app, /museum route remains unchanged/);
 });

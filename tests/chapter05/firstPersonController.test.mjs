@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { PLAYER } from '../../src/chapters/museum3d/config.js';
 
 class FakeEventTarget {
   constructor() {
@@ -21,6 +22,10 @@ class FakeEventTarget {
     for (const fn of this.listeners.get(event.type) ?? []) fn(event);
   }
 }
+
+test('Chapter 5 uses the faster look sensitivity requested for the museum', () => {
+  assert.ok(PLAYER.lookSensitivity >= 0.0035);
+});
 
 test('controller falls back to click-and-drag mode when pointer lock is unavailable', async () => {
   const fakeWindow = new FakeEventTarget();

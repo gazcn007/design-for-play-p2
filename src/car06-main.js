@@ -1,5 +1,8 @@
 import Phaser from 'phaser';
 import { AllWorldsScene } from './chapters/allWorlds/AllWorldsScene.js';
+import { installDevMenuReturnControl } from './devMenuReturn.js';
+
+installDevMenuReturnControl();
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,

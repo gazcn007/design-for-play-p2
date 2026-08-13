@@ -38,7 +38,13 @@ const NAV_BOUNDS = Object.freeze({ minX: -58, maxX: 58, minZ: -28, maxZ: 58 });
 const PROP_OBSTACLES = CITY_MODELS
   .filter((spec) => spec.collision)
   .map((spec) => ({ ...spec.collision, center: [spec.position[0], spec.position[2]], sourceId: spec.id }));
-const ALL_OBSTACLES = [...OBSTACLES, ...PROP_OBSTACLES, ...TUNNEL_TERRAIN.obstacles];
+// The porter handcart moves with Olek at runtime, so its collision footprint
+// is maintained by Chapter3OpeningRuntime instead of remaining at spawn.
+const ALL_OBSTACLES = [
+  ...OBSTACLES,
+  ...PROP_OBSTACLES.filter((obstacle) => obstacle.sourceId !== 'porter-handcart'),
+  ...TUNNEL_TERRAIN.obstacles,
+];
 
 function configureTexture(texture, { color = false, repeat = [1, 1] } = {}) {
   texture.wrapS = THREE.RepeatWrapping;
@@ -815,6 +821,7 @@ function addLandmarkIslands(scene, materials) {
 
 function addLamp(scene, materials, x, z) {
   const group = new THREE.Group();
+  group.name = 'street-lamp';
   const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 3.9, 12), materials.iron);
   pole.position.y = 1.95;
   pole.castShadow = true;
@@ -1029,6 +1036,9 @@ export class EchoCity3DPreview {
     this.gameplayRuntime = null;
     this.pathArrival = null;
     this.cameraOverrideTarget = null;
+    // Optional replacement for the fixed isometric camera offset (used by the
+    // Copper Heron lobby, whose only open face looks northwest).
+    this.cameraOffsetOverride = null;
     this.cameraShakeRemaining = 0;
     this.cameraShakeDuration = 0;
     this.cameraShakeAmplitude = 0;
@@ -1224,6 +1234,18 @@ export class EchoCity3DPreview {
       });
     }
 
+    // The approved v68 layout stores the station canopy's narrow historical
+    // footprint. Add the measured ticket/service block as runtime collision so
+    // the platform stays open while its solid interior cannot be entered.
+    this.boundaryObstacles.push({
+      type: 'oriented-box',
+      center: STATION_LAYOUT.center,
+      size: [5.4, 7.0],
+      rotationY: STATION_LAYOUT.modelRotationY,
+      padding: 0.18,
+      sourceId: 'open-air-station-service-block',
+    });
+
     const ok = this.loadErrors.length === 0;
     this.modelsReady = true;
     const autoWalk = new URLSearchParams(window.location.search).get('autowalk');
@@ -1236,9 +1258,9 @@ export class EchoCity3DPreview {
       const target = new THREE.Vector3(autoTarget[0], 0.5, autoTarget[1]);
       const nextPath = findPath(this.player.position, target, this.boundaryObstacles);
       if (nextPath.length) {
-        nextPath[nextPath.length - 1].copy(target);
         this.path = nextPath;
-        this.destinationMarker.position.set(target.x, 0.52, target.z);
+        const resolvedTarget = nextPath[nextPath.length - 1];
+        this.destinationMarker.position.set(resolvedTarget.x, 0.52, resolvedTarget.z);
         this.destinationMarker.visible = true;
         this.lastClick = { result: 'auto-path', x: target.x, z: target.z, nodes: nextPath.length };
       } else {
@@ -1303,6 +1325,11 @@ export class EchoCity3DPreview {
     });
   }
 
+  setOccludingBuildingForceClear(id, enabled) {
+    const entry = this.occludingBuildings.find((candidate) => candidate.id === id);
+    if (entry) entry.forceClear = Boolean(enabled);
+  }
+
   resetCamera() {
     if (this.developerMode) {
       this.camera.position.set(72, 112, 82);
@@ -1313,8 +1340,9 @@ export class EchoCity3DPreview {
       this.controls.update();
       return;
     }
-    const homeOffset = new THREE.Vector3().fromArray(CAMERA_HOME.position)
-      .sub(new THREE.Vector3().fromArray(CAMERA_HOME.target));
+    const homeOffset = this.cameraOffsetOverride?.clone()
+      ?? new THREE.Vector3().fromArray(CAMERA_HOME.position)
+        .sub(new THREE.Vector3().fromArray(CAMERA_HOME.target));
     const target = new THREE.Vector3(this.player.position.x, CAMERA_HOME.target[1], this.player.position.z);
     this.camera.position.copy(target).add(homeOffset);
     this.camera.zoom = CAMERA_HOME.zoom;
@@ -1358,9 +1386,9 @@ export class EchoCity3DPreview {
       this.lastClick = { result: 'no-path', x: target.x, z: target.z };
       return;
     }
-    nextPath[nextPath.length - 1].copy(target);
     this.path = nextPath;
-    this.destinationMarker.position.set(target.x, 0.52, target.z);
+    const resolvedTarget = nextPath[nextPath.length - 1];
+    this.destinationMarker.position.set(resolvedTarget.x, 0.52, resolvedTarget.z);
     this.destinationMarker.visible = true;
     this.destinationMarker.material.opacity = 0.82;
     this.lastClick = { result: 'path', x: target.x, z: target.z, nodes: nextPath.length };
@@ -1373,7 +1401,8 @@ export class EchoCity3DPreview {
   onKeyDown(event) {
     if (this.gameplayRuntime?.handleKeyDown(event)) return;
     if (event.key.toLowerCase() === 'r') this.resetCamera();
-    if (event.key.toLowerCase() === 'd') this.setDeveloperMode(!this.developerMode);
+    // The full-map developer camera is URL-only (`?dev=1`). It must never be
+    // opened accidentally by pressing D during a normal playthrough.
     if (event.key.toLowerCase() === 'f') {
       if (!document.fullscreenElement) this.container.requestFullscreen?.();
       else document.exitFullscreen?.();
@@ -1404,10 +1433,10 @@ export class EchoCity3DPreview {
     const target = new THREE.Vector3(x, 0.5, z);
     const nextPath = findPath(this.player.position, target, this.boundaryObstacles);
     if (!nextPath.length) return false;
-    nextPath[nextPath.length - 1].copy(target);
     this.path = nextPath;
     this.pathArrival = onArrival;
-    this.destinationMarker.position.set(target.x, 0.52, target.z);
+    const resolvedTarget = nextPath[nextPath.length - 1];
+    this.destinationMarker.position.set(resolvedTarget.x, 0.52, resolvedTarget.z);
     this.destinationMarker.visible = true;
     return true;
   }
@@ -1469,6 +1498,22 @@ export class EchoCity3DPreview {
     this.controls.mouseButtons.RIGHT = THREE.MOUSE.ROTATE;
     this.controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
     document.body.classList.toggle('developer-camera', this.developerMode);
+  }
+
+  // Rooms whose readable opening faces away from the fixed isometric camera
+  // (e.g. the hotel lobby) install a replacement offset here. OrbitControls
+  // clamps azimuth to CAMERA_LIMITS, which would silently rotate any flipped
+  // offset back to the default southeast framing, so the azimuth range is
+  // pinned onto the override's own azimuth while it is active.
+  setCameraOffsetOverride(offset) {
+    this.cameraOffsetOverride = offset ? offset.clone() : null;
+    if (this.cameraOffsetOverride && !this.developerMode) {
+      const azimuth = Math.atan2(this.cameraOffsetOverride.x, this.cameraOffsetOverride.z);
+      this.controls.minAzimuthAngle = azimuth;
+      this.controls.maxAzimuthAngle = azimuth;
+      return;
+    }
+    this.applyCameraMode();
   }
 
   setDeveloperMode(enabled) {
@@ -1567,7 +1612,13 @@ export class EchoCity3DPreview {
     let desiredZ = focus.z;
     if (Math.abs(playerDx) > deadzoneX) desiredX += playerDx - Math.sign(playerDx) * deadzoneX;
     if (Math.abs(playerDz) > deadzoneZ) desiredZ += playerDz - Math.sign(playerDz) * deadzoneZ;
-    desiredX = THREE.MathUtils.clamp(desiredX, CAMERA_FOLLOW.bounds.minX, CAMERA_FOLLOW.bounds.maxX);
+    // The approved city framing ends at x=43, but the Copper Heron threshold is
+    // farther east. Let the follow target reach an actual player in that short
+    // street extension so the morning exit does not pull the camera to the plaza.
+    const eastThresholdMaxX = subject.x > CAMERA_FOLLOW.bounds.maxX
+      ? Math.min(subject.x, 55)
+      : CAMERA_FOLLOW.bounds.maxX;
+    desiredX = THREE.MathUtils.clamp(desiredX, CAMERA_FOLLOW.bounds.minX, eastThresholdMaxX);
     desiredZ = THREE.MathUtils.clamp(desiredZ, CAMERA_FOLLOW.bounds.minZ, CAMERA_FOLLOW.bounds.maxZ);
     const desiredY = this.cameraOverrideTarget
       ? THREE.MathUtils.clamp(this.cameraOverrideTarget.y, CAMERA_HOME.target[1], 18)
@@ -1604,7 +1655,7 @@ export class EchoCity3DPreview {
       // ordinary 20% ghost still layers too much window and cornice detail over
       // Butch, Lev and Nika, so this one facade clears more decisively.
       const clearsMorningHandoff = entry.id === 'transit-ministry' || entry.id === 'east-tenement-mid';
-      entry.targetOpacity = blocked ? (clearsMorningHandoff ? 0.05 : 0.2) : 1;
+      entry.targetOpacity = entry.forceClear ? 0.05 : blocked ? (clearsMorningHandoff ? 0.05 : 0.2) : 1;
       entry.opacity = THREE.MathUtils.lerp(entry.opacity, entry.targetOpacity, blend);
       if (Math.abs(entry.opacity - entry.targetOpacity) < 0.002) entry.opacity = entry.targetOpacity;
       entry.root.userData.occlusionOpacity = entry.opacity;
@@ -1726,8 +1777,8 @@ export class EchoCity3DPreview {
         triangles: this.renderer.info.render.triangles,
       },
       interaction: this.developerMode
-        ? 'developer inspection: left drag pans, right drag orbits, wheel freely zooms, D returns to production camera'
-        : 'left click stone streets to A* walk; camera follows with a deadzone; right drag inspects limited depth; D opens developer camera',
+        ? 'developer inspection: left drag pans, right drag orbits, wheel freely zooms; reload without ?dev=1 for production camera'
+        : 'left click stone streets to A* walk; camera follows with a deadzone; right drag inspects limited depth',
     });
   }
 }

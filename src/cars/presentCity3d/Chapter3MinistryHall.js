@@ -1,20 +1,28 @@
 import * as THREE from 'three';
 
 export const MINISTRY_POSITIONS = Object.freeze({
-  // The imported shell has a 0.32 m stone floor. Actor hosts retain the
-  // legacy +0.49 m capsule anchor, so 0.82 places model soles on that floor.
-  playerStart: [-0.4, 0.82, 3.35],
-  lev: [1.15, 0.82, 3.45],
-  queueDispenser: [-3.55, -0.06, 1.85],
-  queueApproach: [-2.65, 0.82, 2.25],
-  sava: [-1.4, 0.82, -3.7],
-  savaApproach: [-1.4, 0.82, -1.5],
-  nika: [3.2, 0.82, -3.7],
-  nikaApproach: [3.2, 0.82, -1.45],
-  bosko: [-3.75, 0.82, -0.1],
-  boskoApproach: [-2.75, 0.82, 0.2],
-  discardedPrint: [5.15, 0.77, -2.9],
-  discardedPrintApproach: [4.1, 0.5, -1.35],
+  // The imported shell's stone slab floor tops out at 0.768 m (measured from
+  // the GLB). Actor hosts retain the legacy +0.49 m capsule anchor, so 1.26
+  // places model soles on the slabs instead of inside them.
+  playerStart: [-0.5, 1.26, 6.8],
+  lev: [1.0, 1.26, 6.6],
+  queueDispenser: [-3.55, 0.77, 0.2],
+  queueApproach: [-2.35, 1.26, 1.4],
+  // The imported shell fuses the service counter and back wall into one mesh.
+  // This narrow window band keeps the clerks' upper bodies visible while the
+  // counter naturally masks their lower bodies; farther back hides them fully.
+  // Keep both clerks on the public side of the fused imported counter. Their
+  // previous hosts were inside its solid band, so animated bodies embedded.
+  sava: [-3.4, 1.26, -3.82],
+  savaApproach: [-3.4, 1.26, -2.65],
+  nika: [3.4, 1.26, -3.82],
+  nikaApproach: [3.4, 1.26, -2.65],
+  bosko: [4.8, 1.26, 1.5],
+  boskoApproach: [3.6, 1.26, 1.8],
+  // The torn copy lies on the long brass public table (top at 1.42 m), in the
+  // open beside the queue instead of hidden under the staff counter line.
+  discardedPrint: [4.3, 1.79, -0.7],
+  discardedPrintApproach: [3.5, 1.26, 0.3],
 });
 
 function material(color, roughness = 0.82, metalness = 0.02) {
@@ -121,23 +129,30 @@ export function createChapter3MinistryHall(scene) {
   addBox(group, [17.2, 0.12, 1.8], [0, 1.52, -4.35], brass, 'ministry-counter-cap');
 
   const hallLabel = new THREE.Mesh(new THREE.PlaneGeometry(5.3, 1.05), makeLabel('PUBLIC SERVICES'));
+  hallLabel.name = 'ministry-hall-label';
   hallLabel.position.set(0, 3.72, -6.42);
   group.add(hallLabel);
 
   for (const x of [-6.5, -2.2, 2.2, 6.5]) {
-    addBox(group, [0.08, 2.2, 0.08], [x, 2.12, -4.0], brass);
+    addBox(group, [0.08, 2.2, 0.08], [x, 2.12, -4.0], brass, `ministry-counter-post-${x}`);
   }
 
-  for (const x of [-2.7, 2.7]) {
-    for (const z of [2.2, 5.5]) addCylinder(group, 0.1, 1.2, [x, 0.76, z], brass);
+  // Queue rails run along the visitor lane so the line reads as a queue rather
+  // than a transverse barrier. Two side rails and a back rail leave the front
+  // open toward the entrance and the inner side open toward the counter.
+  const queueLaneX = 2.5;
+  for (const x of [-queueLaneX, queueLaneX]) {
+    for (const z of [3.0, 5.5]) addCylinder(group, 0.1, 1.2, [x, 0.76, z], brass, `queue-post-${x}-${z}`);
   }
-  // The two rails create a simple switchback without turning the hall into a maze.
-  addBox(group, [5.4, 0.06, 0.09], [0, 1.23, 2.2], leather, 'queue-rope-near');
-  addBox(group, [5.4, 0.06, 0.09], [0, 1.23, 5.5], leather, 'queue-rope-far');
+  addBox(group, [0.09, 0.06, 2.5], [-queueLaneX, 1.23, 4.25], leather, 'queue-rope-left');
+  addBox(group, [0.09, 0.06, 2.5], [queueLaneX, 1.23, 4.25], leather, 'queue-rope-right');
+  addBox(group, [queueLaneX * 2, 0.06, 0.09], [0, 1.23, 5.5], leather, 'queue-rope-back');
 
-  for (const z of [-0.8, 0.5, 1.8]) {
+  // Waiting benches stay along the left wall, clear of the entrance door and
+  // the main aisle to the counter.
+  for (const z of [3.5, 5.6, 7.7]) {
     addBox(group, [2.5, 0.16, 0.72], [-5.7, 0.76, z], leather, 'ministry-waiting-bench');
-    addBox(group, [2.5, 0.82, 0.14], [-5.7, 1.15, z - 0.28], leather);
+    addBox(group, [2.5, 0.82, 0.14], [-5.7, 1.15, z - 0.28], leather, 'ministry-waiting-bench-back');
   }
 
   const queue = makeQueueDispenser(group, brass, enamel, paper);
@@ -158,19 +173,19 @@ export function createChapter3MinistryHall(scene) {
   discardedPrint.rotation.x = -0.08;
   discardedPrint.visible = false;
 
-  const ambient = new THREE.HemisphereLight(0xdbe7e4, 0x493a32, 1.85);
+  const ambient = new THREE.HemisphereLight(0xdbe7e4, 0x493a32, 2.0);
   group.add(ambient);
-  const key = new THREE.DirectionalLight(0xffd3a0, 3.25);
+  const key = new THREE.DirectionalLight(0xffd3a0, 3.6);
   key.position.set(-5, 10, 8);
   key.castShadow = true;
   group.add(key);
-  const warm = new THREE.PointLight(0xffd8a0, 31, 23, 1.7);
+  const warm = new THREE.PointLight(0xffd8a0, 36, 23, 1.7);
   warm.position.set(-4.2, 4.6, 3.4);
   group.add(warm);
-  const cool = new THREE.PointLight(0x88b5bd, 23, 21, 1.8);
+  const cool = new THREE.PointLight(0x88b5bd, 26, 21, 1.8);
   cool.position.set(5.5, 3.8, -1.8);
   group.add(cool);
-  const counterPractical = new THREE.PointLight(0xffbd72, 20, 11, 1.9);
+  const counterPractical = new THREE.PointLight(0xffbd72, 24, 11, 1.9);
   counterPractical.position.set(1.5, 3.0, -4.4);
   group.add(counterPractical);
 

@@ -19,6 +19,8 @@
     "dev:chapter05": "vite --config vite.museum3d.config.js",
     "build:chapter05": "vite build --config vite.museum3d.config.js",
     "test:chapter05": "node --test tests/chapter05/*.test.mjs",
+    "dev:final-boss": "vite --config vite.final-boss.config.js",
+    "build:final-boss": "vite build --config vite.final-boss.config.js",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -1,5 +1,16 @@
 Original prompt: 你把管线搭一下但是跟玩法有关的先不用管 因为玩法我们还会整一些更有意思的机制
 
+Current request: 将确认的 NIGHTFALL 开场图做成完整交互主菜单，并实现 settings、三槽存档与检查点继续。
+
+Latest request: Credits 要完整体现 George 的主创与整合贡献，并替换不合适的旧配乐。
+
+Current integration request (2026-08-13): Connect the title UI, opening,
+completed chapters, authored transition films and ending into one route. Keep
+each film's existing black animation intact. Add a global ESC pause screen with
+resume, settings, save and title exit. Chapter 5's red-lit Museum collapse is
+itself the 5→6 transition: its black threshold must fade directly into the
+production Conductor boss, never a video or the old Chapter 6 greybox.
+
 ## Scope
 
 - Build only the reusable world-background content pipeline.
@@ -7,14 +18,159 @@ Original prompt: 你把管线搭一下但是跟玩法有关的先不用管 因�
 
 ## Work log
 
+- 2026-08-13: Ran a fresh chapter-by-chapter visual audit from the active
+  integration worktree, with production title plus direct playable routes.
+  Chapter 5 is present as three separately verified pieces: Museum lobby,
+  eight-key Labyrinth, and the collapse/Final Archive route. The audit found
+  three unresolved integration mismatches: Cyberpunk still labels itself
+  `CHAPTER ONE` even though the production route treats it as Chapter 2; the
+  integrated `/painted-country.html` still uses the older wash/bridge build
+  while the telephone/teapot/counterweight/drawbridge version lives unmerged in
+  `design-for-play-p2-main-latest`; and repeated live collapse captures did not
+  show the locked full-room saturated red alarm wash, only the red floor danger
+  telegraph. Evidence is under `outputs/chapter-version-audit-2026-08-13/`.
+
+- 2026-08-13: Integrated the delivered `start`, `1-2`, `2-3`, `3-4`, `4-5`
+  and `end` films without trimming their black frames. The title and completed
+  chapter exits now own those handoffs. The Museum collapse instead routes its
+  black threshold directly to the production Conductor Boss, bypassing the old
+  Chapter 6 greybox and the Boss menu. Boss victory plays the ending film.
+- 2026-08-13: Added a shared ESC pause stack across Phaser, Chapter 3 Three.js,
+  Chapter 4, Museum, films and Boss. It freezes runtime/film advancement and
+  exposes Resume, Save, Settings and Return to Title. Focused flow, save and
+  collapse checks pass 20/20. A full multi-entry production build also passes.
+  Browser QA confirms that ESC holds the opening film and the live Boss, and
+  that the Chapter 5 query starts the fight behind a black-to-game fade with no
+  intermediate Boss menu or console errors.
+
+- 2026-08-13: Added an interactive title-menu Credits register in an American
+  Typewriter / railway timetable visual language. The roster combines four
+  chapter treatments (night-service brass, neon grid, Echo City stone/red and
+  Painted Country paper/ink), while the attribution ledger records team,
+  music, generative production and licensed external sources with live source
+  and license links. The source prompt repeated Carl; the integrated project
+  roster supplies Mathias as the fifth distinct teammate.
+- 2026-08-13 (superseded by the later music change): Selected HoliznaCC0's non-AI-generated instrumental `Last Train
+  To Earth` for the Credits. Its FMA page explicitly grants CC0 1.0. Added a
+  128 kbps runtime derivative with recorded SHA-256, music-volume-aware
+  playback on Credits open, stop/reset on close, and a durable public
+  attribution register. Synthetic voice provider metadata remains missing in
+  the pre-existing line manifests and is disclosed as incomplete rather than
+  guessed.
+- 2026-08-13: Superseded as a deliverable by the user's clarification that the
+  effect belongs in the game, not in a separate video. A 35.96-second,
+  1280×720 H.264/AAC MP4 preview at 4× playback speed, covering the title,
+  complete crew manifest, all four chapter-art cars, music/generative/source
+  ledgers and END OF LINE. Mixed the selected CC0 track into the preview with
+  short fades. The final deliverable is
+  `output/credits-animation/final/NIGHTFALL-rolling-credits-preview.mp4`, but it
+  is QA evidence only and not part of the player-facing delivery;
+  contact-sheet, end-card and browser QA evidence live beside it. The required
+  browser client confirmed rolling state, music playback and 2.25× keyboard
+  speed control with no console-error artifact.
+
+- 2026-08-13: George approved the current Chapter 5 pre-boss collapse as the
+  final lock. Promoted V02 from pending review to the authoritative final
+  gameplay/art/timing document, including the exact 12-event trigger/impact
+  table, warning and fall windows, fixed Final Archive pressure rhythm,
+  impact-only dust, first-run-clear target, insertion animation, threshold
+  coordinates, black hold and `/car06.html` Chapter 6 handoff. Runtime entry,
+  door-pressure, threshold and transition values now share named lock constants
+  instead of duplicated literals, with regression coverage for the complete
+  Labyrinth → collapse → eight keys → black threshold → Chapter 6 chain.
+- 2026-08-13: Finished the Chapter 3 midnight burning-message pass that Kimi left incomplete. The two oil-written lines now use a bundled Permanent Marker face instead of silently falling back to a serif font, preserve the conforming/depth-safe pavement projection, and keep their irregular contour flames. Rebalanced the effect around a readable red letter core: the additive ground halo, heat haze, and point-light spill are substantially more transparent and less orange, so cobblestone remains visible through the firelight. The font ships with its Apache 2.0 license. Chapter 3 passes 163/163 tests; lightweight browser QA verified the hand-lettering and transparent red spill with no console errors and a valid `render_game_to_text()` snapshot.
+
+- 2026-08-13: Added a production title-screen shell using the approved A02 V04 Spanish + Painted Country image. The menu supports keyboard/mouse focus, three save slots, continue, unlocked checkpoint selection, delete/overwrite confirmation, fullscreen, master/music/SFX volume, subtitles, reduced motion and text scale. Save/settings data persists in localStorage; transient launch routing uses sessionStorage.
+- 2026-08-13: Added production checkpoints for Prologue, Chapter 2 start and its authored midpoint, plus Chapter 3/4/5/6 standalone entry boundaries. The Chapter 2 midpoint restores the actual parkour state needed beyond the existing physical checkpoint. Standalone chapters gain a production TITLE return while retaining the development-only DEV MENU behavior.
+
+- 2026-08-13: Removed the collapse corridor's always-on airborne dust field.
+  Dust is now a discrete landing response only: each debris impact emits one
+  sub-second, ground-hugging radial pressure ring, low-poly plaster/concrete
+  plumes and a small ballistic chip spray, then fully disposes the effect.
+  Warning and falling phases remain visually clean, holes do not emit the new
+  burst, and reset/death clears any in-flight particles. Added regression
+  coverage for the impact-only contract; Chapter 5 passes 147/147 tests.
+- 2026-08-13: Tuned Chapter 5 collapse toward a first-run clear without
+  flattening the threat. Ordinary impacts now warn 2.8m ahead for 1.3s plus a
+  0.4s visible fall; floor failures warn 3.4m ahead for 1.55s. Final Archive
+  strikes also expose 1.45s warnings and repeat less often. Expanded the danger
+  marker with a pulsing outer ring and changed the capture-only event camera to
+  stand at the real authored trigger point. Golden-path timing regressions prove
+  that a player who keeps moving clears every corridor impact, while the final
+  room still allows more than 4.5m of lateral response.
+- 2026-08-12: Re-directed the Chapter 5 collapse after George's first live
+  playtest. Removed every player-following hazard. Twelve authored corridor
+  events now have fixed trigger and impact coordinates, including oversized
+  ceiling/wall/world chunks and three large floor failures. Each floor failure
+  shows a high-contrast triangular danger mark and spreading cracks for a full
+  second before the hole opens; ceiling impacts visibly crack first and leave a
+  dark rupture after the mass falls. The Final Archive uses a fixed centre-left-
+  right pressure pattern, with its first centre strike interrupting a held key
+  insertion after three keys rather than almost after the full set.
+- 2026-08-12: Restored the authored corridor lighting hierarchy that the first
+  collapse pass had flattened by globally reducing every light to 18-34%. The
+  calm warm lights and display-case separation remain ahead of the player;
+  passed fixtures now fail individually while three staged red emergency pools
+  enter with the escalation zones. Replaced the light procedural collapse audio
+  with an adaptive unresolved industrial score: low dissonant drone, gated
+  pressure pulse and a high-tension layer that intensifies by zone and at the
+  archive door. Heavy impacts now carry longer low-frequency/noise tails.
+- 2026-08-12: Repaired the live input complaint by widening the Final Archive
+  interaction approach and allowing held primary mouse as a complete alternative
+  to held E/Enter. Museum look sensitivity rose from 0.0022 to 0.0038 radians per
+  pixel. Browser QA proved mouse insertion, fixed door interruption, one-second
+  hole warning/open states, ceiling fracture warnings and the full eight-key
+  completion route. Chapter 5 passes 143/143 tests; Chapter 5/main builds, asset
+  check, whitespace and production first-frame/query-ignore checks pass. No
+  transition video was generated because the revised sequence remains fully
+  playable in real time.
+- 2026-08-12: Implemented the Chapter 5 pre-boss route from
+  `CHAPTER_05_COLLAPSE_GAUNTLET_DESIGN_LOCK_V02.md`; V01 remains history only.
+  The Museum now exposes only the Labyrinth as playable, keeps all four return
+  objects pre-displayed with the locked two-layer accession copy, and grants
+  the Labyrinth's eight-key ring directly into a three-zone corridor collapse.
+  Debris uses 0.72-second outlined/audio telegraphs, escalates by zone, remains
+  as low collision, shatters the four cases in sequence, and applies three-hit
+  retry with one-second invulnerability. Death returns the player to Door 1
+  while preserving every key already slotted at the Final Archive.
+- 2026-08-12: Built the V02 Final Archive interaction: two columns of four
+  keyholes, 0.6-second hold per key, falling hazards that interrupt the hold
+  until release, animated walnut leaves, a walk-or-E black threshold, a
+  1.2-second black hold, Chapter 5 completion card, and the current reversible
+  hard-cut default to `car06.html`. No Chapter 6 artifact contract was changed;
+  the V02 empty-case rule remains intact. Reduced-motion mode removes the hit
+  camera dip while keeping warning shape, contrast, and sound.
+- 2026-08-12: Chapter 5 browser QA exercised the collapse start, live hit,
+  one-death retry with three inserted keys preserved, door-zone hold
+  interruption, all eight key insertions, door opening, black threshold, and
+  completion card. Evidence is in `outputs/chapter05-collapse-qa/`, including
+  `death-persistence-v02`, `door-interrupt-v02`, and
+  `chapter-complete-v02/full-page.png`. The Chapter 5 suite passes 140/140;
+  Chapter 5 production build, main production build, 10-panorama/30-texture
+  asset verification, whitespace validation, and the production query-ignore
+  first-frame contract all pass.
+- 2026-08-11: Corrected the Chapter 1 authority again after confirming the
+  user's intended latest version is PR #6 `f1aa420` (`Polish retro transit
+  prologue`), not the cinematic-preview package. The development-menu Chapter
+  1 row now opens `?chapter=0`, whose orange retro-transit interior, Conductor
+  narrative and power-restoration route have been restored from that PR.
+  The cinematic preview remains reference-only. Full Node tests pass (836/836);
+  retry the main Vite build after the iCloud-backed asset read stalls clear.
+- 2026-08-11: Added one shared development-only exit control to every direct
+  Chapter 1/2/3/4/5/6 entry point. Pressing the backtick key (or clicking the
+  visible `` ` DEV MENU `` control) returns to the root development menu. The
+  control is suppressed in embedded Museum directions and in production or
+  standalone production builds.
 - 2026-08-11: Corrected the latest-main integration boundary before publication:
   the newer Chapter 1 Opening / Night Service package was not part of the
   Cyberpunk Parkour PR. Its 30.8-second preview, first-frame contract,
   narration, storyboard and source assets now live at
-  `public/chapter01-opening/`, with a direct `chapter01-opening.html`
-  development-menu entry and a handoff to `?chapter=0`. The preview and its
-  gameplay handoff are browser-checked; the local integration commit is ready
-  to amend before publication.
+  `public/chapter01-opening/`. The later correction establishes PR #6
+  `f1aa420` as the actual Chapter 1 authority: its orange retro-transit
+  narrative interior, Conductor dialogue and power-restoration route now own
+  the Chapter 1 development-menu entry (`?chapter=0`). The preview remains a
+  reference page only. The local integration commit must be amended before
+  publication.
 - 2026-08-11: Created the local latest-main integration branch
   `codex/latest-main-chapters-1-2-3-5` from `570c988`. It combines the Chapter
   1 / 2 Cyberpunk Parkour PR package, the current Chapter 3 Echo City 3D
@@ -689,3 +845,42 @@ chapter after what it is, not after the slot it currently occupies.
 - 2026-08-09 checkpoint correction: the midpoint now activates from reaching its physical gate instead of requiring every opening obstacle to have logged usage. Crossing it normalizes the completed first-half route state, so subsequent hazards reliably respawn there. The first post-checkpoint spike strip is reduced from four segments to three.
 - 2026-08-09 movement correction: the parkour physics world now extends above the fixed camera, so the high third spike jump can leave the frame without hitting an invisible ceiling. Ladder climbing no longer rewrites the player's x/y position at the top; players climb and move sideways onto a roof continuously under ordinary input. The high spike strip is three segments wide and shifted right for a readable runway.
 - 2026-08-09 topology/exit correction: AIR LANE and NIGHT GRID were lowered 30px together with their attached ladder, rooftop prop, rail and spike strip. Their relative ladder gap is unchanged and the autonomous car remains the only crossing. The final balcony now returns to the completed Prologue train at x=4700 rather than handing off to the next city.
+
+## Production title menu, settings, and archive saves
+
+- 2026-08-13: The approved V04 blended-world opening artwork is now the production title screen. The Phaser runtime is not created until the player starts or continues a journey, so the HTML menu remains accessible and the opening never exposes a paused black canvas.
+- Added three independent archive slots, overwrite/delete confirmation, active-slot Continue, per-slot checkpoint browsing, keyboard focus navigation, fullscreen, and responsive desktop/mobile layouts. Settings persist master/music/SFX values, subtitles, reduced motion, and text size; master volume is applied to the Phaser sound manager and media elements.
+- Checkpoints are now recorded at the Prologue handoff, the Cyberpunk Parkour entrance and physical midpoint, and each standalone Chapter 3–6 entry. A stored checkpoint can relaunch the Prologue, either Chapter 2 checkpoint, the Spanish civic city, the painted-paper country, the museum, or the convergence finale. Production chapter pages expose a consistent TITLE return control while development retains its chapter-menu behavior.
+- Verification: 8 focused/regression Node tests pass, all 10 panoramas and 30 textures pass the asset check, whitespace validation is clean, and browser QA confirms title rendering, persisted settings, new-slot launch, checkpoint browsing, and a 390×844 mobile layout. The production build completes successfully (91 modules; the existing large-chunk warning remains).
+- 2026-08-13 title-menu polish: removed the visible duplicate baked menu through a dedicated dark negative-space mask while preserving the approved title and world blend. Menu response was lightened by removing the expensive backdrop blur, shortening focus transitions, using touch-manipulation behavior, restoring focus to the invoking action, and reducing the hidden QA-state poll from roughly eight times per second to twice per second. Added a confirmed QUIT GAME flow with a browser-safe ended state and Return to Title. The focused save/settings tests, asset check, syntax checks and whitespace validation pass. Two built-in image-edit attempts to create a clean V05 background did not return an artifact, so the approved V04 file remains intact and the cleanup is currently implemented non-destructively in the UI layer.
+- 2026-08-13 complete interaction presentation: rebuilt the title shell into a numbered Night Service terminal with functional descriptions, archive status, keyboard legend, clear cyan focus language and responsive mobile compression. New-game/load flows now present three styled archive cards; settings and quit use a shared ornamented modal language with immediate focus restoration. Live QA confirmed all five main actions, three save cards, six settings controls, quit confirmation and measured the Settings panel opening at about 104ms in the automated browser.
+- 2026-08-13 production title promotion: George approved this version as the formal opening UI. The root production document now identifies the game as `NIGHTFALL — The Last Archive Line`, preloads the approved title background through the stable `/assets/ui/nightfall-title-background.png` production path, suppresses the underlying game host while the title owns the screen, and retains the numbered terminal, three archive slots, checkpoint browser, settings and quit flow as the canonical production entry.
+- 2026-08-13 rolling credits: replaced the browseable Credits register with a 138-second, full-screen cinematic roll. It opens on the NIGHTFALL title, moves through the five-person crew manifest and four chapter-art train cars, then rolls music, generative-production and licensed-source citations before holding on END OF LINE. George now receives a featured Creative & Integration Lead card documenting ten repository-supported areas: game/creative direction; narrative/world/character direction; Butch/Mara relationship design; chapter/gameplay/experience design; Prologue design and implementation; production/team/build integration; voice casting/performance direction; AI production/asset curation; playtest/scope/final acceptance; and title/credits/release presentation. Space pauses, Up/Down changes speed, R restarts and Escape exits; reduced-motion mode presents the same material as a static scroll.
+- 2026-08-13 credits-music replacement: removed the rejected HoliznaCC0 runtime track and replaced it with Scott Buckley's `Last And First Light`, a bittersweet orchestral/solo-violin piece chosen to match the reunion and deep-blue dawn ending. The official source grants commercial use under CC BY 4.0 with attribution. Added a 128 kbps runtime derivative (SHA-256 `f7ea852bc761d7b0d4a42ca586077661a1c3564f062e63830c6987b74b8e92d9`), raised Credits gain from 0.42 to 0.62 of Master × Music for the source's approximately -16.2 LUFS master, and updated both in-game and durable attributions. Production build, asset check, three save-system tests and whitespace validation pass. Browser QA verified the expanded George card, 4× roll and `LAST AND FIRST LIGHT` in playing state with no console-error artifact.
+
+## Final integration and local executable
+
+- 2026-08-13: Integrated the latest three-part Chapter 4 route (`PaintedCountry` → `DrawingStudio` → `PigmentTrain`) and its Debussy runtime tracks. Its completed train now plays the authored 4→5 film and enters Chapter 5. Corrected the parkour HUD to `CHAPTER TWO`.
+- Chapter 5 keeps the Museum/Labyrinth route and authored collapse as the 5→6 transition: full-gallery emergency red light, falling hazards and holes, black hold, then a direct fade into the Final Boss with no duplicate menu or extra film.
+- A Final Boss victory now plays `end.mp4` and opens the rolling Credits automatically. The existing Credits register remains the source of truth for crew, music, generative production and licensed-source attribution.
+- Production build passed with 288 modules. Focused integration/model coverage passed 44/44; whitespace validation passed. Browser QA visually confirmed Chapter 4, the red Museum collapse, the Chapter 6 arena and the rolling Credits; the recorded state reports no asset or page errors.
+- Generated a locally signed, double-clickable macOS bundle at `/Users/zhongzicheng/Codex Local Backups/NIGHTFALL/Release/NIGHTFALL.app` (575 MB, 935 game files, zero iCloud placeholders). It contains the production build and starts a loopback-only server at `127.0.0.1:41730`; no upload or cloud publishing was performed. Node.js remains a local runtime prerequisite on the target Mac.
+- 2026-08-13 release 1.2 fixes the ESC → Resume soft-lock. The pause layer now captures the exact Phaser scenes that were active before suspension and resumes that saved set; querying `getScenes(true)` after pausing had returned no scenes. Automated live QA completed two consecutive pause/resume cycles, restored active scene state both times, moved the player after both resumes and reported zero console errors.
+- Release 1.2 adds the invisible title code `1111`: four uninterrupted presses, with no input field or visible hint, open a six-entry chapter router. Chapters 1–5 play the authored opening/preceding transition film before entry; Chapter 6 begins at the playable Museum collapse, continues through black and lands in the Final Boss. Live production QA confirmed all six rows and full-screen playback of `1-2.mp4` at ready state 4 with no gesture prompt or console errors.
+- The native app now bundles its own Apple Silicon Node runtime, so friends do not need Homebrew or Node installed. It remains ad-hoc signed rather than Developer ID notarized, so another Mac may require right-click → Open on first launch.
+
+## Local web integration fixes — Door 4, preload, music
+
+- 2026-08-13: Per George's playtest, the museum's side-facing last door under the final light is now the sole Labyrinth entrance and is visibly numbered 4. Door 1 and records 2–3 are sealed; walking into the doorway no longer opens anything automatically. The player must face the Door 4 target and press E, with the on-screen prompt `E — ENTER DOOR 4 · THE LABYRINTH`.
+- All four prior-world artifacts are pre-displayed in the archive corridor with stronger case lighting and explicit object labels: Looking Fragment, Three-District Bypass Coil, Mara's Ordinary Morning recording, and The Common Fold.
+- Chapter 3 no longer binds global D to the developer camera and no production-facing help/state text advertises that shortcut. Live production QA loaded all 30/30 model sources and 72/72 expected instances with zero asset errors.
+- The first Painted Country scene now starts its Debussy track, matching the later Drawing Studio and Pigment Train sections. Chapter 4 preloading now warms both authored music files; live production QA reported `chapter4-drawing-music` playing at volume 0.28.
+- The Final Boss Chapter 5 handoff now keeps an authored loading blackout visible until all GLB assets finish, then begins the fight and fades out. Chapter 6 preloading now covers all five score cues and every runtime city/character GLB. Live QA reported `assetsReady: true`, no asset errors, active music, and a visible playable arena.
+- Verification: production build passed; Chapter 3 tests 163/163; Chapter 5 tests 148/148; direct browser checks confirmed Door 4 prompt/entry, Chapter 4 music, Chapter 3 asset load, and Final Boss reveal. Work intentionally remains in the local web version; the macOS app bundle was not rebuilt.
+
+## Chapter 3 final-source integration and transition preload
+
+- 2026-08-13: The integrated web route now consumes the George-approved Chapter 3 temporary-final v31 source as integrated lock v32, rather than the older Echo City runtime that had remained in the assembly workspace. The title/pause/save shell and Chapter 3→4 film handoff remain attached outside the locked runtime.
+- The hidden title code `1111` still enters Chapter 3 through the real 32.88-second `2-3.mp4`. During that film, the preloader now warms all 79 critical page/model/material/character/replacement/music resources with six parallel workers; live QA reached `ready`, 79/79, zero failures before the film ended.
+- After transition, live QA reported `chapter3-temporary-final-v31-integrated-v32`, 30 city model sources with no model errors, 26/26 character instances, 20/20 fitted replacement sets and no fallbacks. A warm re-entry reached initialized gameplay in about 1.76 seconds. Chapter 3 regression is 206/206 and the production build passes.
+- The Museum Labyrinth was audited, not replaced: the integrated implementation is the later full production branch with four wings, eight keys/statues, first-key wing connectors, shields/gaze pursuit and the Door 4 entry contract. Chapter 5 remains 148/148.

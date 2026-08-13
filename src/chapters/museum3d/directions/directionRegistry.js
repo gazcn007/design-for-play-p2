@@ -15,11 +15,13 @@ export const DIRECTION_ORDER = Object.freeze([
   CHAPTER05_DIRECTIONS.PAINTED_COUNTRY,
 ]);
 
-// Echo City and Door 4 stay authored and buildable as standalone slices, but
+// Echo City and the earlier Painted Country museum echo stay authored and
+// buildable as standalone slices, but Door 4 itself now belongs to Labyrinth.
 // are deliberately outside the current Chapter 5 museum route. Keeping the
 // boundary here prevents either slice from silently affecting the museum's
 // completion count while preserving their direct preview entry points.
 export const SEALED_DIRECTION_IDS = Object.freeze([
+  CHAPTER05_DIRECTIONS.BORROWED_GRID,
   CHAPTER05_DIRECTIONS.ECHO_CITY,
   CHAPTER05_DIRECTIONS.PAINTED_COUNTRY,
 ]);
@@ -42,6 +44,7 @@ export const DIRECTION_DEFINITIONS = Object.freeze({
     completeMessage: BORROWED_GRID_CHAPTER05_CONTRACT.completeMessage,
     exitMessage: BORROWED_GRID_CHAPTER05_CONTRACT.exitMessage,
     artifactId: BORROWED_GRID_CHAPTER05_CONTRACT.artifactId,
+    available: false,
   }),
   [CHAPTER05_DIRECTIONS.ECHO_CITY]: Object.freeze({
     id: CHAPTER05_DIRECTIONS.ECHO_CITY,
@@ -55,8 +58,10 @@ export const DIRECTION_DEFINITIONS = Object.freeze({
   }),
   [CHAPTER05_DIRECTIONS.PAINTED_COUNTRY]: Object.freeze({
     id: CHAPTER05_DIRECTIONS.PAINTED_COUNTRY,
-    title: '4',
-    shortTitle: '4',
+    // Its archived object occupies the sealed first bay. Door 4 is now the
+    // Labyrinth, so keeping a second "4" here would make labels ambiguous.
+    title: '1',
+    shortTitle: '1',
     src: '/chapter05-painted-country.html?embedded=1',
     completeMessage: 'chapter05-direction:painted-country:complete',
     exitMessage: 'chapter05-direction:painted-country:exit',
@@ -71,6 +76,7 @@ export const DIRECTION_DEFINITIONS = Object.freeze({
     completeMessage: LABYRINTH_CHAPTER05_CONTRACT.completeMessage,
     exitMessage: LABYRINTH_CHAPTER05_CONTRACT.exitMessage,
     artifactId: LABYRINTH_CHAPTER05_CONTRACT.artifactId,
+    completionMode: 'eight-key-ring',
   }),
 });
 

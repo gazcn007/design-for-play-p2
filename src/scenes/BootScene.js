@@ -6,6 +6,7 @@ import { STORY_WORLDS } from '../story.js';
 import { queueWorldAsset, resolvePreviewWorldIndex } from '../worlds/worldAssets.js';
 import mechanicalTableBaseUrl from '../assets/tutorial/mechanical-table/base-plate.png?url';
 import mechanicalPipeUrl from '../assets/tutorial/mechanical-table/vendor/pipe-tileset-cc0.png?url';
+import { consumePendingLaunch } from '../shell/saveSystem.js';
 
 export default class BootScene extends Phaser.Scene {
   constructor() {
@@ -38,10 +39,13 @@ export default class BootScene extends Phaser.Scene {
       label.destroy();
     });
 
+    this.pendingLaunch = typeof sessionStorage === 'undefined'
+      ? null
+      : sessionStorage.getItem('nightfall.pendingLaunch.v1');
     const params = devParams();
     const directCarIndex = params.get('car') === '2' ? 2 : null;
     const chapterIndex = resolveDevChapterIndex(STORY_WORLDS);
-    const parkourPreview = chapterIndex === 1
+    const parkourPreview = this.pendingLaunch?.startsWith('chapter-2') || chapterIndex === 1
       || params.get('chapter') === 'cyberpunk'
       || params.get('qa')?.startsWith('parkour-');
     const previewIndex = resolvePreviewWorldIndex(STORY_WORLDS);
@@ -58,6 +62,13 @@ export default class BootScene extends Phaser.Scene {
     buildTextures(this);
     buildAnimations(this);
     const params = devParams();
+    const pendingLaunch = consumePendingLaunch();
+    if (pendingLaunch?.startsWith('chapter-2')) {
+      this.scene.start('CyberpunkParkour', {
+        checkpoint: pendingLaunch === 'chapter-2-midpoint' ? 'midpoint' : 'start',
+      });
+      return;
+    }
     if (params.get('car') === '2') {
       this.scene.start('Game', { startWorldIndex: 2 });
       return;

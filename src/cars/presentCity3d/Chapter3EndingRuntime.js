@@ -255,7 +255,29 @@ export class Chapter3DialogueController {
       this.voice.play(line);
       this.onLineChange?.(line, this.index);
     }
-    this.speakerElement.textContent = line.speaker;
+    const panelModifiers = [
+      'dialogue-panel-inner-voice',
+      'dialogue-panel-pattern',
+      'dialogue-panel-tenderness',
+      'dialogue-panel-nerve',
+      'dialogue-panel-system',
+      'dialogue-panel-prompt',
+    ];
+    this.panel.classList.remove(...panelModifiers);
+    const speaker = line.speaker || '';
+    const innerVoiceClass = {
+      PATTERN: 'dialogue-panel-pattern',
+      TENDERNESS: 'dialogue-panel-tenderness',
+      NERVE: 'dialogue-panel-nerve',
+    }[speaker];
+    if (innerVoiceClass) {
+      this.panel.classList.add('dialogue-panel-inner-voice', innerVoiceClass);
+    } else if (speaker === 'NARRATION' || speaker === 'SYSTEM' || speaker === '') {
+      this.panel.classList.add('dialogue-panel-system');
+    } else if (speaker === 'CHOOSE') {
+      this.panel.classList.add('dialogue-panel-prompt');
+    }
+    this.speakerElement.textContent = speaker;
     this.textElement.textContent = line.text.slice(0, Math.floor(this.visibleCharacters));
     this.choicesElement.replaceChildren();
     const complete = this.isLineComplete();

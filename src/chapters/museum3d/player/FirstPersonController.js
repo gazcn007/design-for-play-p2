@@ -31,7 +31,7 @@ export class FirstPersonController {
     this.collisionWorld = collisionWorld;
     this.enabled = true; // false during transitions/overlays
     this.speed = PLAYER.walkSpeed;
-    this.sensitivity = 0.0022; // rad per pixel — Gate 7 exposes this as a setting
+    this.sensitivity = PLAYER.lookSensitivity;
 
     this._keys = { forward: false, back: false, left: false, right: false };
     this._tapPending = { forward: false, back: false, left: false, right: false };
@@ -212,6 +212,10 @@ export class FirstPersonController {
 
   get verticalVelocity() {
     return this._verticalVelocity;
+  }
+
+  get isMoving() {
+    return Object.values(this._keys).some(Boolean);
   }
 
   _applyCamera() {

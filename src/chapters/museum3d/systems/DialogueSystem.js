@@ -40,6 +40,12 @@ export class DialogueSystem {
     };
   }
 
+  get currentLine() {
+    if (this._choice) return { speaker: 'BUTCH', text: this._choice.prompt };
+    if (!this._current) return null;
+    return { speaker: this._current.speaker ?? null, text: this._current.text };
+  }
+
   _next() {
     this.voice.stop();
     this._current = this._queue.shift() ?? null;

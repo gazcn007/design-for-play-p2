@@ -1,5 +1,4 @@
 import { directionDefinition, isDirectionPlayable } from '../directions/directionRegistry.js';
-import { isArtifactDirection } from '../state/chapter05DirectionProgress.js';
 
 export class EmbeddedDirectionExhibit {
   constructor({ root, iframe, closeButton, titleEl, statusEl, progress, onOpen, onClose }) {
@@ -21,14 +20,9 @@ export class EmbeddedDirectionExhibit {
       const definition = directionDefinition(this.directionId);
       if (event.data?.type === definition.exitMessage) this.close();
       if (event.data?.type === definition.completeMessage) {
-        if (isArtifactDirection(this.directionId)) {
-          this.progress.dispatch({ type: 'artifact.take', id: this.directionId });
-          this.statusEl.textContent = '◦';
-        } else {
-          this.progress.dispatch({ type: 'direction.complete', id: this.directionId });
-          this.statusEl.textContent = '·';
-          this.root.classList.add('complete');
-        }
+        this.progress.dispatch({ type: 'direction.complete', id: this.directionId });
+        this.statusEl.textContent = '·';
+        this.root.classList.add('complete');
         this.close();
       }
     };

@@ -1,6 +1,6 @@
 # Chapters 1 / 2 / 3 / 5 latest-main integration handoff
 
-Last updated: 2026-08-11
+Last updated: 2026-08-13
 
 ## Integration boundary
 
@@ -16,10 +16,11 @@ Last updated: 2026-08-11
 Run `npm run dev` once. The main development menu now exposes all playable
 packages together:
 
-- **Chapter 1 — Opening to Night Service:** `/chapter01-opening.html`.
-  This is the latest 30.8-second cinematic preview and its complete source
-  package. It ends on the actual Chapter 1 first-frame plate; **ENTER CHAPTER
-  1** opens `/?chapter=0` for the matching Prologue start.
+- **Chapter 1 — Night Service / orange carriage narrative:** `/?chapter=0`.
+  This is the latest playable Chapter 1 authority from PR #6 (`f1aa420`): the
+  orange retro-transit car, Conductor narrative, and power-restoration route.
+  The separate `/chapter01-opening.html` cinematic preview remains available
+  as reference material, but it is not the Chapter 1 development-menu entry.
 - **Chapter 1 / 2 — Cyberpunk Parkour:** `/?chapter=cyberpunk`.
   The main story column retains the normal Chapter One route; this direct entry
   is the teammate's movable-route, ladder, and flying-car development slice.
@@ -28,6 +29,9 @@ packages together:
 - **Chapter 5 Door 1 — Labyrinth:** `/labyrinth.html`.
 - **Chapter 5 Door 2 — Borrowed Grid:** `/borrowed-grid.html`.
 - **Chapter 5 Echo City review:** `/museum-3d.html?beat=echo&standalone=1`.
+- **Chapter 5 final pre-boss review — Collapse:**
+  `/museum-3d.html?beat=collapse`. This direct route is for review only; the
+  canonical story trigger is the embedded Labyrinth's completion message.
 
 The menu continues to list Chapters 4 and 6, and production stays unchanged:
 `npm run prod` starts the Prologue, not the development menu.
@@ -37,16 +41,20 @@ The menu continues to list Chapters 4 and 6, and production stays unchanged:
 - Chapter 3's active runtime package and its animation, voice, model, backdrop
   and replacement assets live under `src/cars/presentCity3d/` and
   `public/assets/chapter03-3d/`.
-- Chapter 1's latest opening source, preview, narration, subtitles, storyboard
-  and true gameplay-frame reference are packaged at
-  `public/chapter01-opening/` rather than replaced by the earlier Parkour PR.
+- Chapter 1's playable authority is the orange retro-transit narrative
+  interior. Its optional opening source, preview, narration, subtitles,
+  storyboard and true gameplay-frame reference remain packaged at
+  `public/chapter01-opening/` without replacing the playable Chapter 1 route.
 - Chapter 5's Echo City revisit uses its own frozen authority snapshot at
   `public/museum3d/echo-city/authority/`; it does not overwrite Chapter 3.
-- The Museum enables Door 1 and Door 2 by default. Door 3 Echo City and Door 4
-  Painted Country remain sealed in the default registry; the former has the
-  explicit review route above. The Chapter 5 Painted Country revisit is kept at
-  `chapter05-painted-country.html`, so the main Chapter 4 page remains owned by
-  the latest main branch.
+- The final-locked Museum route enables **only Door 1 / Labyrinth**. Borrowed
+  Grid, Echo City and Painted Country remain buildable as direct review pages
+  but are sealed and inert inside the Museum. Completing the embedded Labyrinth
+  grants eight keys and immediately starts the fixed-coordinate collapse in
+  the existing corridor. Slotting all eight keys and crossing the black
+  threshold completes Chapter 5 and hands off to `/car06.html` for the Chapter
+  6 final boss. The authoritative timing/event table is in
+  `docs/CHAPTER_05_COLLAPSE_GAUNTLET_DESIGN_LOCK_V02.md`.
 
 ## Useful focused commands
 
@@ -59,7 +67,7 @@ The menu continues to list Chapters 4 and 6, and production stays unchanged:
 
 - Chapter 1 / 2 focused tests: 8 / 8 passed.
 - Chapter 3 focused tests: 163 / 163 passed.
-- Chapter 5 focused tests: 134 / 134 passed.
+- Chapter 5 focused tests: 148 / 148 passed after the final collapse lock.
 - `npm run assets:check`, `npm run build`, `npm run build:chapter03`,
   `npm run build:chapter05`, and `git diff --check` passed.
 - Browser-checked the menu, clicked its corrected Chapter 1 opening entry and
@@ -68,3 +76,7 @@ The menu continues to list Chapters 4 and 6, and production stays unchanged:
   direct Chapter 2, Chapter 3, Chapter 5 Museum, Door 1, and Door 2 routes
   likewise produced their expected runtime states with no browser-console
   errors.
+- The final Chapter 5 contract additionally locks the Labyrinth completion
+  message, all 12 authored collapse triggers, the eight-key door, black
+  threshold, and `/car06.html` Chapter 6 handoff. Both the Chapter 5 and main
+  production builds pass with this final lock.

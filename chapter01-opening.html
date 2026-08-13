@@ -39,7 +39,10 @@
         <a href="/?chapter=0">ENTER CHAPTER 1</a>
       </div>
     </main>
-    <script>
+    <script type="module">
+      import { installDevMenuReturnControl } from '/src/devMenuReturn.js';
+      installDevMenuReturnControl();
+
       const opening = document.getElementById('opening');
       const status = document.getElementById('status');
       opening.addEventListener('play', () => { status.textContent = 'The last 1.5 seconds are the literal Chapter 1 first frame.'; });

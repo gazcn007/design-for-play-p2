@@ -38,6 +38,13 @@ export default defineConfig(({ command, mode }) => {
         input: {
           main: resolve(import.meta.dirname, 'index.html'),
           chapter01Opening: resolve(import.meta.dirname, 'chapter01-opening.html'),
+          chapter03: resolve(import.meta.dirname, 'car03-3d.html'),
+          chapter04: resolve(import.meta.dirname, 'painted-country.html'),
+          chapter05: resolve(import.meta.dirname, 'museum-3d.html'),
+          finalBoss: resolve(import.meta.dirname, 'final-boss.html'),
+          borrowedGrid: resolve(import.meta.dirname, 'borrowed-grid.html'),
+          labyrinth: resolve(import.meta.dirname, 'labyrinth.html'),
+          chapter05PaintedCountry: resolve(import.meta.dirname, 'chapter05-painted-country.html'),
         },
       },
     },

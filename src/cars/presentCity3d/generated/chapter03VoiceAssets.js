@@ -32,10 +32,6 @@ const ASSETS = Object.freeze({
     "lineId": "CH03_BOSKO_0003",
     "url": "./assets/chapter03-3d/voice/ch03/bosko/CH03_BOSKO_0003.ogg"
   },
-  "BOSKO\u0000South edge of the clock paving. Two long rows. The second one stopped near the fountain service joint.": {
-    "lineId": "CH03_BOSKO_0004",
-    "url": "./assets/chapter03-3d/voice/ch03/bosko/CH03_BOSKO_0004.ogg"
-  },
   "BOSKO\u0000You want yesterday again. Tell me where to start.": {
     "lineId": "CH03_BOSKO_0005",
     "url": "./assets/chapter03-3d/voice/ch03/bosko/CH03_BOSKO_0005.ogg"
@@ -52,6 +48,10 @@ const ASSETS = Object.freeze({
     "lineId": "CH03_BOSKO_0008",
     "url": "./assets/chapter03-3d/voice/ch03/bosko/CH03_BOSKO_0008.ogg"
   },
+  "BOSKO\u0000Over there—south edge of the clock paving. Two long rows. The second one stopped near the fountain service joint.": {
+    "lineId": "CH03_BOSKO_0009",
+    "url": "./assets/chapter03-3d/voice/ch03/bosko/CH03_BOSKO_0009.ogg"
+  },
   "BUTCH\u0000The legend uses three different marks for oil. What is the difference?": {
     "lineId": "CH03_BUTCH_0001",
     "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0001.ogg"
@@ -60,7 +60,7 @@ const ASSETS = Object.freeze({
     "lineId": "CH03_BUTCH_0002",
     "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0002.ogg"
   },
-  "BUTCH\u0000Central Square maintenance request C four four one. We also need the original plan for the announcement grooves.": {
+  "BUTCH\u0000Central Square maintenance request C-441. We also need the original plan for the announcement grooves.": {
     "lineId": "CH03_BUTCH_0003",
     "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0003.ogg"
   },
@@ -87,10 +87,6 @@ const ASSETS = Object.freeze({
   "BUTCH\u0000Was there a machine under the paving?": {
     "lineId": "CH03_BUTCH_0010",
     "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0010.ogg"
-  },
-  "BUTCH\u0000Echo City. The first place on this line where anyone reported seeing Mara.": {
-    "lineId": "CH03_BUTCH_0011",
-    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0011.ogg"
   },
   "BUTCH\u0000Have you seen this woman on the line?": {
     "lineId": "CH03_BUTCH_0012",
@@ -300,7 +296,7 @@ const ASSETS = Object.freeze({
     "lineId": "CH03_BUTCH_0068",
     "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0068.ogg"
   },
-  "BUTCH\u0000Request C four four one. Reported by automatic pressure monitor. Location: south square service joint.": {
+  "BUTCH\u0000Request C-441. Reported by automatic pressure monitor. Location: south square service joint.": {
     "lineId": "CH03_BUTCH_0069",
     "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0069.ogg"
   },
@@ -532,7 +528,7 @@ const ASSETS = Object.freeze({
     "lineId": "CH03_BUTCH_0126",
     "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0126.ogg"
   },
-  "BUTCH\u0000M seventeen.": {
+  "BUTCH\u0000M-17.": {
     "lineId": "CH03_BUTCH_0127",
     "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0127.ogg"
   },
@@ -816,6 +812,534 @@ const ASSETS = Object.freeze({
     "lineId": "CH03_BUTCH_0210",
     "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0210.ogg"
   },
+  "BUTCH\u0000Why was the eastbound service restored after the cancellation?": {
+    "lineId": "CH03_BUTCH_0215",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0215.ogg"
+  },
+  "BUTCH\u0000Who was waiting at this gate yesterday?": {
+    "lineId": "CH03_BUTCH_0216",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0216.ogg"
+  },
+  "BUTCH\u0000What left on the restored service, and where did it go?": {
+    "lineId": "CH03_BUTCH_0217",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0217.ogg"
+  },
+  "BUTCH\u0000The eastbound service was cancelled at 13:42, then restored by hand. Someone circled the replacement time in blue pencil.": {
+    "lineId": "CH03_BUTCH_0218",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0218.ogg"
+  },
+  "BUTCH\u0000Fresh brass shows under the gate latch. It was lifted and set down repeatedly, not forced.": {
+    "lineId": "CH03_BUTCH_0219",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0219.ogg"
+  },
+  "BUTCH\u0000The lamp is out. The wick is still warm.": {
+    "lineId": "CH03_BUTCH_0221",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0221.ogg"
+  },
+  "BUTCH\u0000A dream, then. Paving grooves, fire, my name in the old feed channel.": {
+    "lineId": "CH03_BUTCH_0222",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0222.ogg"
+  },
+  "BUTCH\u0000No dream I have ever kept smelled of lamp oil.": {
+    "lineId": "CH03_BUTCH_0223",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0223.ogg"
+  },
+  "BUTCH\u0000It felt assembled. Like the records. Like someone wanted me to stand in that exact spot.": {
+    "lineId": "CH03_BUTCH_0224",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0224.ogg"
+  },
+  "BUTCH\u0000If the square is really burning, the street will say so. Get up. Look.": {
+    "lineId": "CH03_BUTCH_0225",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0225.ogg"
+  },
+  "BUTCH\u0000No. Personal. Mara disappeared. Echo City is the first place anyone saw her afterward.": {
+    "lineId": "CH03_BUTCH_0226",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0226.ogg"
+  },
+  "BUTCH\u0000She left voluntarily, or somebody made it look that way. Either way, someone here remembers the route.": {
+    "lineId": "CH03_BUTCH_0227",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0227.ogg"
+  },
+  "BUTCH\u0000The public doors are shut. A notice asks for a record number.": {
+    "lineId": "CH03_BUTCH_0228",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0228.ogg"
+  },
+  "BUTCH\u0000Still closed. The old maps will have to wait.": {
+    "lineId": "CH03_BUTCH_0229",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0229.ogg"
+  },
+  "BUTCH\u0000Public Services. A clerk points toward the number dispenser.": {
+    "lineId": "CH03_BUTCH_0230",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0230.ogg"
+  },
+  "BUTCH\u0000Same door, same queue. The city likes an order.": {
+    "lineId": "CH03_BUTCH_0231",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0231.ogg"
+  },
+  "BUTCH\u0000The reader is dark. Whatever it used to check, it is not checking me.": {
+    "lineId": "CH03_BUTCH_0232",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0232.ogg"
+  },
+  "BUTCH\u0000No light, no tone, no answer.": {
+    "lineId": "CH03_BUTCH_0233",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0233.ogg"
+  },
+  "BUTCH\u0000Seven minutes slow. Everyone in the square still checks it.": {
+    "lineId": "CH03_BUTCH_0234",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0234.ogg"
+  },
+  "BUTCH\u0000Still seven minutes slow. Nobody seems surprised.": {
+    "lineId": "CH03_BUTCH_0235",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0235.ogg"
+  },
+  "BUTCH\u0000Coins, tram tokens, and one brass button lie under the water.": {
+    "lineId": "CH03_BUTCH_0236",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0236.ogg"
+  },
+  "BUTCH\u0000Nothing with Mara's name. Just other people's wishes.": {
+    "lineId": "CH03_BUTCH_0237",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0237.ogg"
+  },
+  "BUTCH\u0000The signal cycles for a crowd that is not here.": {
+    "lineId": "CH03_BUTCH_0238",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0238.ogg"
+  },
+  "BUTCH\u0000Walk. Wait. Walk. The street obeys even when nobody does.": {
+    "lineId": "CH03_BUTCH_0239",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0239.ogg"
+  },
+  "BUTCH\u0000Dust inside the horn. The last notice ended mid-sentence.": {
+    "lineId": "CH03_BUTCH_0240",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0240.ogg"
+  },
+  "BUTCH\u0000The speaker has nothing else to announce.": {
+    "lineId": "CH03_BUTCH_0241",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0241.ogg"
+  },
+  "BUTCH\u0000The reader is dark between departures.": {
+    "lineId": "CH03_BUTCH_0242",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0242.ogg"
+  },
+  "BUTCH\u0000No ticket, no light. The next train is not here yet.": {
+    "lineId": "CH03_BUTCH_0243",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0243.ogg"
+  },
+  "BUTCH\u0000The rails disappear into the cutting. East is somewhere past the dark.": {
+    "lineId": "CH03_BUTCH_0244",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0244.ogg"
+  },
+  "BUTCH\u0000No safe path on foot. The train is the only way through.": {
+    "lineId": "CH03_BUTCH_0245",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0245.ogg"
+  },
+  "BUTCH\u0000An open platform, a route board, and no place to hide a departure.": {
+    "lineId": "CH03_BUTCH_0246",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0246.ogg"
+  },
+  "BUTCH\u0000The station keeps every goodbye in public.": {
+    "lineId": "CH03_BUTCH_0247",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0247.ogg"
+  },
+  "BUTCH\u0000Rain has dried from one end of the bench.": {
+    "lineId": "CH03_BUTCH_0248",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0248.ogg"
+  },
+  "BUTCH\u0000Just a bench. People come and go.": {
+    "lineId": "CH03_BUTCH_0249",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0249.ogg"
+  },
+  "BUTCH\u0000A crumpled ticket is wedged beneath the seat.": {
+    "lineId": "CH03_BUTCH_0250",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0250.ogg"
+  },
+  "BUTCH\u0000Wrong date. Wrong line.": {
+    "lineId": "CH03_BUTCH_0251",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0251.ogg"
+  },
+  "BUTCH\u0000Warm ash and a ring of mismatched cups.": {
+    "lineId": "CH03_BUTCH_0252",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0252.ogg"
+  },
+  "BUTCH\u0000Someone will come back for the kettle.": {
+    "lineId": "CH03_BUTCH_0253",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0253.ogg"
+  },
+  "BUTCH\u0000The brass scale settles a little left of zero.": {
+    "lineId": "CH03_BUTCH_0254",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0254.ogg"
+  },
+  "BUTCH\u0000Eda would notice the missing weight.": {
+    "lineId": "CH03_BUTCH_0255",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0255.ogg"
+  },
+  "BUTCH\u0000A paper spike full of ordinary purchases.": {
+    "lineId": "CH03_BUTCH_0256",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0256.ogg"
+  },
+  "BUTCH\u0000No name I recognize on the visible slips.": {
+    "lineId": "CH03_BUTCH_0257",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0257.ogg"
+  },
+  "BUTCH\u0000The rope leads everyone to the same counter eventually.": {
+    "lineId": "CH03_BUTCH_0258",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0258.ogg"
+  },
+  "BUTCH\u0000There is no shortcut through a queue.": {
+    "lineId": "CH03_BUTCH_0259",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0259.ogg"
+  },
+  "BUTCH\u0000The stamp is locked behind the counter.": {
+    "lineId": "CH03_BUTCH_0260",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0260.ogg"
+  },
+  "BUTCH\u0000Forms only become official on the other side of the glass.": {
+    "lineId": "CH03_BUTCH_0261",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0261.ogg"
+  },
+  "BUTCH\u0000The doors are welded shut. This vehicle is not going anywhere.": {
+    "lineId": "CH03_BUTCH_0262",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0262.ogg"
+  },
+  "BUTCH\u0000Still sealed. The route plate has been removed.": {
+    "lineId": "CH03_BUTCH_0263",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0263.ogg"
+  },
+  "BUTCH\u0000Receipts, peelings, and rainwater. Nothing useful.": {
+    "lineId": "CH03_BUTCH_0264",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0264.ogg"
+  },
+  "BUTCH\u0000Still rubbish.": {
+    "lineId": "CH03_BUTCH_0265",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0265.ogg"
+  },
+  "BUTCH\u0000Old wheel grease, fresh pale stains, and a porter who is still nearby.": {
+    "lineId": "CH03_BUTCH_0266",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0266.ogg"
+  },
+  "BUTCH\u0000The same pale stains. Oil moved on this cart, but the cart chose nothing.": {
+    "lineId": "CH03_BUTCH_0267",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0267.ogg"
+  },
+  "BUTCH\u0000Part of the city, but not part of the answer yet.": {
+    "lineId": "CH03_BUTCH_0268",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0268.ogg"
+  },
+  "BUTCH\u0000Nothing else here.": {
+    "lineId": "CH03_BUTCH_0269",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0269.ogg"
+  },
+  "BUTCH\u0000A tall residential block. Washing hangs from two floors, and someone is always watching the street from the third.": {
+    "lineId": "CH03_BUTCH_0270",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0270.ogg"
+  },
+  "BUTCH\u0000Same windows, same curtains. The building does not remember who lived behind each one.": {
+    "lineId": "CH03_BUTCH_0271",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0271.ogg"
+  },
+  "BUTCH\u0000Ground-floor shops under carved stonework. The arcade closes earlier than the street does.": {
+    "lineId": "CH03_BUTCH_0272",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0272.ogg"
+  },
+  "BUTCH\u0000The upper floors are quiet. Whatever noise the arcade made has moved inside for the night.": {
+    "lineId": "CH03_BUTCH_0273",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0273.ogg"
+  },
+  "BUTCH\u0000Warm plaster and the smell of yeast. The bakery is below; the stairs above are narrow.": {
+    "lineId": "CH03_BUTCH_0274",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0274.ogg"
+  },
+  "BUTCH\u0000No bread in the window yet. The ovens are already fed.": {
+    "lineId": "CH03_BUTCH_0275",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0275.ogg"
+  },
+  "BUTCH\u0000A green cross above a corner door. The night bell is the only clean thing on the facade.": {
+    "lineId": "CH03_BUTCH_0276",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0276.ogg"
+  },
+  "BUTCH\u0000Closed until morning. The cross stays lit so people know where to return.": {
+    "lineId": "CH03_BUTCH_0277",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0277.ogg"
+  },
+  "BUTCH\u0000Long windows and a basement hatch. The press stopped hours ago, but the building still hums.": {
+    "lineId": "CH03_BUTCH_0278",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0278.ogg"
+  },
+  "BUTCH\u0000Paper pallets are stacked behind the gate. Tomorrow's notices are already set.": {
+    "lineId": "CH03_BUTCH_0279",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0279.ogg"
+  },
+  "BUTCH\u0000A civic arcade with shuttered stalls. The scale of it says the square used to matter more.": {
+    "lineId": "CH03_BUTCH_0280",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0280.ogg"
+  },
+  "BUTCH\u0000The arches are empty now. Only the lamps prove it is still maintained.": {
+    "lineId": "CH03_BUTCH_0281",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0281.ogg"
+  },
+  "BUTCH\u0000A repair date is scratched into the base. Three winters ago.": {
+    "lineId": "CH03_BUTCH_0282",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0282.ogg"
+  },
+  "BUTCH\u0000The clock is slow. This lamp is not.": {
+    "lineId": "CH03_BUTCH_0283",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0283.ogg"
+  },
+  "BUTCH\u0000Wax from a public notice still clings to the pole.": {
+    "lineId": "CH03_BUTCH_0284",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0284.ogg"
+  },
+  "BUTCH\u0000The notice is gone. The wax stayed.": {
+    "lineId": "CH03_BUTCH_0285",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0285.ogg"
+  },
+  "BUTCH\u0000Someone tied a faded blue thread below the crown.": {
+    "lineId": "CH03_BUTCH_0286",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0286.ogg"
+  },
+  "BUTCH\u0000Not Mara's scarf. Just one loose thread.": {
+    "lineId": "CH03_BUTCH_0287",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0287.ogg"
+  },
+  "BUTCH\u0000The glass is clean on the street side and blackened toward the square.": {
+    "lineId": "CH03_BUTCH_0288",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0288.ogg"
+  },
+  "BUTCH\u0000It has been turned to light the road, not the faces.": {
+    "lineId": "CH03_BUTCH_0289",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0289.ogg"
+  },
+  "BUTCH\u0000Price marks run up the pole in chalk.": {
+    "lineId": "CH03_BUTCH_0290",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0290.ogg"
+  },
+  "BUTCH\u0000Yesterday's prices, half washed away.": {
+    "lineId": "CH03_BUTCH_0291",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0291.ogg"
+  },
+  "BUTCH\u0000A vendor has hung a bent weighing hook from the base.": {
+    "lineId": "CH03_BUTCH_0292",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0292.ogg"
+  },
+  "BUTCH\u0000The hook is empty now.": {
+    "lineId": "CH03_BUTCH_0293",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0293.ogg"
+  },
+  "BUTCH\u0000Its inspection seal matches the Ministry stamp.": {
+    "lineId": "CH03_BUTCH_0294",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0294.ogg"
+  },
+  "BUTCH\u0000Official enough to be ignored.": {
+    "lineId": "CH03_BUTCH_0295",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0295.ogg"
+  },
+  "BUTCH\u0000Coins have been balanced along the bronze foot.": {
+    "lineId": "CH03_BUTCH_0296",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0296.ogg"
+  },
+  "BUTCH\u0000Nobody trusts the fountain with every wish.": {
+    "lineId": "CH03_BUTCH_0297",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0297.ogg"
+  },
+  "BUTCH\u0000Water spots reach higher than the last rainfall could.": {
+    "lineId": "CH03_BUTCH_0298",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0298.ogg"
+  },
+  "BUTCH\u0000The fountain throws farther when the wind turns.": {
+    "lineId": "CH03_BUTCH_0299",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0299.ogg"
+  },
+  "BUTCH\u0000One side is dented at handcart height.": {
+    "lineId": "CH03_BUTCH_0300",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0300.ogg"
+  },
+  "BUTCH\u0000A cart hit this corner more than once.": {
+    "lineId": "CH03_BUTCH_0301",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0301.ogg"
+  },
+  "BUTCH\u0000Tiny paper fibres cling inside the lower grille.": {
+    "lineId": "CH03_BUTCH_0302",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0302.ogg"
+  },
+  "BUTCH\u0000Archive waste, carried out on wet shoes.": {
+    "lineId": "CH03_BUTCH_0303",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0303.ogg"
+  },
+  "BUTCH\u0000A route number has been painted over twice.": {
+    "lineId": "CH03_BUTCH_0304",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0304.ogg"
+  },
+  "BUTCH\u0000The newest number is already peeling.": {
+    "lineId": "CH03_BUTCH_0305",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0305.ogg"
+  },
+  "BUTCH\u0000Soot darkens the side facing the tunnel.": {
+    "lineId": "CH03_BUTCH_0306",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0306.ogg"
+  },
+  "BUTCH\u0000Every train leaves a little of itself here.": {
+    "lineId": "CH03_BUTCH_0307",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0307.ogg"
+  },
+  "BUTCH\u0000The bulb hums at the same pitch as the rail.": {
+    "lineId": "CH03_BUTCH_0308",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0308.ogg"
+  },
+  "BUTCH\u0000The hum stops whenever the track goes quiet.": {
+    "lineId": "CH03_BUTCH_0309",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0309.ogg"
+  },
+  "BUTCH\u0000A departure notice is pinned beneath the glass.": {
+    "lineId": "CH03_BUTCH_0310",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0310.ogg"
+  },
+  "BUTCH\u0000The notice lists yesterday's last train.": {
+    "lineId": "CH03_BUTCH_0311",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0311.ogg"
+  },
+  "BUTCH\u0000Fresh boot scrapes circle the base.": {
+    "lineId": "CH03_BUTCH_0312",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0312.ogg"
+  },
+  "BUTCH\u0000Someone waited here and kept moving.": {
+    "lineId": "CH03_BUTCH_0313",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0313.ogg"
+  },
+  "BUTCH\u0000Moths collect inside the cracked shade.": {
+    "lineId": "CH03_BUTCH_0314",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0314.ogg"
+  },
+  "BUTCH\u0000The crack is too high to have happened by accident.": {
+    "lineId": "CH03_BUTCH_0315",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0315.ogg"
+  },
+  "BUTCH\u0000Its city crest has been filed almost smooth.": {
+    "lineId": "CH03_BUTCH_0316",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0316.ogg"
+  },
+  "BUTCH\u0000The outline of the crest is still visible.": {
+    "lineId": "CH03_BUTCH_0317",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0317.ogg"
+  },
+  "BUTCH\u0000A strip of red cloth marks a buried cable.": {
+    "lineId": "CH03_BUTCH_0318",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0318.ogg"
+  },
+  "BUTCH\u0000Workers left the warning, then left the work.": {
+    "lineId": "CH03_BUTCH_0319",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0319.ogg"
+  },
+  "BUTCH\u0000The pole leans toward the square by a few degrees.": {
+    "lineId": "CH03_BUTCH_0320",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0320.ogg"
+  },
+  "BUTCH\u0000Still standing. Barely straight.": {
+    "lineId": "CH03_BUTCH_0321",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0321.ogg"
+  },
+  "BUTCH\u0000A chalk arrow points back toward the station.": {
+    "lineId": "CH03_BUTCH_0322",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0322.ogg"
+  },
+  "BUTCH\u0000The rain spared one useful mark.": {
+    "lineId": "CH03_BUTCH_0323",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0323.ogg"
+  },
+  "BUTCH\u0000Two different crews have numbered the same pole.": {
+    "lineId": "CH03_BUTCH_0324",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0324.ogg"
+  },
+  "BUTCH\u0000The city cannot agree which district owns it.": {
+    "lineId": "CH03_BUTCH_0325",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0325.ogg"
+  },
+  "BUTCH\u0000A tram token has been hammered into a split in the base.": {
+    "lineId": "CH03_BUTCH_0326",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0326.ogg"
+  },
+  "BUTCH\u0000Too damaged to spend, too deliberate to discard.": {
+    "lineId": "CH03_BUTCH_0327",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0327.ogg"
+  },
+  "BUTCH\u0000The light catches flour dust from the bakery doors.": {
+    "lineId": "CH03_BUTCH_0328",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0328.ogg"
+  },
+  "BUTCH\u0000Tomorrow's bread is already in the air.": {
+    "lineId": "CH03_BUTCH_0329",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0329.ogg"
+  },
+  "BUTCH\u0000A pharmacy bell wire runs past the mounting plate.": {
+    "lineId": "CH03_BUTCH_0330",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0330.ogg"
+  },
+  "BUTCH\u0000The night bell and the lamp share the same conduit.": {
+    "lineId": "CH03_BUTCH_0331",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0331.ogg"
+  },
+  "BUTCH\u0000A paper flower has been folded around the access keyhole.": {
+    "lineId": "CH03_BUTCH_0332",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0332.ogg"
+  },
+  "BUTCH\u0000Someone wanted the repair crew to notice it.": {
+    "lineId": "CH03_BUTCH_0333",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0333.ogg"
+  },
+  "BUTCH\u0000The final pole before the tunnel burns a colder white.": {
+    "lineId": "CH03_BUTCH_0334",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0334.ogg"
+  },
+  "BUTCH\u0000Beyond it, the railway keeps the dark.": {
+    "lineId": "CH03_BUTCH_0335",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0335.ogg"
+  },
+  "BUTCH\u0000The collection plate says yesterday. A corner of a timetable is caught in the slot.": {
+    "lineId": "CH03_BUTCH_0336",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0336.ogg"
+  },
+  "BUTCH\u0000The timetable will not fit through from this side.": {
+    "lineId": "CH03_BUTCH_0337",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0337.ogg"
+  },
+  "BUTCH\u0000Three forwarding labels overlap on the same address strip.": {
+    "lineId": "CH03_BUTCH_0338",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0338.ogg"
+  },
+  "BUTCH\u0000People leave. Their mail takes longer.": {
+    "lineId": "CH03_BUTCH_0339",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0339.ogg"
+  },
+  "BUTCH\u0000The lock has been replaced, but the city crest has not.": {
+    "lineId": "CH03_BUTCH_0340",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0340.ogg"
+  },
+  "BUTCH\u0000New lock, old promises.": {
+    "lineId": "CH03_BUTCH_0341",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0341.ogg"
+  },
+  "BUTCH\u0000Rain has blurred every collection time except the last one.": {
+    "lineId": "CH03_BUTCH_0342",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0342.ogg"
+  },
+  "BUTCH\u0000The final collection is still legible: 19:10.": {
+    "lineId": "CH03_BUTCH_0343",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0343.ogg"
+  },
+  "BUTCH\u0000A bakery order protrudes just far enough to smell of yeast.": {
+    "lineId": "CH03_BUTCH_0344",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0344.ogg"
+  },
+  "BUTCH\u0000Not mine to pull out.": {
+    "lineId": "CH03_BUTCH_0345",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0345.ogg"
+  },
+  "BUTCH\u0000The slot is polished by years of gloved hands.": {
+    "lineId": "CH03_BUTCH_0346",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0346.ogg"
+  },
+  "BUTCH\u0000Nothing addressed to Mara is visible.": {
+    "lineId": "CH03_BUTCH_0347",
+    "url": "./assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0347.ogg"
+  },
   "CLERK\u0000M-seventeen. Counter one.": {
     "lineId": "CH03_CLERK_0001",
     "url": "./assets/chapter03-3d/voice/ch03/clerk/CH03_CLERK_0001.ogg"
@@ -835,6 +1359,22 @@ const ASSETS = Object.freeze({
   "CONDUCTOR\u0000Clear of the door.": {
     "lineId": "CH03_CONDUCTOR_0004",
     "url": "./assets/chapter03-3d/voice/ch03/conductor/CH03_CONDUCTOR_0004.ogg"
+  },
+  "CONDUCTOR\u0000A late municipal clearance. I can give you the carriage ledger, not a story about why it came through.": {
+    "lineId": "CH03_CONDUCTOR_0005",
+    "url": "./assets/chapter03-3d/voice/ch03/conductor/CH03_CONDUCTOR_0005.ogg"
+  },
+  "CONDUCTOR\u0000People wait here every day. One woman kept looking east, then left when the replacement service arrived.": {
+    "lineId": "CH03_CONDUCTOR_0006",
+    "url": "./assets/chapter03-3d/voice/ch03/conductor/CH03_CONDUCTOR_0006.ogg"
+  },
+  "CONDUCTOR\u0000Eastbound. That is all I can say before this door closes. Station staff keep the fuller record.": {
+    "lineId": "CH03_CONDUCTOR_0007",
+    "url": "./assets/chapter03-3d/voice/ch03/conductor/CH03_CONDUCTOR_0007.ogg"
+  },
+  "CONDUCTOR\u0000Official inquiry? Then make it brief. This service is leaving.": {
+    "lineId": "CH03_CONDUCTOR_0008",
+    "url": "./assets/chapter03-3d/voice/ch03/conductor/CH03_CONDUCTOR_0008.ogg"
   },
   "DARO\u0000That is what I can sign.": {
     "lineId": "CH03_DARO_0001",
@@ -1016,7 +1556,7 @@ const ASSETS = Object.freeze({
     "lineId": "CH03_LEV_0002",
     "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0002.ogg"
   },
-  "LEV\u0000Place the maintenance print beside it. C four four one names the south service joint.": {
+  "LEV\u0000Place the maintenance print beside it. C-441 names the south service joint.": {
     "lineId": "CH03_LEV_0003",
     "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0003.ogg"
   },
@@ -1212,7 +1752,7 @@ const ASSETS = Object.freeze({
     "lineId": "CH03_LEV_0051",
     "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0051.ogg"
   },
-  "LEV\u0000The pressure monitor creates C four four one at fifteen oh three. Mara, or someone using her name, reserves the eastbound seat at fifteen thirty-eight.": {
+  "LEV\u0000The pressure monitor creates C-441 at fifteen oh three. Mara, or someone using her name, reserves the eastbound seat at fifteen thirty-eight.": {
     "lineId": "CH03_LEV_0052",
     "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0052.ogg"
   },
@@ -1512,7 +2052,7 @@ const ASSETS = Object.freeze({
     "lineId": "CH03_LEV_0126",
     "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0126.ogg"
   },
-  "LEV\u0000Put C four four one beside the office times. Read the order itself: isolate the lower branch, clean the groove, preserve the main feed. No message is mentioned.": {
+  "LEV\u0000Put C-441 beside the office times. Read the order itself: isolate the lower branch, clean the groove, preserve the main feed. No message is mentioned.": {
     "lineId": "CH03_LEV_0127",
     "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0127.ogg"
   },
@@ -1636,6 +2176,162 @@ const ASSETS = Object.freeze({
     "lineId": "CH03_LEV_0157",
     "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0157.ogg"
   },
+  "LEV\u0000You started with the record. Good. We can check the station claim against the city now.": {
+    "lineId": "CH03_LEV_0160",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0160.ogg"
+  },
+  "LEV\u0000You started with the person who waited. Keep that detail separate from what the record can prove.": {
+    "lineId": "CH03_LEV_0161",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0161.ogg"
+  },
+  "LEV\u0000You started with the last departure. Good. We have a direction, not an explanation.": {
+    "lineId": "CH03_LEV_0162",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0162.ogg"
+  },
+  "LEV\u0000Look at the route, the smell, or the cleaned edge before you decide.": {
+    "lineId": "CH03_LEV_0163",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0163.ogg"
+  },
+  "LEV\u0000We have walked past it twice. The Transport Ministry is north of here — the tall stone front with the recessed doors.": {
+    "lineId": "CH03_LEV_0164",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0164.ogg"
+  },
+  "LEV\u0000Public Services uses the front entrance, facing the square. Toma is posted there.": {
+    "lineId": "CH03_LEV_0165",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0165.ogg"
+  },
+  "LEV\u0000Bosko did not go home. He is north of here, at the edge of the central square — look for the man standing by the clock paving.": {
+    "lineId": "CH03_LEV_0166",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0166.ogg"
+  },
+  "LEV\u0000The Old Municipal Archive is north of here, past the market row — the old stone building with the narrow door.": {
+    "lineId": "CH03_LEV_0167",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0167.ogg"
+  },
+  "LEV\u0000Mila is expecting the maintenance number. The entrance faces the lane.": {
+    "lineId": "CH03_LEV_0168",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0168.ogg"
+  },
+  "LEV\u0000The cut feed ends north of here, at the south edge of the square — look for the old connector block between the paving grooves.": {
+    "lineId": "CH03_LEV_0169",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0169.ogg"
+  },
+  "LEV\u0000It is small and it sits low. Follow the groove lines and watch for the marker light.": {
+    "lineId": "CH03_LEV_0170",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0170.ogg"
+  },
+  "LEV\u0000We have walked past it twice. The Transport Ministry is northeast of here — the tall stone front with the recessed doors.": {
+    "lineId": "CH03_LEV_0171",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0171.ogg"
+  },
+  "LEV\u0000Bosko did not go home. He is northeast of here, at the edge of the central square — look for the man standing by the clock paving.": {
+    "lineId": "CH03_LEV_0172",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0172.ogg"
+  },
+  "LEV\u0000The Old Municipal Archive is northeast of here, past the market row — the old stone building with the narrow door.": {
+    "lineId": "CH03_LEV_0173",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0173.ogg"
+  },
+  "LEV\u0000The cut feed ends northeast of here, at the south edge of the square — look for the old connector block between the paving grooves.": {
+    "lineId": "CH03_LEV_0174",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0174.ogg"
+  },
+  "LEV\u0000We have walked past it twice. The Transport Ministry is east of here — the tall stone front with the recessed doors.": {
+    "lineId": "CH03_LEV_0175",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0175.ogg"
+  },
+  "LEV\u0000Bosko did not go home. He is east of here, at the edge of the central square — look for the man standing by the clock paving.": {
+    "lineId": "CH03_LEV_0176",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0176.ogg"
+  },
+  "LEV\u0000The Old Municipal Archive is east of here, past the market row — the old stone building with the narrow door.": {
+    "lineId": "CH03_LEV_0177",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0177.ogg"
+  },
+  "LEV\u0000The cut feed ends east of here, at the south edge of the square — look for the old connector block between the paving grooves.": {
+    "lineId": "CH03_LEV_0178",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0178.ogg"
+  },
+  "LEV\u0000We have walked past it twice. The Transport Ministry is southeast of here — the tall stone front with the recessed doors.": {
+    "lineId": "CH03_LEV_0179",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0179.ogg"
+  },
+  "LEV\u0000Bosko did not go home. He is southeast of here, at the edge of the central square — look for the man standing by the clock paving.": {
+    "lineId": "CH03_LEV_0180",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0180.ogg"
+  },
+  "LEV\u0000The Old Municipal Archive is southeast of here, past the market row — the old stone building with the narrow door.": {
+    "lineId": "CH03_LEV_0181",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0181.ogg"
+  },
+  "LEV\u0000The cut feed ends southeast of here, at the south edge of the square — look for the old connector block between the paving grooves.": {
+    "lineId": "CH03_LEV_0182",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0182.ogg"
+  },
+  "LEV\u0000We have walked past it twice. The Transport Ministry is south of here — the tall stone front with the recessed doors.": {
+    "lineId": "CH03_LEV_0183",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0183.ogg"
+  },
+  "LEV\u0000Bosko did not go home. He is south of here, at the edge of the central square — look for the man standing by the clock paving.": {
+    "lineId": "CH03_LEV_0184",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0184.ogg"
+  },
+  "LEV\u0000The Old Municipal Archive is south of here, past the market row — the old stone building with the narrow door.": {
+    "lineId": "CH03_LEV_0185",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0185.ogg"
+  },
+  "LEV\u0000The cut feed ends south of here, at the south edge of the square — look for the old connector block between the paving grooves.": {
+    "lineId": "CH03_LEV_0186",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0186.ogg"
+  },
+  "LEV\u0000We have walked past it twice. The Transport Ministry is southwest of here — the tall stone front with the recessed doors.": {
+    "lineId": "CH03_LEV_0187",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0187.ogg"
+  },
+  "LEV\u0000Bosko did not go home. He is southwest of here, at the edge of the central square — look for the man standing by the clock paving.": {
+    "lineId": "CH03_LEV_0188",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0188.ogg"
+  },
+  "LEV\u0000The Old Municipal Archive is southwest of here, past the market row — the old stone building with the narrow door.": {
+    "lineId": "CH03_LEV_0189",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0189.ogg"
+  },
+  "LEV\u0000The cut feed ends southwest of here, at the south edge of the square — look for the old connector block between the paving grooves.": {
+    "lineId": "CH03_LEV_0190",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0190.ogg"
+  },
+  "LEV\u0000We have walked past it twice. The Transport Ministry is west of here — the tall stone front with the recessed doors.": {
+    "lineId": "CH03_LEV_0191",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0191.ogg"
+  },
+  "LEV\u0000Bosko did not go home. He is west of here, at the edge of the central square — look for the man standing by the clock paving.": {
+    "lineId": "CH03_LEV_0192",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0192.ogg"
+  },
+  "LEV\u0000The Old Municipal Archive is west of here, past the market row — the old stone building with the narrow door.": {
+    "lineId": "CH03_LEV_0193",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0193.ogg"
+  },
+  "LEV\u0000The cut feed ends west of here, at the south edge of the square — look for the old connector block between the paving grooves.": {
+    "lineId": "CH03_LEV_0194",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0194.ogg"
+  },
+  "LEV\u0000We have walked past it twice. The Transport Ministry is northwest of here — the tall stone front with the recessed doors.": {
+    "lineId": "CH03_LEV_0195",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0195.ogg"
+  },
+  "LEV\u0000Bosko did not go home. He is northwest of here, at the edge of the central square — look for the man standing by the clock paving.": {
+    "lineId": "CH03_LEV_0196",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0196.ogg"
+  },
+  "LEV\u0000The Old Municipal Archive is northwest of here, past the market row — the old stone building with the narrow door.": {
+    "lineId": "CH03_LEV_0197",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0197.ogg"
+  },
+  "LEV\u0000The cut feed ends northwest of here, at the south edge of the square — look for the old connector block between the paving grooves.": {
+    "lineId": "CH03_LEV_0198",
+    "url": "./assets/chapter03-3d/voice/ch03/lev/CH03_LEV_0198.ogg"
+  },
   "MAN IN THE BROWN COAT\u0000The lane is public. The crate is ours. Walk around it and nobody has to explain anything.": {
     "lineId": "CH03_MAN_IN_THE_BROWN_COAT_0001",
     "url": "./assets/chapter03-3d/voice/ch03/man_in_the_brown_coat/CH03_MAN_IN_THE_BROWN_COAT_0001.ogg"
@@ -1648,7 +2344,7 @@ const ASSETS = Object.freeze({
     "lineId": "CH03_MILA_0001",
     "url": "./assets/chapter03-3d/voice/ch03/mila/CH03_MILA_0001.ogg"
   },
-  "MILA\u0000C four four one is a current work order. The groove plan is in the old fire-letter collection. Those are separate indexes.": {
+  "MILA\u0000C-441 is a current work order. The groove plan is in the old fire-letter collection. Those are separate indexes.": {
     "lineId": "CH03_MILA_0002",
     "url": "./assets/chapter03-3d/voice/ch03/mila/CH03_MILA_0002.ogg"
   },
@@ -1660,17 +2356,13 @@ const ASSETS = Object.freeze({
     "lineId": "CH03_MILA_0004",
     "url": "./assets/chapter03-3d/voice/ch03/mila/CH03_MILA_0004.ogg"
   },
-  "MILA\u0000Then the current maintenance ledger is your next document. C four four one is clipped under yesterday.": {
+  "MILA\u0000Then the current maintenance ledger is your next document. C-441 is clipped under yesterday.": {
     "lineId": "CH03_MILA_0005",
     "url": "./assets/chapter03-3d/voice/ch03/mila/CH03_MILA_0005.ogg"
   },
   "MILA\u0000He is returning tools in the staff corridor. You may ask him about his work. You may not take the ledger with you.": {
     "lineId": "CH03_MILA_0006",
     "url": "./assets/chapter03-3d/voice/ch03/mila/CH03_MILA_0006.ogg"
-  },
-  "MIRO\u0000Detective, settle something. If a tram loses a wheel at noon and management files the report at four, when did the tram lose the wheel?": {
-    "lineId": "CH03_MIRO_0001",
-    "url": "./assets/chapter03-3d/voice/ch03/miro/CH03_MIRO_0001.ogg"
   },
   "MIRO\u0000Wrong. According to management, nothing happens before the form exists.": {
     "lineId": "CH03_MIRO_0002",
@@ -1680,17 +2372,21 @@ const ASSETS = Object.freeze({
     "lineId": "CH03_MIRO_0003",
     "url": "./assets/chapter03-3d/voice/ch03/miro/CH03_MIRO_0003.ogg"
   },
+  "MIRO\u0000Traveler, settle something. If a tram loses a wheel at noon and management files the report at four, when did the tram lose the wheel?": {
+    "lineId": "CH03_MIRO_0004",
+    "url": "./assets/chapter03-3d/voice/ch03/miro/CH03_MIRO_0004.ogg"
+  },
   "NERVE\u0000Let them see who you are looking for before they decide how much to say.": {
     "lineId": "CH03_NERVE_0002",
     "url": "./assets/chapter03-3d/voice/ch03/nerve/CH03_NERVE_0002.ogg"
   },
+  "NERVE\u0000Ask Eda now. A careful question is still a question, and the market will not wait for certainty.": {
+    "lineId": "CH03_NERVE_0004",
+    "url": "./assets/chapter03-3d/voice/ch03/nerve/CH03_NERVE_0004.ogg"
+  },
   "NIKA\u0000Before I print anything, compare the timeline, check the reservation, and ask me directly about the missing page.": {
     "lineId": "CH03_NIKA_0001",
     "url": "./assets/chapter03-3d/voice/ch03/nika/CH03_NIKA_0001.ogg"
-  },
-  "NIKA\u0000The clean comparison is yours. The torn first copy is still in the bin beside the printer.": {
-    "lineId": "CH03_NIKA_0002",
-    "url": "./assets/chapter03-3d/voice/ch03/nika/CH03_NIKA_0002.ogg"
   },
   "NIKA\u0000Yes. I hid something embarrassing. I did not change when any event happened.": {
     "lineId": "CH03_NIKA_0003",
@@ -1736,6 +2432,10 @@ const ASSETS = Object.freeze({
     "lineId": "CH03_NIKA_0013",
     "url": "./assets/chapter03-3d/voice/ch03/nika/CH03_NIKA_0013.ogg"
   },
+  "NIKA\u0000The clean comparison is yours. The torn first copy is still out on the public table by the queue.": {
+    "lineId": "CH03_NIKA_0014",
+    "url": "./assets/chapter03-3d/voice/ch03/nika/CH03_NIKA_0014.ogg"
+  },
   "OLEK\u0000Follow the drain channel. It ends beside the grey door. I carried the cans there. I did not know about Eda's false code.": {
     "lineId": "CH03_OLEK_0001",
     "url": "./assets/chapter03-3d/voice/ch03/olek/CH03_OLEK_0001.ogg"
@@ -1776,11 +2476,11 @@ const ASSETS = Object.freeze({
     "lineId": "CH03_PATTERN_0002",
     "url": "./assets/chapter03-3d/voice/ch03/pattern/CH03_PATTERN_0002.ogg"
   },
-  "PATTERN\u0000The first half lists the oil sale and rear-hatch pressure change. The second lists maintenance request C four four one: Central Square, old announcement grooves.": {
+  "PATTERN\u0000The first half lists the oil sale and rear-hatch pressure change. The second lists maintenance request C-441: CENTRAL SQUARE, OLD ANNOUNCEMENT GROOVES.": {
     "lineId": "CH03_PATTERN_0003",
     "url": "./assets/chapter03-3d/voice/ch03/pattern/CH03_PATTERN_0003.ogg"
   },
-  "PATTERN\u0000Instruction: Isolate unregistered branch. Remove surface residue at access point. Leave main feed in service.": {
+  "PATTERN\u0000Instruction: ISOLATE UNREGISTERED BRANCH. REMOVE SURFACE RESIDUE AT ACCESS POINT. LEAVE MAIN FEED IN SERVICE.": {
     "lineId": "CH03_PATTERN_0004",
     "url": "./assets/chapter03-3d/voice/ch03/pattern/CH03_PATTERN_0004.ogg"
   },
@@ -1800,6 +2500,14 @@ const ASSETS = Object.freeze({
     "lineId": "CH03_PATTERN_0008",
     "url": "./assets/chapter03-3d/voice/ch03/pattern/CH03_PATTERN_0008.ogg"
   },
+  "PATTERN\u0000A schedule is not a witness. But it tells you which question has a record behind it.": {
+    "lineId": "CH03_PATTERN_0010",
+    "url": "./assets/chapter03-3d/voice/ch03/pattern/CH03_PATTERN_0010.ogg"
+  },
+  "PATTERN\u0000The turns are evidence of a hand. The pale edge is evidence of an earlier cleanup. Keep those facts separate.": {
+    "lineId": "CH03_PATTERN_0011",
+    "url": "./assets/chapter03-3d/voice/ch03/pattern/CH03_PATTERN_0011.ogg"
+  },
   "PETAR\u0000Correct. If I had seen a public display, I would have asked who authorized it. I saw an unlisted line losing pressure.": {
     "lineId": "CH03_PETAR_0001",
     "url": "./assets/chapter03-3d/voice/ch03/petar/CH03_PETAR_0001.ogg"
@@ -1808,7 +2516,7 @@ const ASSETS = Object.freeze({
     "lineId": "CH03_PETAR_0002",
     "url": "./assets/chapter03-3d/voice/ch03/petar/CH03_PETAR_0002.ogg"
   },
-  "PETAR\u0000Mila said you are reading C four four one. I signed it. What is wrong with the work?": {
+  "PETAR\u0000Mila said you are reading C-441. I signed it. What is wrong with the work?": {
     "lineId": "CH03_PETAR_0003",
     "url": "./assets/chapter03-3d/voice/ch03/petar/CH03_PETAR_0003.ogg"
   },
@@ -1920,6 +2628,14 @@ const ASSETS = Object.freeze({
     "lineId": "CH03_SELINE_0004",
     "url": "./assets/chapter03-3d/voice/ch03/seline/CH03_SELINE_0004.ogg"
   },
+  "TENDERNESS\u0000Someone waited here long enough to make a nervous habit of it.": {
+    "lineId": "CH03_TENDERNESS_0001",
+    "url": "./assets/chapter03-3d/voice/ch03/tenderness/CH03_TENDERNESS_0001.ogg"
+  },
+  "TENDERNESS\u0000Someone worked here long enough to be afraid of what the street would remember.": {
+    "lineId": "CH03_TENDERNESS_0002",
+    "url": "./assets/chapter03-3d/voice/ch03/tenderness/CH03_TENDERNESS_0002.ogg"
+  },
   "TOMA\u0000Public hall is open. What business are you bringing inside?": {
     "lineId": "CH03_TOMA_0001",
     "url": "./assets/chapter03-3d/voice/ch03/toma/CH03_TOMA_0001.ogg"
@@ -1932,6 +2648,14 @@ const ASSETS = Object.freeze({
     "lineId": "CH03_TOMA_0003",
     "url": "./assets/chapter03-3d/voice/ch03/toma/CH03_TOMA_0003.ogg"
   },
+  "VENDOR\u0000Buying something, or only asking after the woman in the photograph?": {
+    "lineId": "CH03_VENDOR_0001",
+    "url": "./assets/chapter03-3d/voice/ch03/vendor/CH03_VENDOR_0001.ogg"
+  },
+  "VENDOR\u0000I already told you. Look, do not block the counter.": {
+    "lineId": "CH03_VENDOR_0002",
+    "url": "./assets/chapter03-3d/voice/ch03/vendor/CH03_VENDOR_0002.ogg"
+  },
   "VESNA\u0000Special? No. Hana leaves a name out when writing it down would cause more trouble than the room is worth. Debt collectors, angry relatives, employers. She still records the room and takes the key back.": {
     "lineId": "CH03_VESNA_0001",
     "url": "./assets/chapter03-3d/voice/ch03/vesna/CH03_VESNA_0001.ogg"
@@ -1939,6 +2663,14 @@ const ASSETS = Object.freeze({
   "VESNA\u0000No. My husband complains about every footstep on those stairs. He complained once when she went up, once when she came down for water.": {
     "lineId": "CH03_VESNA_0002",
     "url": "./assets/chapter03-3d/voice/ch03/vesna/CH03_VESNA_0002.ogg"
+  },
+  "VOICE BEHIND DOOR\u0000Wrong room.": {
+    "lineId": "CH03_VOICE_BEHIND_DOOR_0001",
+    "url": "./assets/chapter03-3d/voice/ch03/voice_behind_door/CH03_VOICE_BEHIND_DOOR_0001.ogg"
+  },
+  "VOICE BEHIND DOOR\u0000Some of us work nights. Knock softer.": {
+    "lineId": "CH03_VOICE_BEHIND_DOOR_0002",
+    "url": "./assets/chapter03-3d/voice/ch03/voice_behind_door/CH03_VOICE_BEHIND_DOOR_0002.ogg"
   },
   "WOMAN BY THE HEAT GRATE\u0000If you are looking for the shelter office, it opens after eight. If you are not, mind the blanket.": {
     "lineId": "CH03_WOMAN_BY_THE_HEAT_GRATE_0001",
@@ -1950,4 +2682,4 @@ export function chapter03VoiceAssetFor(speaker, text) {
   return ASSETS[`${speaker}\0${text}`] ?? null;
 }
 
-export const CHAPTER03_VOICE_ASSET_COUNT = 486;
+export const CHAPTER03_VOICE_ASSET_COUNT = 669;

@@ -6,7 +6,8 @@ import {
   createChapter3Clock,
 } from './chapter3TimeSystem.js';
 
-export const ARRIVAL_CHOICES = Object.freeze(['ask-conductor', 'check-platform', 'show-photograph']);
+export const ARRIVAL_CHOICES = Object.freeze(['arrival-pattern', 'arrival-tenderness', 'arrival-nerve']);
+export const ARRIVAL_OBSERVATIONS = Object.freeze(['route-board', 'gate-latch']);
 export const SEAM_OBSERVATIONS = Object.freeze(['geometry', 'fuel', 'cleaning']);
 export const SEAM_INFERENCES = Object.freeze(['deliberate', 'cart-leak', 'reserve-judgment']);
 export const EDA_APPROACHES = Object.freeze(['direct', 'patient', 'pressuring']);
@@ -34,6 +35,7 @@ function initialState() {
     phase: 'train-door',
     arrivalChoice: null,
     arrivalApproach: null,
+    arrivalObservations: [],
     maraPhotoShown: false,
     maraSightingReported: false,
     trainDeparted: false,
@@ -487,8 +489,9 @@ function interaction07State() {
   Object.assign(state, {
     mode: 'transport-ministry-exterior',
     phase: 'transport-entrance',
-    arrivalChoice: 'show-photograph',
-    arrivalApproach: 'open',
+    arrivalChoice: 'arrival-nerve',
+    arrivalApproach: 'nerve',
+    arrivalObservations: ['route-board', 'gate-latch'],
     maraPhotoShown: true,
     maraSightingReported: true,
     trainDeparted: true,
@@ -546,6 +549,24 @@ function interaction07State() {
   return state;
 }
 
+function npcLifeQaState() {
+  const state = interaction07State();
+  Object.assign(state, {
+    mode: 'market-investigation',
+    phase: 'market-follow-up',
+    cartInspected: false,
+    olekTopics: [],
+    olekRouteConfirmed: false,
+    marketLeadComplete: false,
+    solventBottleObserved: false,
+    bottleInference: null,
+    lastEvent: 'npc-life-qa-started',
+  });
+  state.evidence.deliveryRoute = null;
+  state.evidence.solventBottle = null;
+  return state;
+}
+
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -588,6 +609,7 @@ export function createChapter3OpeningModel(options = {}) {
     if (options.startAt === 'interaction-13') return interaction13State();
     if (options.startAt === 'interaction-08') return interaction08State();
     if (options.startAt === 'interaction-07') return interaction07State();
+    if (options.startAt === 'npc-life-qa') return npcLifeQaState();
     return initialState();
   };
   let state = createStartState();
@@ -600,15 +622,18 @@ export function createChapter3OpeningModel(options = {}) {
     chooseArrival(choice) {
       if (state.arrivalChoice || !ARRIVAL_CHOICES.includes(choice)) return false;
       state.arrivalChoice = choice;
-      state.arrivalApproach = choice === 'ask-conductor'
-        ? 'direct'
-        : choice === 'check-platform'
-          ? 'observant'
-          : 'open';
-      state.maraPhotoShown = choice !== 'check-platform';
+      state.arrivalApproach = choice.replace('arrival-', '');
+      state.maraPhotoShown = true;
       state.phase = 'train-departing';
       state.lastEvent = `arrival-${choice}`;
       spendTopicTime(state, `arrival-${choice}`);
+      return true;
+    },
+
+    observeArrival(trace) {
+      if (state.arrivalChoice || !ARRIVAL_OBSERVATIONS.includes(trace) || state.arrivalObservations.includes(trace)) return false;
+      state.arrivalObservations.push(trace);
+      state.lastEvent = `arrival-observed-${trace}`;
       return true;
     },
 
@@ -703,7 +728,7 @@ export function createChapter3OpeningModel(options = {}) {
     },
 
     obtainEdaRecord() {
-      if (state.edaComplete || !this.canObtainEdaRecord()) return false;
+      if (!state.edaApproach || state.edaComplete) return false;
       state.edaRecordObtained = true;
       state.edaComplete = true;
       state.phase = 'question-olek';
@@ -737,7 +762,7 @@ export function createChapter3OpeningModel(options = {}) {
     },
 
     completeOlekRoute() {
-      if (state.marketLeadComplete || !this.canCompleteOlek()) return false;
+      if (!state.edaComplete || state.marketLeadComplete) return false;
       state.olekRouteConfirmed = true;
       state.marketLeadComplete = true;
       state.phase = 'transport-lead';
@@ -806,7 +831,7 @@ export function createChapter3OpeningModel(options = {}) {
     },
 
     completeSava() {
-      if (state.savaComplete || !this.canCompleteSava()) return false;
+      if (!state.interaction07Complete || state.savaComplete) return false;
       state.savaComplete = true;
       state.phase = 'nika-terminal';
       state.evidence.retiredCodePractice = 'confirmed-standing-practice';
@@ -839,7 +864,7 @@ export function createChapter3OpeningModel(options = {}) {
     },
 
     completeNika() {
-      if (state.nikaComplete || !this.canCompleteNika()) return false;
+      if (!state.savaComplete || state.nikaComplete) return false;
       state.nikaComplete = true;
       state.phase = 'inspect-discarded-print';
       state.evidence.eastboundReservation = 'm-venn-unconfirmed-identity';
@@ -977,7 +1002,7 @@ export function createChapter3OpeningModel(options = {}) {
     },
 
     completePetarInterview() {
-      if (state.petarInterviewComplete || !this.canCompletePetar()) return false;
+      if (!state.maintenanceOrderInspected || state.petarInterviewComplete) return false;
       state.petarInterviewComplete = true;
       state.phase = 'assemble-material-timeline';
       state.evidence.petarCutBranch = 'confirmed-without-message-knowledge';
@@ -1012,7 +1037,7 @@ export function createChapter3OpeningModel(options = {}) {
     },
 
     completeSecondTheory() {
-      if (state.secondTheoryComplete || !this.canCompleteSecondTheory()) return false;
+      if (!state.materialTimelineInspected || state.secondTheoryComplete) return false;
       state.secondTheoryComplete = true;
       state.mode = 'central-square-dusk';
       state.phase = 'inspect-cut-interface';
@@ -1067,7 +1092,7 @@ export function createChapter3OpeningModel(options = {}) {
     },
 
     completeHotelCheckIn() {
-      if (state.hotelCheckInComplete || !this.canCompleteHana()) return false;
+      if (!state.hotelEntered || state.hotelCheckInComplete) return false;
       state.hotelCheckInComplete = true;
       state.phase = 'question-daro';
       state.evidence.hotelRegister = 'blank-line-standing-practice-mara-alone';
@@ -1097,7 +1122,7 @@ export function createChapter3OpeningModel(options = {}) {
     },
 
     completeDaro() {
-      if (state.daroComplete || !this.canCompleteDaro()) return false;
+      if (!state.hotelCheckInComplete || state.daroComplete) return false;
       state.daroComplete = true;
       state.phase = 'go-to-hotel-corridor';
       state.evidence.daroSightline = 'mara-alone-hotel-square-station';
@@ -1148,7 +1173,7 @@ export function createChapter3OpeningModel(options = {}) {
     },
 
     completeEvidenceTable() {
-      if (state.evidenceTableComplete || !this.canCompleteEvidenceTable()) return false;
+      if (!state.hotelRoomEntered || state.evidenceTableComplete) return false;
       state.evidenceTableComplete = true;
       state.phase = 'sleep';
       state.evidence.evidenceTable = 'mara-alone-knew-complete-sequence';
@@ -1334,7 +1359,7 @@ export function createChapter3OpeningModel(options = {}) {
     },
 
     completeLevFinal() {
-      if (state.levFinalComplete || !this.canCompleteLevFinal()) return false;
+      if (!state.morningEvidenceConfirmed || state.levFinalComplete) return false;
       state.levFinalComplete = true;
       state.phase = 'choose-why-continue';
       state.evidence.eastboundOriginal = 'mara-route-consistent-eastbound';

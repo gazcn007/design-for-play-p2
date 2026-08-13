@@ -30,9 +30,9 @@ const ACCENT = '#c9a227';
 // there is no need to start that car's own Vite config to reach it from here.
 const STANDALONE_SLICES = [
   {
-    label: 'CHAPTER 1  //  OPENING · NIGHT SERVICE',
-    detail: 'Latest opening preview. It ends on the literal Chapter 1 first frame before the Prologue handoff.',
-    href: '/chapter01-opening.html',
+    label: 'CHAPTER 1  //  NIGHT SERVICE · ORANGE CARRIAGE',
+    detail: 'Latest playable narrative interior: the Conductor, the power-restoration route, and the retro transit car.',
+    href: '/?chapter=0',
   },
   {
     label: 'CHAPTER 2  //  CYBERPUNK PARKOUR',
@@ -56,7 +56,7 @@ const STANDALONE_SLICES = [
   },
   {
     label: 'CHAPTER 5  //  THE MUSEUM OF ONE ANSWER',
-    detail: 'Museum shell with Door 1 and Door 2 enabled.',
+    detail: 'The Labyrinth, eight-key collapse gauntlet, and Final Archive exit.',
     href: '/museum-3d.html',
   },
   {

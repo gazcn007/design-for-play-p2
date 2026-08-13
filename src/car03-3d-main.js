@@ -1,6 +1,23 @@
 import { EchoCity3DPreview } from './cars/presentCity3d/EchoCity3DPreview.js';
 import { Chapter3OpeningRuntime } from './cars/presentCity3d/Chapter3OpeningRuntime.js';
 import { createChapter3OpeningModel } from './cars/presentCity3d/chapter3OpeningModel.js';
+import { installDevMenuReturnControl } from './devMenuReturn.js';
+import { installPauseMenu } from './shell/pauseMenu.js';
+import { CINEMATICS, navigateAfterCinematic } from './shell/gameFlow.js';
+import { createSaveStore } from './shell/saveSystem.js';
+
+installDevMenuReturnControl();
+installPauseMenu({ checkpointId: 'chapter-3-start' });
+
+window.addEventListener('nightfall:chapter3-complete', () => {
+  createSaveStore().markCheckpoint('chapter-4-start');
+  window.setTimeout(() => {
+    navigateAfterCinematic('chapter-3-to-4', CINEMATICS.chapter3To4, '/painted-country.html', {
+      preloadChapterId: 'chapter4',
+      label: 'ECHO CITY TO THE PAINTED COUNTRY',
+    });
+  }, 2400);
+}, { once: true });
 
 const preview = new EchoCity3DPreview({
   container: document.querySelector('#city-3d'),
@@ -26,6 +43,7 @@ const openingStart = playtest === 'chapter3-time-transition'
   : playtest === 'chapter3-night-hotel' ? 'night-hotel-qa'
   : playtest === 'chapter3-night-lobby' ? 'night-lobby-qa'
   : playtest === 'chapter3-night-exterior' ? 'night-exterior-qa'
+  : playtest === 'chapter3-npc-life' ? 'npc-life-qa'
   : playtest === 'chapter3-29' ? 'interaction-29'
   : playtest === 'chapter3-31' ? 'interaction-31'
   : playtest === 'chapter3-morning-exterior' ? 'morning-exterior-qa'
@@ -83,7 +101,11 @@ preview.attachGameplayRuntime(gameplayRuntime);
 
 window.render_game_to_text = () => {
   const city = JSON.parse(preview.textState());
-  return JSON.stringify({ ...city, gameplay: gameplayRuntime.textState() });
+  return JSON.stringify({
+    ...city,
+    chapterVersion: 'chapter3-temporary-final-v31-integrated-v32',
+    gameplay: gameplayRuntime.textState(),
+  });
 };
 window.advanceTime = (ms) => preview.advanceTime(ms);
 window.echoCity3D = preview;

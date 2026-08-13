@@ -23,3 +23,4 @@ dist-car03-3d/
 tmp/
 outputs/car03-acceptance/
 outputs/qa-phase2/
+.gstack/

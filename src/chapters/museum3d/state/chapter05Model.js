@@ -3,6 +3,7 @@
 // Engine-neutral: no Three.js imports here (work package §3.3).
 
 import { createEventBus } from './chapter05Events.js';
+import { createCollapseState, reduceCollapse } from './collapseGauntlet.js';
 
 export const PHASES = Object.freeze([
   'lobby',
@@ -17,9 +18,9 @@ export const PHASES = Object.freeze([
 // allowed to move the player between spaces, and it validates against this.
 export const PHASE_TRANSITIONS = Object.freeze({
   lobby: ['corridor'],
-  corridor: ['echo-city', 'lobby', 'return'],
+  corridor: ['echo-city', 'lobby', 'return', 'collapse'],
   'echo-city': ['corridor', 'return'],
-  return: ['collapse'],
+  return: [],
   collapse: ['complete'],
   complete: [],
 });
@@ -70,7 +71,7 @@ export function createInitialState() {
     },
     corridor: { pass: 1, guideStandSide: 'south' },
     lobby: { deskReclassified: false },
-    collapse: { started: false, completed: false },
+    collapse: createCollapseState(),
   };
 }
 
@@ -352,15 +353,37 @@ export function reduce(prev, action) {
       emit('phase.changed', { phase: 'return' });
       break;
     }
-    case 'enterCollapse': {
-      if (state.phase !== 'return' || !state.lobby.deskReclassified) {
-        return rejected('the former desk location is not open yet');
-      }
+    case 'labyrinthComplete': {
+      if (state.phase !== 'corridor') return rejected('the Labyrinth must return to the archive corridor');
       if (!canTransition(state.phase, 'collapse')) return rejected('illegal transition');
+      const collapse = reduceCollapse(state.collapse, { type: 'collapse.start' });
+      state.collapse = collapse.state;
       state.phase = 'collapse';
-      state.collapse.started = true;
-      emit('collapse.started');
+      state.lobby.deskReclassified = true;
+      for (const event of collapse.events) events.push(event);
+      emit('lobby.deskReclassified');
       emit('phase.changed', { phase: 'collapse' });
+      break;
+    }
+    case 'collapseReachZone':
+    case 'collapseHit':
+    case 'collapseSlotKey':
+    case 'collapseJump': {
+      if (state.phase !== 'collapse') return rejected('the collapse gauntlet is not active');
+      const collapseAction = {
+        collapseReachZone: { type: 'collapse.reachZone', zone: action.zone },
+        collapseHit: { type: 'collapse.hit' },
+        collapseSlotKey: { type: 'collapse.slotKey' },
+        collapseJump: { type: 'collapse.jump' },
+      }[action.type];
+      const collapse = reduceCollapse(state.collapse, collapseAction);
+      if (collapse.state === state.collapse) return rejected(collapse.events[0]?.payload?.reason ?? 'collapse action rejected');
+      state.collapse = collapse.state;
+      for (const event of collapse.events) events.push(event);
+      if (state.collapse.completed) {
+        state.phase = 'complete';
+        emit('phase.changed', { phase: 'complete' });
+      }
       break;
     }
     default:
@@ -402,7 +425,6 @@ export class Chapter05Model {
     if (s.phase === 'lobby' && s.ticket.carried) actions.push('enterCorridor');
     if (s.phase === 'corridor') {
       if (s.corridor.pass === 1) actions.push('corridorLoop');
-      actions.push('enterEchoCity');
       actions.push('leaveCorridor');
     }
     if (s.phase === 'echo-city') {
@@ -419,7 +441,10 @@ export class Chapter05Model {
       if (s.echoRecord.stationLampOn && !s.echoRecord.tramNoticeReset) actions.push('resetTramNotice');
       if (s.echoRecord.stationLampOn && !s.echoRecord.standpipeClosed) actions.push('closeStandpipe');
     }
-    if (s.phase === 'return' && s.lobby.deskReclassified) actions.push('enterCollapse');
+    if (s.phase === 'collapse') {
+      if (s.collapse.labyrinthKeys > 0) actions.push('collapseSlotKey');
+      if (s.collapse.doorOpen) actions.push('collapseJump');
+    }
     return actions;
   }
 

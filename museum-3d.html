@@ -154,6 +154,17 @@
         transition: opacity 0.2s ease;
       }
       #fade.on { opacity: 1; pointer-events: all; }
+      #fade .chapter-completion {
+        position: absolute; inset: 0;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 14px; padding: 8vw; box-sizing: border-box;
+        color: #eee8d9; text-align: center; opacity: 0;
+        transition: opacity 0.45s ease;
+      }
+      #fade .chapter-completion.visible { opacity: 1; }
+      #fade .chapter-completion div { color: #aaa394; font-size: 14px; letter-spacing: 0.08em; }
+      #fade .chapter-completion strong { font-size: clamp(18px, 2.5vw, 32px); letter-spacing: 0.16em; }
+      #fade .chapter-completion small { color: #79756d; font-size: 12px; }
 
       #direction-exhibit {
         position: fixed; inset: 0; z-index: 50;
@@ -215,7 +226,7 @@
         </div>
       </div>
     </div>
-    <div id="fade"></div>
+    <div id="fade"><div class="chapter-completion" aria-live="polite"></div></div>
     <section id="direction-exhibit" aria-hidden="true">
       <div id="direction-shell">
         <div id="direction-title">ARCHIVAL RECONSTRUCTION</div>

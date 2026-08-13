@@ -8,6 +8,7 @@
 //   echo          — Echo City entrance (spawn plaza, gate ahead)
 //   reclassified  — reclassified lobby (desk in glass, doorway behind)
 import { ECHO_CITY_ENTRY } from '../scenes/EchoCityWalkingSim.js';
+import { COLLAPSE_ENTRY } from '../state/collapseGauntlet.js';
 
 export function installQaHooks(app) {
   const qa = {
@@ -15,6 +16,18 @@ export function installQaHooks(app) {
     snapshot: () => app.model.getSnapshot(),
     dispatch: (type) => app.model.dispatch({ type }),
     setSimulatedLock: (on) => app.setSimulatedLock(on),
+
+    advance(ms) {
+      const steps = Math.max(1, Math.ceil(ms / (1000 / 60)));
+      const dt = (ms / 1000) / steps;
+      for (let index = 0; index < steps; index += 1) {
+        app.controller.update(dt);
+        const snapshot = app.model.getSnapshot();
+        app.getActiveScene()?.update(dt, snapshot);
+        app.interaction.update();
+        app.dialogue.update(dt);
+      }
+    },
 
     // Drive the real, legal action chain to the reclassified return state
     // without fades — used by the reclassified screenshot view.
@@ -62,6 +75,10 @@ export function installQaHooks(app) {
       } else if (name === 'maintenance') {
         qa.playthroughToReturn();
         qa.lookAt(0, 7.0, 0, 11.2, -0.04);
+      } else if (name === 'collapse-start') {
+        qa.jumpTo('corridor', COLLAPSE_ENTRY);
+      } else if (name === 'collapse-door') {
+        qa.jumpTo('corridor', { x: 39.9, z: 0, yaw: -Math.PI / 2 });
       } else {
         throw new Error(`unknown QA view: ${name}`);
       }
@@ -71,6 +88,7 @@ export function installQaHooks(app) {
   };
 
   window.__qa = qa;
+  window.advanceTime = (ms) => qa.advance(ms);
 
   window.render_game_to_text = () => {
     const s = app.model.getSnapshot();
@@ -96,9 +114,12 @@ export function installQaHooks(app) {
       minimap: app.minimap?.getSnapshot?.() ?? { visible: false, markers: [] },
       corridor: s.corridor,
       lobby: s.lobby,
+      collapse: s.collapse,
+      collapseGameplay: app.scenes.get('corridor')?.gauntlet?.getSnapshot?.() ?? null,
       directions: app.directionProgress.getSnapshot(),
       focusedInteractable: focused ? { id: focused.id, prompt: typeof focused.prompt === 'function' ? focused.prompt() : focused.prompt } : null,
       dialoguePlaying: app.dialogue.isPlaying,
+      dialogueLine: app.dialogue.currentLine,
       dialogueChoice: app.dialogue.choiceState,
       labyrinthExhibit: {
         open: app.labyrinth.opened,

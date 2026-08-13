@@ -21,13 +21,10 @@ import {
   boundaryScaleFor,
 } from '../../src/chapters/museum3d/echoCityV68/city3dConfig.js';
 
-test('the P0 round trip is lobby → corridor → echo-city → return → collapse → complete', () => {
+test('V02 enters the collapse directly from the Labyrinth corridor and then completes', () => {
   assert.equal(canTransition('lobby', 'corridor'), true);
-  assert.equal(canTransition('corridor', 'echo-city'), true);
-  assert.equal(canTransition('echo-city', 'corridor'), true);
-  assert.equal(canTransition('corridor', 'return'), true);
-  assert.equal(canTransition('echo-city', 'return'), true);
-  assert.equal(canTransition('return', 'collapse'), true);
+  assert.equal(canTransition('corridor', 'collapse'), true);
+  assert.equal(canTransition('return', 'collapse'), false);
   assert.equal(canTransition('collapse', 'complete'), true);
 });
 

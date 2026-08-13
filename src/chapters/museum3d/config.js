@@ -9,6 +9,7 @@ export const PLAYER = {
   jumpVelocity: 5.8,
   gravity: 13,
   interactRange: 2.6,
+  lookSensitivity: 0.0038,
 };
 
 export const COLORS = {
@@ -47,4 +48,4 @@ export const COLORS = {
 export const VERSION = 'P0 ECHO CITY AUTHORITY v0.5.0';
 
 // Debug beat entry points (?beat=lobby|corridor|echo|return) — Gate 1 task 5.
-export const DEBUG_BEATS = ['lobby', 'corridor', 'echo', 'return'];
+export const DEBUG_BEATS = ['lobby', 'corridor', 'echo', 'return', 'collapse'];

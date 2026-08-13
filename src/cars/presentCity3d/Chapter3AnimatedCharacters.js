@@ -14,13 +14,17 @@ const LOCOMOTION_REFERENCE_SPEEDS = Object.freeze({
 });
 
 export const CHAPTER3_CHARACTER_ASSETS = Object.freeze({
-  butch: Object.freeze({ file: 'butch_shared_rig.glb', height: 2.02 }),
-  lev: Object.freeze({ file: 'lev_shared_rig.glb', height: 1.98 }),
-  femaleCivic: Object.freeze({ file: 'female_civic_shared_rig.glb', height: 1.91 }),
-  femaleCivilian: Object.freeze({ file: 'female_civilian_shared_rig.glb', height: 1.88 }),
-  femaleMarket: Object.freeze({ file: 'female_market_shared_rig.glb', height: 1.90 }),
-  maleMunicipal: Object.freeze({ file: 'male_municipal_shared_rig.glb', height: 1.98 }),
-  maleLabor: Object.freeze({ file: 'male_labor_shared_rig.glb', height: 2.02 }),
+  // Target heights are measured sole-to-crown in world metres. The previous
+  // 1.88-2.02 m targets made nearly every shared NPC read as unusually tall
+  // beside counters, doors and Butch. Keep recognizable variation while
+  // returning the cast to the architectural scale used by Echo City.
+  butch: Object.freeze({ file: 'butch_shared_rig.glb', height: 1.86 }),
+  lev: Object.freeze({ file: 'lev_shared_rig.glb', height: 1.82 }),
+  femaleCivic: Object.freeze({ file: 'female_civic_shared_rig.glb', height: 1.70 }),
+  femaleCivilian: Object.freeze({ file: 'female_civilian_shared_rig.glb', height: 1.67 }),
+  femaleMarket: Object.freeze({ file: 'female_market_shared_rig.glb', height: 1.71 }),
+  maleMunicipal: Object.freeze({ file: 'male_municipal_shared_rig.glb', height: 1.79 }),
+  maleLabor: Object.freeze({ file: 'male_labor_shared_rig.glb', height: 1.83 }),
 });
 
 export const CHAPTER3_CHARACTER_ACTIONS = Object.freeze({

@@ -1,8 +1,8 @@
-// Beat 2 — packaged Chapter 5 archive corridor.
-// Doors 1–2 belong to this route. Doors 3–4 remain authored as standalone
-// slices, represented here only by sealed, inert archive shutters.
+// Beat 2 — V02 Chapter 5 archive corridor and collapse gauntlet.
+// Only Door 4 (The Labyrinth) is playable in this route. The first three
+// directions survive as pre-displayed records behind sealed archive shutters.
 //
-// Layout: x ∈ [8, 34], z ∈ [-2, 2], ceiling 3.2. Entrance from lobby at x=8.
+// Layout: x ∈ [8, 42], z ∈ [-2, 2], ceiling 3.2. Entrance from lobby at x=8.
 
 import * as THREE from 'three';
 import { COLORS } from '../config.js';
@@ -12,6 +12,8 @@ import { addAcousticCeilingGrid, createGuidePedestal, createPublicBench, createW
 import { CHAPTER05_DIRECTIONS, isDirectionPlayable } from '../directions/directionRegistry.js';
 import { directionAtDoorway } from '../directions/directionDoorways.js';
 import { animateReturnArtifact, createReturnArtifact } from '../assets/ReturnArtifacts.js';
+import { CollapseGauntletDirector } from '../systems/CollapseGauntletDirector.js';
+import { COLLAPSE_STRINGS } from '../state/collapseGauntlet.js';
 
 const WALL_H = 3.2;
 const WALL_T = 0.3;
@@ -28,26 +30,63 @@ export class ArchiveCorridor {
     this.ctx = ctx;
     const { collisionWorld } = ctx;
     const g = this.root;
+    // Restore the authored dark archive look that existed before the V02
+    // integration. The lobby HDR environment was washing the hall flat and
+    // made emergency red read as a few isolated bulbs instead of a room state.
+    this.root.userData.environment = null;
+    this.root.userData.rendererExposure = 0.80;
     this.materials = createMuseumMaterialLibrary();
     const cx = 25; // corridor center x
     const len = 34;
+    const roomStartX = 38.8;
+    const roomEndX = 42;
+    const roomCenterX = (roomStartX + roomEndX) / 2;
+    const roomLength = roomEndX - roomStartX;
+    const roomHalfDepth = 4.2;
 
     // shell
     plane(g, { x: cx, z: 0, w: len, h: 4, material: this.materials.carpet, name: 'floor' });
     plane(g, { x: cx, y: 0.005, z: 0, w: len, h: 1.6, material: this.materials.carpetLane, name: 'lane' });
     plane(g, { x: cx, y: WALL_H, z: 0, w: len, h: 4, material: this.materials.ceilingTile, rotationX: Math.PI / 2, name: 'ceiling' });
     addAcousticCeilingGrid(g, { width: len, depth: 4, y: WALL_H - 0.012, centerX: cx });
+    // The last three metres flare into a real dodge room. The overlap with the
+    // corridor floor/ceiling avoids a visible seam at the transition.
+    plane(g, { x: roomCenterX, z: 0, w: roomLength + 0.18, h: roomHalfDepth * 2, material: this.materials.carpet, name: 'final-antechamber-floor' });
+    plane(g, { x: roomCenterX, y: 0.006, z: 0, w: roomLength + 0.18, h: 6.8, material: this.materials.carpetLane, name: 'final-antechamber-lane' });
+    plane(g, { x: roomCenterX, y: WALL_H, z: 0, w: roomLength + 0.18, h: roomHalfDepth * 2, material: this.materials.ceilingTile, rotationX: Math.PI / 2, name: 'final-antechamber-ceiling' });
+    addAcousticCeilingGrid(g, { width: roomLength + 0.18, depth: roomHalfDepth * 2, y: WALL_H - 0.012, centerX: roomCenterX });
 
     const wall = this.materials.wallDark;
     const lower = this.materials.wallDark;
     const rail = this.materials.oliveSteel;
-    // south wall (solid)
-    box(g, { x: cx, y: WALL_H / 2, z: 2, w: len, h: WALL_H, d: WALL_T, material: wall, name: 'wall-south', collide: true, collisionWorld });
-    box(g, { x: cx, y: 0.63, z: 1.82, w: len - 0.3, h: 1.08, d: 0.05, material: lower, name: 'wainscot-south' });
-    box(g, { x: cx, y: 1.18, z: 1.86, w: len - 0.3, h: 0.09, d: 0.07, material: rail, name: 'chair-rail-south' });
-    // end wall — deliberately blank. The corridor ends; it is not a fifth
-    // destination or a labelled staff route.
-    box(g, { x: 42, y: WALL_H / 2, z: 0, w: WALL_T, h: WALL_H, d: 4, material: wall, name: 'wall-end', collide: true, collisionWorld });
+    // Main hall walls stop where the final dodge room flares outward.
+    const mainWallLength = roomStartX - 8;
+    const mainWallCenter = 8 + mainWallLength / 2;
+    box(g, { x: mainWallCenter, y: WALL_H / 2, z: 2, w: mainWallLength, h: WALL_H, d: WALL_T, material: wall, name: 'wall-south', collide: true, collisionWorld });
+    box(g, { x: mainWallCenter, y: 0.63, z: 1.82, w: mainWallLength - 0.3, h: 1.08, d: 0.05, material: lower, name: 'wainscot-south' });
+    box(g, { x: mainWallCenter, y: 1.18, z: 1.86, w: mainWallLength - 0.3, h: 0.09, d: 0.07, material: rail, name: 'chair-rail-south' });
+    for (const side of [-1, 1]) {
+      const start = new THREE.Vector2(roomStartX, side * 2);
+      const end = new THREE.Vector2(39.58, side * roomHalfDepth);
+      const dx = end.x - start.x;
+      const dz = end.y - start.y;
+      const length = Math.hypot(dx, dz);
+      const rotationY = -Math.atan2(dz, dx);
+      const flare = new THREE.Mesh(new THREE.BoxGeometry(length, WALL_H, WALL_T), wall);
+      flare.name = `final-room-flare-${side < 0 ? 'north' : 'south'}`;
+      flare.position.set((start.x + end.x) / 2, WALL_H / 2, (start.y + end.y) / 2);
+      flare.rotation.y = rotationY;
+      g.add(flare);
+      collisionWorld.addOrientedBoxFromCenterSize(flare.position.x, flare.position.z, length, WALL_T, rotationY, flare.name);
+    }
+    for (const side of [-1, 1]) {
+      box(g, { x: 40.79, y: WALL_H / 2, z: side * roomHalfDepth, w: 2.42, h: WALL_H, d: WALL_T, material: wall, name: `final-room-wall-${side < 0 ? 'north' : 'south'}`, collide: true, collisionWorld });
+    }
+    // The east wall is split around the Final Archive doorway. The closed
+    // leaves own the central collider and remove it only after key eight.
+    for (const z of [-2.88, 2.88]) {
+      box(g, { x: 42, y: WALL_H / 2, z, w: WALL_T, h: WALL_H, d: 2.64, material: wall, name: `wall-end-${z < 0 ? 'north' : 'south'}`, collide: true, collisionWorld });
+    }
 
     // The open west threshold is the route back to the ordinary front lobby.
     // Warm spill and the continuing carpet lane make the return leg readable
@@ -60,8 +99,8 @@ export class ArchiveCorridor {
     lobbyGlow.rotation.y = Math.PI / 2;
     g.add(lobbyGlow);
 
-    // The four-number archive rhythm remains visible. Only the first two gaps
-    // contain playable door frames in the packaged route.
+    // The four-number archive rhythm remains visible. Door 1 is sealed; the
+    // side-on last door beneath the final light is the only playable route.
     const gaps = [14, 22, 30, 38];
     let cursor = 8;
     for (const gx of gaps) {
@@ -73,45 +112,44 @@ export class ArchiveCorridor {
       box(g, { x: gx, y: 2.85, z: -2, w: 2.0, h: 0.7, d: WALL_T, material: wall, name: `lintel-${gx}` });
       cursor = gx + 1;
     }
-    const endW = 42 - cursor;
-    const endX = (cursor + 42) / 2;
-    box(g, { x: endX, y: WALL_H / 2, z: -2, w: endW, h: WALL_H, d: WALL_T, material: wall, name: 'wall-n-end', collide: true, collisionWorld });
-    box(g, { x: endX, y: 0.63, z: -1.82, w: Math.max(0.05, endW - 0.12), h: 1.08, d: 0.05, material: lower, name: 'wainscot-n-end' });
-    box(g, { x: endX, y: 1.18, z: -1.86, w: Math.max(0.05, endW - 0.12), h: 0.09, d: 0.07, material: rail, name: 'chair-rail-n-end' });
-
     // fluorescent strips
+    this.ceilingFixtures = [];
     for (const fx of [11, 17, 23, 29, 35, 40]) {
-      fluorescentFixture(g, { x: fx, z: 0, ceilingY: WALL_H, length: 2.6 });
+      const fixture = fluorescentFixture(g, { x: fx, z: 0, ceilingY: WALL_H, length: 2.6 });
+      fixture.x = fx;
+      if (fx !== 40) fixture.tube.material = mat(0x24231f);
+      this.ceilingFixtures.push(fixture);
+    }
+    for (const z of [-2.55, 2.55]) {
+      const fixture = fluorescentFixture(g, { x: 40, z, ceilingY: WALL_H, length: 1.55 });
+      fixture.x = 40;
+      this.ceilingFixtures.push(fixture);
     }
 
-    // ---- Two packaged doors, followed by two inert standalone shutters. ----
+    // ---- One sealed first door, two sealed records, then Door 4 Labyrinth. ----
     this._recordDoors = [];
+    this._sealArchiveBay(g, { x: 14, id: 'record-1', number: '1' });
+    this._sealArchiveBay(g, { x: 22, id: 'borrowed-grid', number: '2' });
+    this._sealArchiveBay(g, { x: 30, id: 'echo-city', number: '3' });
     this.labyrinthScreen = this._numberedDoor(g, {
-      x: 14,
+      x: 38,
       id: 'labyrinth',
-      number: 1,
+      number: '4',
       screenColor: 0x21131a,
     });
-    this.borrowedGridScreen = this._numberedDoor(g, {
-      x: 22,
-      id: 'borrowed-grid',
-      number: 2,
-      screenColor: 0x09232b,
-    });
 
-    // Records 3 and 4 are standalone slices. The museum constructs only
-    // closed shutters here: no portal, evidence case, hit target, or niche.
-    this._sealNumberedDoor(g, { x: 30, number: 3, id: 'echo-city' });
-    this._sealNumberedDoor(g, { x: 38, number: 4, id: 'painted-country' });
-
-    // Return niches exist only for the two artifacts filed by this route.
+    // The whole journey is already catalogued before the Labyrinth opens.
     this.artifactNiches = new Map();
     for (const [id, x] of [
-      [CHAPTER05_DIRECTIONS.LABYRINTH, 14],
+      [CHAPTER05_DIRECTIONS.LABYRINTH, 38],
       [CHAPTER05_DIRECTIONS.BORROWED_GRID, 22],
+      [CHAPTER05_DIRECTIONS.ECHO_CITY, 30],
+      [CHAPTER05_DIRECTIONS.PAINTED_COUNTRY, 14],
     ]) {
       this.artifactNiches.set(id, this._artifactNiche(g, { id, x }));
     }
+
+    this.finalDoor = this._finalArchiveDoor(g);
 
     // guide stand — south side on pass 1, north side after the loop
     this.guideStand = new THREE.Group();
@@ -135,31 +173,39 @@ export class ArchiveCorridor {
       g.add(radiator);
     }
 
-    // Lights share the lobby's fluorescent language but become more uneven
-    // down the long archive run. Broad ceiling emitters keep the cases legible;
-    // the soft directional key supplies the contact shadows the old graybox
-    // lacked.
-    g.add(new THREE.HemisphereLight(0xffefd3, 0x3e372f, 0.48));
-    for (const fx of [11, 17, 23, 29, 35, 40]) {
-      const fluorescent = new THREE.RectAreaLight(0xffedc5, fx === 29 ? 2.2 : 2.8, 0.48, 2.5);
-      fluorescent.position.set(fx, WALL_H - 0.13, 0);
-      fluorescent.rotation.x = -Math.PI / 2;
-      g.add(fluorescent);
+    // Exact dark-light foundation from the last approved archive pass: real
+    // black environment, low neutral spill, and one dominant end fixture.
+    const ambient = new THREE.HemisphereLight(0x77736a, 0x25231f, 1.15);
+    const reflected = new THREE.AmbientLight(0x4c4942, 0.82);
+    g.add(ambient, reflected);
+    this.corridorLights = [ambient, reflected];
+    for (const spillX of [14, 22, 30, 38]) {
+      const spill = new THREE.PointLight(0x77736a, spillX === 14 ? 11 : 8.4, spillX === 38 ? 8.4 : 7.2, 2);
+      spill.position.set(spillX, 2.25, 0.35);
+      spill.userData.corridorX = spillX;
+      g.add(spill);
+      this.corridorLights.push(spill);
     }
-    const key = new THREE.DirectionalLight(0xffe3b6, 1.25);
-    key.position.set(17, 7, 5);
-    key.target.position.set(22, 0, 0);
-    key.castShadow = true;
-    key.shadow.mapSize.set(2048, 2048);
-    key.shadow.camera.left = -16;
-    key.shadow.camera.right = 16;
-    key.shadow.camera.top = 5;
-    key.shadow.camera.bottom = -5;
-    key.shadow.camera.near = 0.5;
-    key.shadow.camera.far = 22;
-    key.shadow.bias = -0.00025;
-    key.shadow.normalBias = 0.035;
-    g.add(key, key.target);
+    const finalFluorescent = new THREE.RectAreaLight(0xffedc5, 9.0, 3.0, 7.2);
+    finalFluorescent.position.set(40.2, WALL_H - 0.13, 0);
+    finalFluorescent.rotation.x = -Math.PI / 2;
+    finalFluorescent.userData.corridorX = 40.2;
+    g.add(finalFluorescent);
+    const finalDoorPool = new THREE.PointLight(0xf4f0df, 12, 6.4, 2);
+    finalDoorPool.position.set(40.3, 2.45, 0);
+    finalDoorPool.userData.corridorX = 40.3;
+    g.add(finalDoorPool);
+    this.corridorLights.push(finalFluorescent, finalDoorPool);
+
+    this.gauntlet = new CollapseGauntletDirector({
+      ctx,
+      root: g,
+      materials: this.materials,
+      cases: this.artifactNiches,
+      corridorLights: this.corridorLights,
+      ceilingFixtures: this.ceilingFixtures,
+      finalDoor: this.finalDoor,
+    });
 
     // trigger zones
     this._doorwayDirection = null;
@@ -186,7 +232,7 @@ export class ArchiveCorridor {
       x: x + 0.62, y: 1.02, z: -1.85, w: 0.09, h: 0.09, d: 0.05,
       material: this.materials.brass, name: `${id}-control-rail`,
     });
-    label(g, String(number), { x, y: 1.45, z: -1.84, w: 0.62, h: 0.82, fg: '#d8d4c9', bg: '#111416', font: 'bold 280px Georgia, serif' });
+    label(g, String(number), { x, y: 1.45, z: -1.84, w: 1.5, h: 0.44, fg: '#d8d4c9', bg: '#111416', font: 'bold 62px Georgia, serif' });
     // Keep the target broad, but leave it as a thin plane behind the player's
     // nearest legal standing position. A deep box reaches into the collision
     // boundary and lets the camera end up *inside* the proxy; Three's default
@@ -197,7 +243,7 @@ export class ArchiveCorridor {
     });
   }
 
-  _sealNumberedDoor(g, { x, number, id }) {
+  _sealArchiveBay(g, { x, id, number }) {
     const shutter = new THREE.Group();
     shutter.name = `${id}-standalone-shutter`;
     shutter.position.set(x, 0, -1.73);
@@ -212,8 +258,9 @@ export class ArchiveCorridor {
     for (const y of [0.38, 0.76, 1.14, 1.52, 1.9, 2.26]) {
       box(shutter, { x: 0, y, z: 0.055, w: 1.68, h: 0.028, d: 0.025, material: this.materials.brass, name: 'sealed-rail' });
     }
-    box(shutter, { x: 0, y: 1.26, z: 0.085, w: 0.66, h: 0.9, d: 0.035, material: this.materials.walnutDark, name: 'sealed-number-plate' });
-    label(shutter, String(number), { x: 0, y: 1.34, z: 0.112, w: 0.56, h: 0.76, fg: '#b6b09e', bg: '#111416', font: 'bold 280px Georgia, serif' });
+    box(shutter, { x: 0, y: 1.26, z: 0.085, w: 1.2, h: 0.46, d: 0.035, material: this.materials.walnutDark, name: 'sealed-accession-plate' });
+    label(shutter, 'RECORD SEALED', { x: 0, y: 1.3, z: 0.112, w: 1.08, h: 0.32, fg: '#b6b09e', bg: '#111416', font: 'bold 46px Georgia, serif' });
+    if (number) label(shutter, number, { x: 0, y: 2.52, z: 0.112, w: 0.58, h: 0.42, fg: '#d8d4c9', bg: '#111416', font: 'bold 62px Georgia, serif' });
     const lock = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.025, 8, 20), this.materials.brass);
     lock.name = 'sealed-lock-ring';
     lock.position.set(0.59, 0.54, 0.11);
@@ -228,20 +275,36 @@ export class ArchiveCorridor {
     g.add(group);
     box(group, { x: 0, y: 1.35, z: 0.07, w: 1.5, h: 1.15, d: 0.16, material: this.materials.walnutDark, name: `${id}-niche-frame` });
     box(group, { x: 0, y: 1.35, z: -0.03, w: 1.23, h: 0.9, d: 0.08, material: emissiveMat(0x080a0b, 0.2), name: `${id}-niche-back` });
-    box(group, { x: 0, y: 1.35, z: -0.24, w: 1.28, h: 0.94, d: 0.012, material: glassMat(), name: `${id}-niche-glass` });
+    const glass = box(group, { x: 0, y: 1.35, z: -0.24, w: 1.28, h: 0.94, d: 0.012, material: glassMat(), name: `${id}-niche-glass` });
     const artifact = createReturnArtifact(id);
     artifact.position.set(0, 1.34, -0.17);
     artifact.scale.setScalar(id === CHAPTER05_DIRECTIONS.LABYRINTH
       ? 1.1
       : id === CHAPTER05_DIRECTIONS.ECHO_CITY ? 1.3 : 1.22);
     artifact.rotation.y = Math.PI;
-    artifact.visible = false;
+    artifact.visible = true;
     group.add(artifact);
-    const light = new THREE.PointLight(id === CHAPTER05_DIRECTIONS.BORROWED_GRID ? 0x55ddd5 : 0xffd7a1, 0, 2.2, 2);
+    const light = new THREE.PointLight(id === CHAPTER05_DIRECTIONS.BORROWED_GRID ? 0x55ddd5 : 0xffd7a1, id === CHAPTER05_DIRECTIONS.BORROWED_GRID ? 2.4 : 1.8, 3.4, 2);
     light.position.set(0, 1.6, -0.55);
     group.add(light);
     const proxy = hitProxy(group, { x: 0, y: 1.35, z: -0.32, w: 1.5, h: 1.15, d: 0.12, name: `${id}-niche-interaction-proxy` });
-    return { group, artifact, light, proxy, displayed: false };
+    const cards = {
+      labyrinth: ['ACC. 17-0000 — STONE FACE, UNVERIFIED SIGHT', 'It watched you the whole way through. It is still watching.'],
+      'borrowed-grid': ['ACC. 17-0002 — ILLEGAL GRID TAP, THREE DISTRICTS', "You didn't tap the grid. You taught three districts to share."],
+      'echo-city': ['ACC. 17-0003 — DOMESTIC RECORDING, LOW VALUE', 'One ordinary morning, kept on tape. The museum priced it at nothing.'],
+      'painted-country': ['ACC. 17-0004 — PAPER FOLD, WATER DAMAGE', 'Folded paper, one cyan thread. It held a country together once.'],
+    };
+    const objectLabels = {
+      labyrinth: 'THE LOOKING FRAGMENT',
+      'borrowed-grid': 'THREE-DISTRICT BYPASS COIL',
+      'echo-city': 'MARA · ORDINARY MORNING',
+      'painted-country': 'THE COMMON FOLD',
+    };
+    label(group, objectLabels[id], {
+      x: 0, y: 0.68, z: -0.255, w: 1.34, h: 0.18,
+      fg: '#eee4cb', bg: '#090b0c', font: 'bold 30px Georgia, serif',
+    });
+    return { group, artifact, light, glass, proxy, displayed: true, shattered: false, card: cards[id] };
   }
 
   _syncArtifacts() {
@@ -250,8 +313,70 @@ export class ArchiveCorridor {
       const displayed = snapshot.artifacts[id]?.displayed === true;
       niche.displayed = displayed;
       niche.artifact.visible = displayed;
-      niche.light.intensity = displayed ? (id === CHAPTER05_DIRECTIONS.BORROWED_GRID ? 1.2 : 0.72) : (snapshot.carriedArtifact === id ? 0.3 : 0);
+      if (!niche.shattered) niche.light.intensity = displayed ? (id === CHAPTER05_DIRECTIONS.BORROWED_GRID ? 2.4 : 1.8) : 0;
     }
+  }
+
+  _finalArchiveDoor(g) {
+    const root = new THREE.Group();
+    root.name = 'final-archive-door';
+    g.add(root);
+    const voidPlane = new THREE.Mesh(new THREE.PlaneGeometry(3.05, 2.95), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+    voidPlane.name = 'final-archive-void';
+    voidPlane.position.set(41.96, 1.47, 0);
+    voidPlane.rotation.y = -Math.PI / 2;
+    voidPlane.visible = false;
+    root.add(voidPlane);
+    box(root, { x: 41.72, y: 2.98, z: 0, w: 0.34, h: 0.34, d: 3.2, material: this.materials.walnutDark, name: 'final-door-lintel' });
+    for (const z of [-1.52, 1.52]) box(root, { x: 41.72, y: 1.46, z, w: 0.34, h: 2.95, d: 0.24, material: this.materials.walnutDark, name: 'final-door-jamb' });
+    const leftPivot = new THREE.Group();
+    leftPivot.position.set(41.72, 0, -1.42);
+    const leftLeaf = box(leftPivot, { x: 0, y: 1.46, z: 0.71, w: 0.18, h: 2.9, d: 1.4, material: this.materials.deskWoodDark, name: 'final-door-left-leaf' });
+    const rightPivot = new THREE.Group();
+    rightPivot.position.set(41.72, 0, 1.42);
+    const rightLeaf = box(rightPivot, { x: 0, y: 1.46, z: -0.71, w: 0.18, h: 2.9, d: 1.4, material: this.materials.deskWoodDark, name: 'final-door-right-leaf' });
+    root.add(leftPivot, rightPivot);
+    for (const leaf of [leftLeaf, rightLeaf]) {
+      leaf.castShadow = true;
+      for (const y of [0.5, 1.25, 2]) {
+        const panel = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.54, 0.98), this.materials.walnutDark);
+        panel.position.set(-0.1, y - 1.46, 0);
+        leaf.add(panel);
+      }
+    }
+    const lockedPlaque = label(root, COLLAPSE_STRINGS.exitDoorPlaqueLocked, { x: 41.6, y: 2.32, z: 0, w: 2.55, h: 0.34, fg: '#d7c69c', bg: '#201b15', font: 'bold 15px Georgia, serif', rotationY: -Math.PI / 2 });
+    const openPlaque = label(root, COLLAPSE_STRINGS.exitDoorPlaqueOpen, { x: 41.59, y: 2.32, z: 0, w: 2.55, h: 0.34, fg: '#d7c69c', bg: '#201b15', font: 'bold 14px Georgia, serif', rotationY: -Math.PI / 2 });
+    openPlaque.visible = false;
+    const keyRoot = new THREE.Group();
+    keyRoot.name = 'final-archive-eight-keyholes';
+    root.add(keyRoot);
+    const keySlots = [];
+    const ys = [0.72, 1.12, 1.52, 1.92];
+    for (let column = 0; column < 2; column += 1) {
+      for (let row = 0; row < 4; row += 1) {
+        const z = column === 0 ? -0.23 : 0.23;
+        const y = ys[row];
+        const glow = new THREE.Mesh(new THREE.TorusGeometry(0.065, 0.018, 8, 18), new THREE.MeshBasicMaterial({ color: 0xd9b15c }));
+        glow.position.set(41.59, y, z);
+        glow.rotation.y = -Math.PI / 2;
+        keyRoot.add(glow);
+        const key = new THREE.Group();
+        key.position.set(41.55, y, z);
+        key.rotation.y = -Math.PI / 2;
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.015, 7, 16), this.materials.brass);
+        const stem = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.14, 0.02), this.materials.brass);
+        stem.position.y = -0.09;
+        const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.025, 0.02), this.materials.brass);
+        tooth.position.set(0.016, -0.15, 0);
+        key.add(ring, stem, tooth);
+        key.visible = false;
+        keyRoot.add(key);
+        keySlots.push({ glow, key });
+      }
+    }
+    const proxy = hitProxy(root, { x: 41.42, y: 1.48, z: 0, w: 0.38, h: 2.85, d: 2.75, name: 'final-archive-interaction-proxy' });
+    this.ctx.collisionWorld.addBoxFromCenterSize(41.72, 0, 0.34, 2.86, 'final-archive-door-closed');
+    return { root, void: voidPlane, leftPivot, rightPivot, lockedPlaque, openPlaque, keyRoot, keySlots, proxy, openAmount: 0 };
   }
 
   _recordDoor(g, { x, id, title, status, description = null, doorColor }) {
@@ -268,22 +393,44 @@ export class ArchiveCorridor {
       this.ctx.interaction.register(`direction-${id}`, {
         mesh,
         enabled: () => this.ctx.model.getSnapshot().phase === 'corridor',
-        prompt: () => this.ctx.directionProgress.getSnapshot().completed[id] ? 'E  ·  FILED' : 'E',
+        prompt: () => this.ctx.directionProgress.getSnapshot().completed[id]
+          ? 'E — LABYRINTH FILED'
+          : 'E — ENTER DOOR 4 · THE LABYRINTH',
         action: () => this._enterDirection(id),
       });
     };
-    registerDirection(CHAPTER05_DIRECTIONS.BORROWED_GRID, this.borrowedGridScreen);
     registerDirection(CHAPTER05_DIRECTIONS.LABYRINTH, this.labyrinthScreen);
     for (const [id, niche] of this.artifactNiches) {
-      this.ctx.interaction.register(`display-artifact-${id}`, {
+      this.ctx.interaction.register(`gallery-artifact-${id}`, {
         mesh: niche.proxy,
-        enabled: () => this.ctx.model.getSnapshot().phase === 'corridor' && this.ctx.directionProgress.getSnapshot().carriedArtifact === id,
-        prompt: 'E',
+        enabled: () => this.ctx.model.getSnapshot().phase === 'corridor',
+        prompt: 'E — READ ACCESSION CARD',
         action: () => {
-          if (this.ctx.displayArtifact(id)) this._syncArtifacts();
+          this.ctx.dialogue.play([
+            { speaker: 'ARCHIVIST', text: niche.card[0] },
+            { speaker: null, text: niche.card[1] },
+          ]);
         },
       });
     }
+    this.ctx.interaction.register('final-archive-door', {
+      mesh: this.finalDoor.proxy,
+      enabled: () => ['corridor', 'collapse'].includes(this.ctx.model.getSnapshot().phase)
+        && this.ctx.controller.position.x >= 39.15,
+      prompt: () => {
+        const state = this.ctx.model.getSnapshot();
+        if (state.phase !== 'collapse') return 'E — INSPECT EIGHT KEYHOLES';
+        if (state.collapse.doorOpen) return COLLAPSE_STRINGS.promptJump;
+        return `${COLLAPSE_STRINGS.promptSlotKey} / LMB — ${state.collapse.keysSlotted} / 8`;
+      },
+      action: () => {
+        const state = this.ctx.model.getSnapshot();
+        if (state.phase !== 'collapse') this.ctx.dialogue.play([{ speaker: null, text: COLLAPSE_STRINGS.exitDoorSealedNote }]);
+        else if (state.collapse.doorOpen) {
+          this.ctx.controller.setPose(41.28, this.ctx.controller.position.z, -Math.PI / 2);
+        }
+      },
+    });
     for (const { id, title, status, description, knob } of this._recordDoors) {
       this.ctx.interaction.register(id, {
         mesh: knob,
@@ -318,33 +465,28 @@ export class ArchiveCorridor {
     // A returned artifact still has a dedicated niche and can be placed there
     // manually. If the player walks straight to another numbered door, file it
     // automatically instead of silently disabling every door in the corridor.
-    const carriedArtifact = this.ctx.directionProgress.getSnapshot().carriedArtifact;
-    if (carriedArtifact) {
-      if (!this.ctx.displayArtifact(carriedArtifact)) return false;
-      this._syncArtifacts();
-      if (this.ctx.directionProgress.getSnapshot().allComplete) return true;
-    }
     return this.ctx.openDirection(id);
   }
 
   enter(snapshot) {
     this._applyStandSide(snapshot.corridor.guideStandSide);
     this._syncArtifacts();
+    this.gauntlet.enter(snapshot);
   }
 
   update(dt, snapshot) {
     const player = this.ctx.controller.position;
 
+    if (snapshot.phase === 'collapse') {
+      this.gauntlet.update(dt, snapshot);
+      return;
+    }
+
     if (this._inZone(player, this._lobbyReturnZone)) this.ctx.goBackToLobby();
 
-    const doorwayDirection = directionAtDoorway(player);
-    const enteredDoorway = doorwayDirection && doorwayDirection !== this._doorwayDirection;
-    this._doorwayDirection = doorwayDirection;
-    if (enteredDoorway
-      && snapshot.phase === 'corridor'
-      && !this.ctx.directionProgress.getSnapshot().activeDirection) {
-      this._enterDirection(doorwayDirection);
-    }
+    // Doorways no longer auto-open on collision. Facing Door 4 displays the
+    // interaction prompt; E / Enter is the sole way into the Labyrinth.
+    this._doorwayDirection = directionAtDoorway(player);
     const time = performance.now() / 1000;
     for (const niche of this.artifactNiches.values()) {
       if (niche.displayed) animateReturnArtifact(niche.artifact, time);

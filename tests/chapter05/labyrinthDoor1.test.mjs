@@ -1,4 +1,4 @@
-// Door 1 (Labyrinth) production-pass regression coverage.
+// Door 4 (Labyrinth) production-pass regression coverage.
 //
 // Behavioral wherever the module under test is plain data/math: the maze
 // layout, statue pursuit AI, texture slot painters, the formal Chapter 5
@@ -62,22 +62,22 @@ function makeStatue(walls, spawnCell, spawnPos) {
   return new StatueNPC(walls, spawnCell, spawnPos, 0, sprite);
 }
 
-test('Door 1 exposes one formal Chapter 5 route, message, and artifact contract', () => {
-  assert.equal(LABYRINTH_CHAPTER05_CONTRACT.doorNumber, 1);
+test('Door 4 exposes one formal Chapter 5 route, message, and artifact contract', () => {
+  assert.equal(LABYRINTH_CHAPTER05_CONTRACT.doorNumber, 4);
   assert.equal(LABYRINTH_CHAPTER05_CONTRACT.artifactLabel, 'Looking Fragment');
   const definition = directionDefinition(CHAPTER05_DIRECTIONS.LABYRINTH);
   assert.equal(definition.src, LABYRINTH_CHAPTER05_CONTRACT.embeddedSrc);
   assert.equal(definition.completeMessage, LABYRINTH_CHAPTER05_CONTRACT.completeMessage);
   assert.equal(definition.exitMessage, LABYRINTH_CHAPTER05_CONTRACT.exitMessage);
   assert.equal(definition.artifactId, LABYRINTH_CHAPTER05_CONTRACT.artifactId);
-  assert.equal(definition.title, '1');
+  assert.equal(definition.title, '4');
   assert.match(labyrinthEntry, /LABYRINTH_CHAPTER05_CONTRACT\.completeMessage/);
   assert.match(labyrinthEntry, /LABYRINTH_CHAPTER05_CONTRACT\.exitMessage/);
   assert.match(museumVite, /LABYRINTH_CHAPTER05_CONTRACT\.entryHtml/);
   assert.match(labyrinthVite, /LABYRINTH_CHAPTER05_CONTRACT\.entryHtml/);
 });
 
-test('Door 1 completion carries the fragment through the real Museum exhibit bridge', () => {
+test('Door 4 completion grants the corridor route while the Looking Fragment stays pre-displayed', () => {
   const previousWindow = globalThis.window;
   const parentWindow = {};
   let messageListener = null;
@@ -116,17 +116,14 @@ test('Door 1 completion carries the fragment through the real Museum exhibit bri
       data: { type: LABYRINTH_CHAPTER05_CONTRACT.completeMessage },
     });
 
-    // The fragment is carried, NOT filed — the direction completes only when
-    // it is displayed in its opposite niche.
+    // V02 leaves the Looking Fragment in its pre-display niche. The complete
+    // message closes Door 1 and makes the eight-key gauntlet eligible to start.
     let snapshot = progress.getSnapshot();
     assert.equal(exhibit.opened, false);
-    assert.equal(snapshot.carriedArtifact, LABYRINTH_CHAPTER05_CONTRACT.artifactId);
-    assert.equal(snapshot.completed[LABYRINTH_CHAPTER05_CONTRACT.id], false);
-
-    progress.dispatch({ type: 'artifact.display', id: LABYRINTH_CHAPTER05_CONTRACT.artifactId });
-    snapshot = progress.getSnapshot();
     assert.equal(snapshot.carriedArtifact, null);
     assert.equal(snapshot.completed[LABYRINTH_CHAPTER05_CONTRACT.id], true);
+    assert.equal(snapshot.artifacts[LABYRINTH_CHAPTER05_CONTRACT.artifactId].displayed, true);
+    assert.equal(snapshot.allComplete, true);
 
     // A finished Door 1 run must not accidentally file any other direction.
     assert.equal(snapshot.completed[CHAPTER05_DIRECTIONS.BORROWED_GRID], false);
@@ -291,7 +288,7 @@ test('keys and torches can never share a read', () => {
   assert.ok(!idle.has(PAL.eyeHunt) && !idle.has(PAL.eyeFrozen));
 });
 
-test('no missing chase-theme file is referenced anywhere in Door 1 audio', () => {
+test('no missing chase-theme file is referenced anywhere in Door 4 audio', () => {
   assert.doesNotMatch(chaseMusic, /chase-theme/);
   assert.doesNotMatch(chaseMusic, /new Audio\(/);
   assert.doesNotMatch(chaseMusic, /import\.meta\.url/);

@@ -1,6 +1,6 @@
 export const OPENING_POSITIONS = Object.freeze({
   playerStart: [-10.2, 0.5, 29.1],
-  levStart: [0.3, 0.5, 17.4],
+  levStart: [-7.8, 0.5, 26.4],
   levArrivalTalk: [-7.6, 0.5, 27.0],
   levInterview: [1.8, 0.5, 11.8],
   seam: [8.2, 0.71, 7.3],
@@ -17,11 +17,17 @@ export const OPENING_POSITIONS = Object.freeze({
   cartApproach: [-21.6, 0.5, -0.6],
   bottle: [-5.1, 0.54, -10.2],
   bottleApproach: [-3.4, 0.5, -8.6],
-  toma: [36.6, 0.5, -9.8],
-  transportApproach: [38.2, 0.5, -8.1],
-  levTransportExterior: [36.8, 0.5, -6.8],
-  squareBosko: [13.2, 0.5, 15.0],
-  squareBoskoApproach: [11.1, 0.5, 15.8],
+  // Final user-marked placement: the centre of the white X in the supplied
+  // v28 screenshot, converted from screen pixels onto the y=0.5 ground plane.
+  // Keep the v28 player/Lev staging fixed so camera follow cannot move the
+  // marked screen-space destination out from under Toma.
+  toma: [37.68, 0.5, -15.87],
+  transportApproach: [28.27, 0.5, -16.29],
+  levTransportExterior: [26.77, 0.5, -15.09],
+  // Bosko works beside the north-east bench, well away from the two paving
+  // rows he is about to point out on the south side of the clock.
+  squareBosko: [17.8, 0.5, 8.2],
+  squareBoskoApproach: [15.8, 0.5, 9.4],
   plazaGrooves: [7.4, 0.73, 17.2],
   plazaGroovesApproach: [6.6, 0.5, 13.8],
   archiveEntrance: [-18.0, 0.5, -10.7],
@@ -36,10 +42,66 @@ export const ARRIVAL_DIALOGUE = Object.freeze([
     speaker: 'CONDUCTOR',
     text: 'Echo City. Passengers leaving the train, please step onto the platform. Keep the doorway clear.',
   },
+  { speaker: 'CONDUCTOR', text: 'Official inquiry? Then make it brief. This service is leaving.' },
   {
     speaker: 'BUTCH',
-    text: 'Echo City. The first place on this line where anyone reported seeing Mara.',
+    text: 'No. Personal. Mara disappeared. Echo City is the first place anyone saw her afterward.',
   },
+  { speaker: 'BUTCH', text: 'She left voluntarily, or somebody made it look that way. Either way, someone here remembers the route.' },
+]);
+
+export function arrivalObservationMenu(observations = []) {
+  const seen = new Set(observations);
+  return {
+    speaker: 'CHOOSE',
+    text: 'The train is still here. What else do you examine?',
+    choices: [
+      { id: 'arrival-route-board', label: 'Read the departure board and its cancellation marks.' },
+      { id: 'arrival-gate-latch', label: 'Inspect the scuffed station gate latch.' },
+      { id: 'arrival-infer', label: 'Put the two traces together. (Continue)' },
+    ].filter((choice) => choice.id === 'arrival-infer' || !seen.has(choice.id.replace('arrival-', ''))),
+  };
+}
+
+export const ARRIVAL_OBSERVATION_RESPONSES = Object.freeze({
+  'arrival-route-board': [
+    { speaker: 'BUTCH', text: 'The eastbound service was cancelled at 13:42, then restored by hand. Someone circled the replacement time in blue pencil.' },
+    { speaker: 'PATTERN', text: 'A schedule is not a witness. But it tells you which question has a record behind it.' },
+  ],
+  'arrival-gate-latch': [
+    { speaker: 'BUTCH', text: 'Fresh brass shows under the gate latch. It was lifted and set down repeatedly, not forced.' },
+    { speaker: 'TENDERNESS', text: 'Someone waited here long enough to make a nervous habit of it.' },
+  ],
+});
+
+export function arrivalInferenceMenu() {
+  return {
+    speaker: 'CHOOSE',
+    text: 'Which lead do you trust first?',
+    choices: [
+      { id: 'arrival-pattern', label: 'PATTERN · Ask the conductor about the restored service.' },
+      { id: 'arrival-tenderness', label: 'TENDERNESS · Ask who waited by the gate.' },
+      { id: 'arrival-nerve', label: 'NERVE · Ask what left before the door closes.' },
+    ],
+  };
+}
+
+export const ARRIVAL_INFERENCE_RESPONSES = Object.freeze({
+  'arrival-pattern': [
+    { speaker: 'BUTCH', text: 'Why was the eastbound service restored after the cancellation?' },
+    { speaker: 'CONDUCTOR', text: 'A late municipal clearance. I can give you the carriage ledger, not a story about why it came through.' },
+  ],
+  'arrival-tenderness': [
+    { speaker: 'BUTCH', text: 'Who was waiting at this gate yesterday?' },
+    { speaker: 'CONDUCTOR', text: 'People wait here every day. One woman kept looking east, then left when the replacement service arrived.' },
+  ],
+  'arrival-nerve': [
+    { speaker: 'BUTCH', text: 'What left on the restored service, and where did it go?' },
+    { speaker: 'CONDUCTOR', text: 'Eastbound. That is all I can say before this door closes. Station staff keep the fuller record.' },
+  ],
+});
+
+export const ARRIVAL_DIALOGUE_LEGACY = Object.freeze([
   {
     speaker: 'PATTERN',
     text: 'Keep the photograph visible. A face is more useful here than another description written from memory.',
@@ -79,12 +141,12 @@ export const LEV_INTRO_DIALOGUE = Object.freeze([
   { speaker: 'LEV', text: 'Because I saw that woman yesterday. Or someone close enough that I wrote down the time.' },
   { speaker: 'LEV', text: 'Lev Ardin. Civic Movement Investigation Office.' },
   {
-    speaker: 'BUTCH',
+    speaker: 'CHOOSE',
     text: 'What do you ask first?',
     choices: [
-      { id: 'lev-where', label: 'Where did you see her?' },
-      { id: 'lev-certain', label: 'How certain are you?' },
-      { id: 'lev-stop-her', label: 'Why didn\'t you stop her?' },
+      { id: 'lev-where', label: 'Where did you see her? (Continue)' },
+      { id: 'lev-certain', label: 'How certain are you? (Continue)' },
+      { id: 'lev-stop-her', label: 'Why didn\'t you stop her? (Continue)' },
     ],
   },
 ]);
@@ -107,14 +169,14 @@ export const LEV_FIRST_RESPONSES = Object.freeze({
 export function levTopicMenu(asked = []) {
   const seen = new Set(asked);
   return {
-    speaker: 'BUTCH',
+    speaker: 'CHOOSE',
     text: 'What do you ask Lev?',
     choices: [
       { id: 'lev-office', label: 'What does your office investigate?' },
       { id: 'lev-sighting', label: 'What exactly was Mara doing?' },
       { id: 'lev-oil', label: 'What happened in the square afterward?' },
       { id: 'lev-role', label: 'What do you want from me?' },
-      { id: 'lev-now', label: 'What do we do now?' },
+      { id: 'lev-now', label: 'What do we do now? (Continue)' },
     ].filter((choice) => choice.id === 'lev-now' || !seen.has(choice.id)),
   };
 }
@@ -172,14 +234,14 @@ export const SEAM_DIALOGUE = Object.freeze([
 export function seamMenu(observed = [], testingAsked = false) {
   const seen = new Set(observed);
   return {
-    speaker: 'BUTCH',
+    speaker: 'CHOOSE',
     text: 'Inspect the oil line.',
     choices: [
       { id: 'seam-geometry', label: 'Follow the shape of the line.' },
       { id: 'seam-fuel', label: 'Check the smell without touching it.' },
       { id: 'seam-cleaning', label: 'Look at the pale marks along the edges.' },
       { id: 'seam-testing', label: 'Ask how Lev will test it.' },
-      { id: 'seam-conclude', label: 'Give Lev your conclusion.' },
+      { id: 'seam-conclude', label: 'Give Lev your conclusion. (Continue)' },
     ].filter((choice) => {
       if (choice.id === 'seam-conclude') return true;
       if (choice.id === 'seam-testing') return !testingAsked;
@@ -212,12 +274,12 @@ export const SEAM_TOPIC_RESPONSES = Object.freeze({
 
 export function seamInferenceMenu() {
   return {
-    speaker: 'BUTCH',
+    speaker: 'CHOOSE',
     text: 'What is your working conclusion?',
     choices: [
-      { id: 'seam-deliberate', label: 'Someone placed it deliberately.' },
-      { id: 'seam-cart-leak', label: 'It could still be leaking from a cart.' },
-      { id: 'seam-reserve', label: 'I would rather reserve judgment.' },
+      { id: 'seam-deliberate', label: 'Someone placed it deliberately. (Continue)' },
+      { id: 'seam-cart-leak', label: 'It could still be leaking from a cart. (Continue)' },
+      { id: 'seam-reserve', label: 'I would rather reserve judgment. (Continue)' },
     ],
   };
 }
@@ -240,6 +302,9 @@ export const SEAM_INFERENCE_RESPONSES = Object.freeze({
 });
 
 export const SEAM_CONCLUSION = Object.freeze([
+  { speaker: 'PATTERN', text: 'The turns are evidence of a hand. The pale edge is evidence of an earlier cleanup. Keep those facts separate.' },
+  { speaker: 'TENDERNESS', text: 'Someone worked here long enough to be afraid of what the street would remember.' },
+  { speaker: 'NERVE', text: 'Ask Eda now. A careful question is still a question, and the market will not wait for certainty.' },
   { speaker: 'LEV', text: 'The visible section stops at the crossing. The last trace points toward the market.' },
   { speaker: 'BUTCH', text: 'We ask who sells it.' },
   { speaker: 'LEV', text: 'First the product, then the sale, then whoever moved it. We do not need a theory before we have those answers.' },
@@ -249,12 +314,12 @@ export const EDA_OPENING = Object.freeze([
   { speaker: 'EDA', text: 'If this is about the smell, I already called Sanitation. They sent me a complaint form instead of a cleaner.' },
   { speaker: 'LEV', text: 'We are not here to assign the cleaning bill. We found lamp oil in the paving and need to identify the supply.' },
   {
-    speaker: 'BUTCH',
+    speaker: 'CHOOSE',
     text: 'How do you begin?',
     choices: [
-      { id: 'eda-direct', label: 'Show her Mara\'s photograph and ask about the oil.' },
-      { id: 'eda-patient', label: 'Let her finish the crate, then ask about yesterday.' },
-      { id: 'eda-pressuring', label: 'Tell her the sales book will show it anyway.' },
+      { id: 'eda-direct', label: 'Show her Mara\'s photograph and ask about the oil. (Continue)' },
+      { id: 'eda-patient', label: 'Let her finish the crate, then ask about yesterday. (Continue)' },
+      { id: 'eda-pressuring', label: 'Tell her the sales book will show it anyway. (Continue)' },
     ],
   },
 ]);
@@ -285,9 +350,9 @@ export function edaTopicMenu(cooperation, asked = []) {
     { id: 'eda-authorization', label: 'Why is her name missing from the copy?' },
   ];
   if (cooperation !== 'guarded') choices.push({ id: 'eda-complaint', label: 'Why did nobody sign the smell complaint?' });
-  choices.push({ id: 'eda-record', label: 'Show us the record.' });
+  choices.push({ id: 'eda-record', label: 'Show us the record. (Continue)' });
   return {
-    speaker: 'BUTCH',
+    speaker: 'CHOOSE',
     text: 'What do you ask Eda?',
     choices: choices.filter((choice) => choice.id === 'eda-record' || !seen.has(choice.id.replace('eda-', ''))),
   };
@@ -360,14 +425,14 @@ export const OLEK_OPENING = Object.freeze([
 export function olekTopicMenu(asked = []) {
   const seen = new Set(asked);
   return {
-    speaker: 'BUTCH',
+    speaker: 'CHOOSE',
     text: 'What do you ask Olek?',
     choices: [
       { id: 'olek-destination', label: 'Where did you take them?' },
       { id: 'olek-leak', label: 'Did either can leak?' },
       { id: 'olek-recipient', label: 'Who accepted the delivery?' },
       { id: 'olek-route', label: 'Which route did you use?' },
-      { id: 'olek-done', label: 'Show us the service hatch.' },
+      { id: 'olek-done', label: 'Show us the service hatch. (Continue)' },
     ].filter((choice) => choice.id === 'olek-done' || !seen.has(choice.id.replace('olek-', ''))),
   };
 }
@@ -418,12 +483,12 @@ export const BOTTLE_DIALOGUE = Object.freeze([
   { speaker: 'BUTCH', text: 'Radek Stone Solvent. One litre. Same product and volume as Eda\'s issue copy.' },
   { speaker: 'LEV', text: 'Black paving grit inside the neck. It was opened near stonework.' },
   {
-    speaker: 'BUTCH',
+    speaker: 'CHOOSE',
     text: 'What can you claim from this?',
     choices: [
-      { id: 'bottle-same-order', label: 'This came from Eda\'s order.' },
-      { id: 'bottle-overclaimed', label: 'This proves solvent was used on the oil line.' },
-      { id: 'bottle-bounded', label: 'It supports the delivery route. Nothing more yet.' },
+      { id: 'bottle-same-order', label: 'This came from Eda\'s order. (Continue)' },
+      { id: 'bottle-overclaimed', label: 'This proves solvent was used on the oil line. (Continue)' },
+      { id: 'bottle-bounded', label: 'It supports the delivery route. Nothing more yet. (Continue)' },
     ],
   },
 ]);
@@ -483,14 +548,14 @@ export const SAVA_OPENING = Object.freeze([
 export function savaTopicMenu(asked = []) {
   const seen = new Set(asked);
   return {
-    speaker: 'BUTCH',
+    speaker: 'CHOOSE',
     text: 'What do you ask Sava?',
     choices: [
       { id: 'sava-code-history', label: 'What was the old code used for?' },
       { id: 'sava-anonymous-use', label: 'Who was still allowed to use it?' },
       { id: 'sava-mara-transaction', label: 'When did you notice Mara\'s transaction?' },
       { id: 'sava-no-correction', label: 'Why did you leave it uncorrected?' },
-      { id: 'sava-done', label: 'Have Nika show us the actual times.' },
+      { id: 'sava-done', label: 'Have Nika show us the actual times. (Continue)' },
     ].filter((choice) => choice.id === 'sava-done' || !seen.has(choice.id.replace('sava-', ''))),
   };
 }
@@ -543,14 +608,14 @@ export const NIKA_OPENING = Object.freeze([
 export function nikaTopicMenu(asked = []) {
   const seen = new Set(asked);
   return {
-    speaker: 'BUTCH',
+    speaker: 'CHOOSE',
     text: 'What do you ask Nika to compare?',
     choices: [
       { id: 'nika-timeline', label: 'Put the sale and service hatch on one timeline.' },
       { id: 'nika-reservation', label: 'Check the next eastbound reservations.' },
       { id: 'nika-discarded-print', label: 'Why is one print sequence missing?' },
       { id: 'nika-source-records', label: 'Could anyone have changed the original times?' },
-      { id: 'nika-done', label: 'Print the comparison and identify what you discarded.' },
+      { id: 'nika-done', label: 'Print the comparison and identify what you discarded. (Continue)' },
     ].filter((choice) => choice.id === 'nika-done' || !seen.has(choice.id.replace('nika-', ''))),
   };
 }
@@ -584,7 +649,7 @@ export const NIKA_BLOCKED = Object.freeze([
 ]);
 
 export const NIKA_CONCLUSION = Object.freeze([
-  { speaker: 'NIKA', text: 'The clean comparison is yours. The torn first copy is still in the bin beside the printer.' },
+  { speaker: 'NIKA', text: 'The clean comparison is yours. The torn first copy is still out on the public table by the queue.' },
   { speaker: 'LEV', text: 'You deleted a printout, not a source record.' },
   { speaker: 'NIKA', text: 'Yes. I hid something embarrassing. I did not change when any event happened.' },
 ]);
@@ -600,12 +665,12 @@ export const DISCARDED_PRINT_DIALOGUE = Object.freeze([
 export const FIRST_THEORY_OPENING = Object.freeze([
   { speaker: 'LEV', text: 'State the strongest version. Do not soften it because I may disagree.' },
   {
-    speaker: 'BUTCH',
+    speaker: 'CHOOSE',
     text: 'What do you think they did?',
     choices: [
-      { id: 'theory-market-ministry', label: 'The market and ministry coordinated Mara\'s route.' },
-      { id: 'theory-code-cover', label: 'Sava supplied the code and Nika cleaned the record.' },
-      { id: 'theory-planned-handoff', label: 'The rear hatch was a planned handoff point.' },
+      { id: 'theory-market-ministry', label: 'The market and ministry coordinated Mara\'s route. (Continue)' },
+      { id: 'theory-code-cover', label: 'Sava supplied the code and Nika cleaned the record. (Continue)' },
+      { id: 'theory-planned-handoff', label: 'The rear hatch was a planned handoff point. (Continue)' },
     ],
   },
 ]);
@@ -634,12 +699,12 @@ export const FIRST_THEORY_CONCLUSION = Object.freeze([
 export const BOSKO_SQUARE_OPENING = Object.freeze([
   { speaker: 'BOSKO', text: 'You want yesterday again. Tell me where to start.' },
   {
-    speaker: 'BUTCH',
-    text: 'How do you question him?',
+    speaker: 'CHOOSE',
+    text: 'How do you question Bosko?',
     choices: [
-      { id: 'bosko-first-sighting', label: 'Start with the first moment you saw her.' },
-      { id: 'bosko-who-with', label: 'Tell me who stood close enough to help.' },
-      { id: 'bosko-actions', label: 'Only describe what she physically did.' },
+      { id: 'bosko-first-sighting', label: 'Start with the first moment you saw her. (Continue)' },
+      { id: 'bosko-who-with', label: 'Tell me who stood close enough to help. (Continue)' },
+      { id: 'bosko-actions', label: 'Only describe what she physically did. (Continue)' },
     ],
   },
 ]);
@@ -660,7 +725,7 @@ export const BOSKO_SQUARE_CONCLUSION = Object.freeze([
   { speaker: 'BUTCH', text: 'Did Eda, Olek, Sava or Nika appear while she worked?' },
   { speaker: 'BOSKO', text: 'No. I know all four by sight. Mara worked alone each time I could see her.' },
   { speaker: 'LEV', text: 'Show us exactly where she kept kneeling.' },
-  { speaker: 'BOSKO', text: 'South edge of the clock paving. Two long rows. The second one stopped near the fountain service joint.' },
+  { speaker: 'BOSKO', text: 'Over there—south edge of the clock paving. Two long rows. The second one stopped near the fountain service joint.' },
 ]);
 
 export const PLAZA_GROOVE_OPENING = Object.freeze([
@@ -670,13 +735,13 @@ export const PLAZA_GROOVE_OPENING = Object.freeze([
 export function plazaGrooveMenu(observed = []) {
   const seen = new Set(observed);
   return {
-    speaker: 'BUTCH',
+    speaker: 'CHOOSE',
     text: 'Inspect the old announcement grooves.',
     choices: [
       { id: 'groove-rows', label: 'Trace the two long rows.' },
       { id: 'groove-spacing', label: 'Compare the turns and spaces.' },
       { id: 'groove-feed-gap', label: 'Find where the second supply stops.' },
-      { id: 'groove-conclude', label: 'Tell Lev what the layout forms.' },
+      { id: 'groove-conclude', label: 'Tell Lev what the layout forms. (Continue)' },
     ].filter((choice) => choice.id === 'groove-conclude' || !seen.has(choice.id.replace('groove-', ''))),
   };
 }
@@ -730,7 +795,7 @@ export const ARCHIVE_MAP_DIALOGUE = Object.freeze([
   { speaker: 'BUTCH', text: 'The plan is dated twenty-three years ago. Central Square still has the same fountain and clock paving.' },
   { speaker: 'LEV', text: 'Place the maintenance print beside it. C-441 names the south service joint.' },
   {
-    speaker: 'BUTCH',
+    speaker: 'CHOOSE',
     text: 'What does the physical plan establish?',
     choices: [
       { id: 'archive-map-separate-supplies', label: 'Each line had its own independent supply.' },
@@ -777,14 +842,14 @@ export const PETAR_OPENING = Object.freeze([
 export function petarTopicMenu(asked = []) {
   const seen = new Set(asked);
   return {
-    speaker: 'BUTCH',
+    speaker: 'CHOOSE',
     text: 'What do you ask Petar?',
     choices: [
       { id: 'petar-instruction', label: 'What exactly were you ordered to do?' },
       { id: 'petar-route', label: 'Where did you enter and leave the service channel?' },
       { id: 'petar-surface-view', label: 'What could you see from the access chamber?' },
       { id: 'petar-cleaning', label: 'How much of the oil and groove did you clean?' },
-      { id: 'petar-done', label: 'State what you cut and what you knew.' },
+      { id: 'petar-done', label: 'State what you cut and what you knew. (Continue)' },
     ].filter((choice) => choice.id === 'petar-done' || !seen.has(choice.id.replace('petar-', ''))),
   };
 }
@@ -842,14 +907,14 @@ export const SECOND_THEORY_OPENING = Object.freeze([
 export function secondTheoryMenu(tested = []) {
   const seen = new Set(tested);
   return {
-    speaker: 'BUTCH',
+    speaker: 'CHOOSE',
     text: 'Test every remaining explanation.',
     choices: [
       { id: 'second-market-coordination', label: 'The market arranged the oil route together.' },
       { id: 'second-municipal-censorship', label: 'The city used maintenance to censor Mara.' },
       { id: 'second-petar-knew-message', label: 'Petar knew exactly which words he was cutting.' },
       { id: 'second-lev-steered-case', label: 'Lev already knew the answer and steered the case.' },
-      { id: 'second-conclude', label: 'State what all four failures mean.' },
+      { id: 'second-conclude', label: 'State what all four failures mean. (Continue)' },
     ].filter((choice) => choice.id === 'second-conclude' || !seen.has(choice.id.replace('second-', ''))),
   };
 }
@@ -894,13 +959,13 @@ export const CUT_INTERFACE_OPENING = Object.freeze([
 export function cutInterfaceMenu(observed = []) {
   const seen = new Set(observed);
   return {
-    speaker: 'BUTCH',
+    speaker: 'CHOOSE',
     text: 'Inspect the broken lower feed.',
     choices: [
       { id: 'cut-cut', label: 'Examine the cut surfaces.' },
       { id: 'cut-placement', label: 'Check where both loose ends were left.' },
       { id: 'cut-reconnection', label: 'Test whether the ends can meet without tools.' },
-      { id: 'cut-conclude', label: 'Tell Lev what the interface proves.' },
+      { id: 'cut-conclude', label: 'Tell Lev what the interface proves. (Continue)' },
     ].filter((choice) => choice.id === 'cut-conclude' || !seen.has(choice.id.replace('cut-', ''))),
   };
 }
@@ -974,6 +1039,30 @@ export function hanaTopicMenu(asked = []) {
   if (!asked.includes('register')) choices.push({ id: 'hana-register', label: 'Ask why the register line was left blank.' });
   if (!asked.includes('alone')) choices.push({ id: 'hana-alone', label: 'Ask whether Mara met anyone in the hotel.' });
   if (!asked.includes('departure')) choices.push({ id: 'hana-departure', label: 'Ask when and how Mara left.' });
-  choices.push({ id: 'hana-done', label: 'Take the room and compare what Hana knows.' });
-  return { speaker: 'BUTCH', text: 'Ask Hana about the previous guest.', choices };
+  choices.push({ id: 'hana-done', label: 'Take the room and compare what Hana knows. (Continue)' });
+  return { speaker: 'CHOOSE', text: 'Ask Hana about the previous guest.', choices };
 }
+
+// Lev notices Butch searching too long and points him at the current
+// destination. `direction` is a compass word computed from the live player
+// position, so the same line works from any street corner.
+export const SEARCH_HINT_LINES = Object.freeze({
+  'find-ministry': (direction) => [
+    { speaker: 'LEV', text: `We have walked past it twice. The Transport Ministry is ${direction} of here — the tall stone front with the recessed doors.` },
+    { speaker: 'LEV', text: 'Public Services uses the front entrance, facing the square. Toma is posted there.' },
+  ],
+  'find-bosko': (direction) => [
+    { speaker: 'LEV', text: `Bosko did not go home. He is ${direction} of here, at the edge of the central square — look for the man standing by the clock paving.` },
+  ],
+  'find-archive': (direction) => [
+    { speaker: 'LEV', text: `The Old Municipal Archive is ${direction} of here, past the market row — the old stone building with the narrow door.` },
+    { speaker: 'LEV', text: 'Mila is expecting the maintenance number. The entrance faces the lane.' },
+  ],
+  'find-hotel': (direction) => [
+    { speaker: 'SYSTEM', text: `Copper Heron: ${direction}, beyond the ministry lane. Follow the breathing brass-bird entrance marker.` },
+  ],
+  'find-cut-interface': (direction) => [
+    { speaker: 'LEV', text: `The cut feed ends ${direction} of here, at the south edge of the square — look for the old connector block between the paving grooves.` },
+    { speaker: 'LEV', text: 'It is small and it sits low. Follow the groove lines and watch for the marker light.' },
+  ],
+});

@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { GAME_H, GAME_W } from '../constants.js';
 import { C, CAR } from './colors.js';
 import { devParam } from '../devMode.js';
+import { RETRO_TRANSIT } from './retroTransitTheme.js';
 
 // This file's local swatch names are kept as an alias layer rather than being
 // inlined at every call site: the names say what a surface IS (shell, trim,
@@ -10,10 +11,10 @@ import { devParam } from '../devMode.js';
 // `C` object, whose name now belongs to the compliance wrapper.
 const SWATCH = {
   ink: C(CAR.VOID),
-  shell: C(CAR.VOID_LIFT),
-  shellLight: C(CAR.ENAMEL_DARK),
-  trim: C(CAR.ENAMEL_HI),
-  brass: C(CAR.BRASS_MID),
+  shell: RETRO_TRANSIT.ivory,
+  shellLight: RETRO_TRANSIT.orange,
+  trim: RETRO_TRANSIT.silverDark,
+  brass: RETRO_TRANSIT.orangeShadow,
   red: C(CAR.VINYL_HI),
   redLight: C(CAR.VINYL_HI),
   cream: C(CAR.BRASS_HI),
@@ -114,7 +115,7 @@ export default class TutorialCarArt {
       this.scene.add.text(480, 22, 'NIGHT SERVICE  01', {
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
         fontSize: '12px',
-        color: '#d7c99d',
+        color: '#e8d5a7',
         letterSpacing: 4,
       }).setOrigin(0.5, 0),
       29,
@@ -124,7 +125,7 @@ export default class TutorialCarArt {
       this.scene.add.text(480, 88, 'NORMAL SERVICE  /  POWER RESTORATION', {
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
         fontSize: '10px',
-        color: '#70818a',
+        color: '#9fb7c0',
         letterSpacing: 2,
       }).setOrigin(0.5, 0),
       29,
@@ -247,7 +248,7 @@ export default class TutorialCarArt {
       this.scene.add.text(826, 408, 'AUX POWER', {
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
         fontSize: '9px',
-        color: '#899aa1',
+        color: '#e8d5a7',
         letterSpacing: 1,
       }).setOrigin(0.5),
       34,

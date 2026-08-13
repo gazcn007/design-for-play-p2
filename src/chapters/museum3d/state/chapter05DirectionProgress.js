@@ -10,6 +10,7 @@ export const ARTIFACT_DIRECTIONS = Object.freeze([
   CHAPTER05_DIRECTIONS.LABYRINTH,
   CHAPTER05_DIRECTIONS.BORROWED_GRID,
   CHAPTER05_DIRECTIONS.ECHO_CITY,
+  CHAPTER05_DIRECTIONS.PAINTED_COUNTRY,
 ]);
 
 export function isArtifactDirection(id) {
@@ -24,8 +25,8 @@ export function createDirectionProgressState(seed = {}) {
   const completed = Object.fromEntries(DIRECTION_ORDER.map((id) => [id, false]));
   for (const id of DIRECTION_ORDER) completed[id] = seed.completed?.[id] === true;
   const artifacts = Object.fromEntries(ARTIFACT_DIRECTIONS.map((id) => [id, {
-    taken: seed.artifacts?.[id]?.taken === true || completed[id],
-    displayed: seed.artifacts?.[id]?.displayed === true || completed[id],
+    taken: false,
+    displayed: true,
   }]));
   return {
     activeDirection: null,
@@ -46,7 +47,6 @@ export function reduceDirectionProgress(previous, action) {
     if (!isDirectionId(action.id)) return reject('unknown direction');
     if (!isDirectionPlayable(action.id)) return reject('direction is sealed');
     if (state.activeDirection) return reject('another direction is already open');
-    if (state.carriedArtifact) return reject('display carried artifact first');
     state.activeDirection = action.id;
     events.push({ type: 'direction.opened', payload: { id: action.id } });
   } else if (action.type === 'direction.close') {
@@ -57,7 +57,6 @@ export function reduceDirectionProgress(previous, action) {
   } else if (action.type === 'direction.complete') {
     if (!isDirectionId(action.id)) return reject('unknown direction');
     if (!isDirectionPlayable(action.id)) return reject('direction is sealed');
-    if (isArtifactDirection(action.id)) return reject('artifact must be displayed');
     if (!state.completed[action.id]) {
       state.completed[action.id] = true;
       events.push({ type: 'direction.completed', payload: { id: action.id } });
@@ -67,21 +66,10 @@ export function reduceDirectionProgress(previous, action) {
     if (state.allComplete && !previous.allComplete) events.push({ type: 'directions.allComplete' });
   } else if (action.type === 'artifact.take') {
     if (!isArtifactDirection(action.id)) return reject('unknown artifact');
-    if (state.artifacts[action.id].displayed) return reject('artifact already displayed');
-    if (state.carriedArtifact && state.carriedArtifact !== action.id) return reject('another artifact is already carried');
-    state.artifacts[action.id].taken = true;
-    state.carriedArtifact = action.id;
-    events.push({ type: 'artifact.taken', payload: { id: action.id } });
+    return reject('gallery artifacts are pre-displayed and cannot be carried');
   } else if (action.type === 'artifact.display') {
     if (!isArtifactDirection(action.id)) return reject('unknown artifact');
-    if (state.carriedArtifact !== action.id || !state.artifacts[action.id].taken) return reject('artifact is not carried');
-    state.artifacts[action.id].displayed = true;
-    state.carriedArtifact = null;
-    if (!state.completed[action.id]) {
-      state.completed[action.id] = true;
-      events.push({ type: 'artifact.displayed', payload: { id: action.id } });
-      events.push({ type: 'direction.completed', payload: { id: action.id } });
-    }
+    return reject('gallery artifacts are already displayed');
   } else {
     return reject('unknown action');
   }

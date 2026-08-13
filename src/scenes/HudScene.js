@@ -97,10 +97,10 @@ export default class HudScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setAlpha(0);
 
-    // A compact, cinematic caption card keeps the character and mechanism in
-    // view. Lines arrive with a typewriter cadence instead of popping in.
+    // Keep dialogue over the window band, not over the player and floor-mounted
+    // machinery. Lines arrive with a typewriter cadence instead of popping in.
     this.dialoguePanel = this.add
-      .rectangle(28, 408, 620, 164, 0x05070c, 0.9)
+      .rectangle(28, 34, 620, 164, 0x05070c, 0.9)
       .setOrigin(0)
       .setScrollFactor(0)
       .setDepth(80)
@@ -108,7 +108,7 @@ export default class HudScene extends Phaser.Scene {
     this.dialoguePanel.setStrokeStyle(1, 0x3a4653, 0.95);
 
     this.dialogueSpeaker = this.add
-      .text(48, 426, '', {
+      .text(48, 52, '', {
         fontFamily: MONO,
         fontSize: '13px',
         color: '#d9e3eb',
@@ -119,7 +119,7 @@ export default class HudScene extends Phaser.Scene {
       .setVisible(false);
 
     this.dialogueRole = this.add
-      .text(48, 447, '', {
+      .text(48, 73, '', {
         fontFamily: MONO,
         fontSize: '9px',
         color: '#697784',
@@ -130,7 +130,7 @@ export default class HudScene extends Phaser.Scene {
       .setVisible(false);
 
     this.dialogueText = this.add
-      .text(48, 470, '', {
+      .text(48, 96, '', {
         fontFamily: MONO,
         fontSize: '15px',
         color: '#f0f3f5',
@@ -142,7 +142,7 @@ export default class HudScene extends Phaser.Scene {
       .setVisible(false);
 
     this.dialogueChoices = this.add
-      .text(48, 512, '', {
+      .text(48, 138, '', {
         fontFamily: MONO,
         fontSize: '12px',
         color: '#d8c89f',
@@ -154,7 +154,7 @@ export default class HudScene extends Phaser.Scene {
       .setVisible(false);
 
     this.dialogueHint = this.add
-      .text(628, 548, '', {
+      .text(628, 174, '', {
         fontFamily: MONO,
         fontSize: '10px',
         color: '#687684',
