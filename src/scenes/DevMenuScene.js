@@ -10,10 +10,10 @@ import { enterDevRoute } from '../devMode.js';
 
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace';
 
-const DIM = '#4d5764';
-const BODY = '#7d8896';
-const BRIGHT = '#d7e2ee';
-const ACCENT = '#c9a227';
+const DIM = '#7d8997';
+const BODY = '#aab5c2';
+const BRIGHT = '#e5ebf1';
+const ACCENT = '#dfbd58';
 
 // ---------------------------------------------------------------------------
 // ADDING YOUR CHAPTER
@@ -74,7 +74,7 @@ const COLUMN_X = [64, 500];
 const COLUMN_W = 396;
 const HEADING_Y = 168;
 const ROW_TOP = 200;
-const ROW_STEP = 24;
+const ROW_STEP = 25;
 const GROUP_GAP = 22; // blank space a sub-heading sits in
 // The page shell lets the canvas overflow a short window, so the detail block
 // is measured from the longest column rather than pinned to the bottom edge.
@@ -157,25 +157,25 @@ export default class DevMenuScene extends Phaser.Scene {
   }
 
   buildHeader() {
-    this.label(COLUMN_X[0], 58, 'NIGHTFALL  //  DEV BUILD', 11, DIM);
-    this.label(COLUMN_X[0], 78, 'CHAPTER SELECT', 22, BRIGHT);
+    this.label(COLUMN_X[0], 56, 'NIGHTFALL  //  DEV BUILD', 13, DIM);
+    this.label(COLUMN_X[0], 78, 'CHAPTER SELECT', 25, BRIGHT);
     this.label(
       COLUMN_X[0],
       112,
       'W / S  or  ↑ ↓   move      A / D  or  ← →   column      ENTER  start      `  back here',
-      11,
+      13,
       BODY,
     );
     this.label(
       COLUMN_X[0],
       130,
       'this screen exists only in `npm run dev`  ·  `npm run prod` starts the real run',
-      11,
+      12,
       DIM,
     );
 
-    this.label(COLUMN_X[0], HEADING_Y, 'PROLOGUE  ·  BEFORE DEPARTURE', 12, ACCENT);
-    this.label(COLUMN_X[1], HEADING_Y, 'CHAPTERS  ·  BACKWARD THROUGH THE TRAIN', 12, ACCENT);
+    this.label(COLUMN_X[0], HEADING_Y, 'PROLOGUE  ·  BEFORE DEPARTURE', 14, ACCENT);
+    this.label(COLUMN_X[1], HEADING_Y, 'CHAPTERS  ·  BACKWARD THROUGH THE TRAIN', 14, ACCENT);
 
     const rule = this.add.graphics();
     rule.lineStyle(1, 0x232b36, 1);
@@ -191,7 +191,7 @@ export default class DevMenuScene extends Phaser.Scene {
       const x = COLUMN_X[entry.column];
       if (entry.heading) {
         nextY[entry.column] += GROUP_GAP;
-        this.label(x, nextY[entry.column], entry.heading, 11, ACCENT);
+        this.label(x, nextY[entry.column], entry.heading, 13, ACCENT);
         nextY[entry.column] += ROW_STEP;
       }
 
@@ -202,8 +202,8 @@ export default class DevMenuScene extends Phaser.Scene {
       nextY[entry.column] += ROW_STEP;
       entry.row = row;
 
-      entry.marker = this.label(x, y, '▸', 12, ACCENT);
-      entry.text = this.label(x + 18, y, entry.label, 12, BODY);
+      entry.marker = this.label(x, y, '▸', 14, ACCENT);
+      entry.text = this.label(x + 18, y, entry.label, 13, BODY);
 
       // A generous invisible strip so the mouse does not have to find the
       // glyphs themselves.
@@ -231,9 +231,9 @@ export default class DevMenuScene extends Phaser.Scene {
     g.lineStyle(1, 0x232b36, 1);
     g.lineBetween(COLUMN_X[0], y, GAME_W - 64, y);
 
-    this.detailText = this.label(COLUMN_X[0], y + 14, '', 12, BRIGHT);
+    this.detailText = this.label(COLUMN_X[0], y + 14, '', 14, BRIGHT);
     this.detailText.setWordWrapWidth(GAME_W - 128);
-    this.routeText = this.label(COLUMN_X[0], y + 40, '', 11, DIM);
+    this.routeText = this.label(COLUMN_X[0], y + 42, '', 12, DIM);
   }
 
   // ------------------------------------------------------------------- input

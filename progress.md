@@ -672,3 +672,17 @@ chapter after what it is, not after the slot it currently occupies.
 - 2026-08-09 checkpoint correction: the midpoint now activates from reaching its physical gate instead of requiring every opening obstacle to have logged usage. Crossing it normalizes the completed first-half route state, so subsequent hazards reliably respawn there. The first post-checkpoint spike strip is reduced from four segments to three.
 - 2026-08-09 movement correction: the parkour physics world now extends above the fixed camera, so the high third spike jump can leave the frame without hitting an invisible ceiling. Ladder climbing no longer rewrites the player's x/y position at the top; players climb and move sideways onto a roof continuously under ordinary input. The high spike strip is three segments wide and shifted right for a readable runway.
 - 2026-08-09 topology/exit correction: AIR LANE and NIGHT GRID were lowered 30px together with their attached ladder, rooftop prop, rail and spike strip. Their relative ladder gap is unchanged and the autonomous car remains the only crossing. The final balcony now returns to the completed Prologue train at x=4700 rather than handing off to the next city.
+
+## Chapter One interaction layout
+
+- 2026-08-11: Moved the Phase II latch, relay-case, and contactor interaction prompts off the light carriage panels and into the fixed black hint bar beneath the character. Their existing proximity and solved-state visibility rules are preserved.
+
+## Interface legibility pass
+
+- 2026-08-11: Increased the main build's screen-fixed UI typography by roughly 20–30% across loading, chapter selection, shared HUD/dialogue, Prologue prompts, and Chapter One parkour controls. Muted text now has stronger contrast, active copy uses soft off-white rather than pure white, and prompt backplates are darker and more opaque. Decorative world labels and mechanical markings remain unchanged.
+
+## Chapter One ladder collision correction
+
+- 2026-08-12: Ladder climbing no longer disables collision for the entire city. Only the roof attached to the active ladder is temporarily passable; every unrelated building remains solid. Horizontal ladder movement stays locked until the player's feet clear that roof, then the existing continuous A/D dismount resumes without teleporting. No platform, ladder, obstacle, or route geometry changed.
+- 2026-08-12: Upward climbing now stops when the player's feet meet the visible ladder top. The ladder engagement range extends beyond the artwork only by half the player body's height plus an 8px physics tolerance, preserving the natural sideways dismount without allowing the character to climb into empty air.
+- 2026-08-12 lateral-release correction: A/D now exits a ladder immediately at any height. Collision is restored before the same physics step, so input toward the attached building is blocked while input away from it produces a normal fall. Top dismounts, visible-height limits, recovery routes and topology remain unchanged.

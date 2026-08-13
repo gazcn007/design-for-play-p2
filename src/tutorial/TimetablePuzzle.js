@@ -2044,8 +2044,17 @@ export default class TimetablePuzzle {
       return '[E] OPEN SERVICE TABLE';
     }
     if (interactable.def.kind === 'contact-interlock') {
-      // Null on purpose: the shared prompt bubble stays hidden and
-      // ContactInterlockArt shows the only two allowed strings in-world.
+      const snap = this.contactLock?.snapshot?.();
+      if (!snap) return null;
+      if (interactable.def.command === 'latch') {
+        return snap.latchClosed ? null : CONTACT_PROMPTS.latch;
+      }
+      if (interactable.def.command === 'relay') {
+        return this.relay?.isSolved() ? null : CONTACT_PROMPTS.relay;
+      }
+      if (interactable.def.command === 'power') {
+        return snap.complete ? null : CONTACT_PROMPTS.power;
+      }
       return null;
     }
     if (interactable.def.kind === 'timetable-run') return '[E] RUN TIMETABLE';
@@ -5530,33 +5539,15 @@ export default class TimetablePuzzle {
     }
   }
 
-  // The only strings the room may show (spec §4 + relay §2.1), gated by
-  // distance and machine state. Each prompt vanishes the moment the player
-  // leaves its device or the device has done its job. The relay prompt only
-  // exists while the case is still unbridged and the close-up is down.
+  // Interaction copy is rendered by GameScene's fixed black hint bar. Keep
+  // the legacy art-owned prompt slots empty so light carriage panels cannot
+  // wash out the text or leave duplicate instructions in the world.
   updateContactPrompts() {
-    const { scene } = this;
-    const puzzle = scene.tutorialPuzzle;
-    const lock = this.contactLock;
     const art = this.contactArt;
-    if (!lock || !art) return;
-    const snap = lock.snapshot();
-    const live = puzzle.stageIndex === CONTACT_STAGE_INDEX
-      && puzzle.briefed
-      && !puzzle.stageComplete[CONTACT_STAGE_INDEX]
-      && !['opening', 'approach', 'departure', 'complete'].includes(puzzle.phase)
-      && this.visible
-      && scene.activeWorldIndex === 0;
-    const nearLatch = live && Math.abs(scene.player.x - CONTACT_INTERLOCK_LAYOUT.startX) < 62;
-    const nearRelay = live && Math.abs(scene.player.x - CONTACT_INTERLOCK_LAYOUT.relayX) < 62;
-    const nearPower = live && Math.abs(scene.player.x - CONTACT_INTERLOCK_LAYOUT.endX) < 62;
-    const relaySolved = this.relay?.isSolved() ?? false;
-    art.setPrompt('latch', nearLatch && !snap.latchClosed ? CONTACT_PROMPTS.latch : null);
-    art.setPrompt(
-      'relay',
-      nearRelay && !relaySolved && !scene.relayCloseupActive ? CONTACT_PROMPTS.relay : null,
-    );
-    art.setPrompt('power', nearPower && !snap.complete ? CONTACT_PROMPTS.power : null);
+    if (!art) return;
+    art.setPrompt('latch', null);
+    art.setPrompt('relay', null);
+    art.setPrompt('power', null);
   }
 
   // ------------------------------------------------------ relay close-up --
@@ -5598,8 +5589,8 @@ export default class TimetablePuzzle {
     this._mechanicalPressedId = null;
     const partTextStyle = {
       fontFamily: 'ui-monospace, Menlo, monospace',
-      fontSize: '11px',
-      color: '#9fb7c0',
+      fontSize: '13px',
+      color: '#b8cbd2',
       align: 'center',
     };
     const partTexts = Object.fromEntries(
@@ -5619,19 +5610,19 @@ export default class TimetablePuzzle {
       graphics: make(scene.add.graphics(), tableMode ? 791 : 790),
       title: make(scene.add.text(left + 28, top + 20, '', {
         fontFamily: 'ui-monospace, Menlo, monospace',
-        fontSize: '18px',
-        color: '#e8d5a7',
+        fontSize: '22px',
+        color: '#f0dfb5',
       }), 792),
       status: make(scene.add.text(left + width / 2, top + 68, '', {
         fontFamily: 'ui-monospace, Menlo, monospace',
-        fontSize: '13px',
-        color: '#9fb7c0',
+        fontSize: '15px',
+        color: '#b8cbd2',
         align: 'center',
       }).setOrigin(0.5), 792),
       help: make(scene.add.text(left + width / 2, top + height - 24, 'CLICK MECHANICAL PARTS    /    ESC OR E TO CLOSE', {
         fontFamily: 'ui-monospace, Menlo, monospace',
-        fontSize: '10px',
-        color: '#687981',
+        fontSize: '12px',
+        color: '#a7b6bc',
       }).setOrigin(0.5), 792),
       objects: [],
       hits: [],

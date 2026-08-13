@@ -76,6 +76,7 @@ const states = [
   ['entrance', 'chapter=cyberpunk'],
   ['illegal-drag', 'qa=parkour-drag'],
   ['moving-car', 'qa=parkour-car'],
+  ['ladder-wall', 'qa=parkour-ladder-wall'],
   ['recovery', 'qa=parkour-recovery'],
   ['recovery-car-b', 'qa=parkour-recovery-car-b'],
   ['spikes', 'qa=parkour-spikes'],
@@ -141,12 +142,46 @@ for (const [name, query] of states) {
     }
     evidence['completion-door'] = goalSnapshot;
     snapshot = nextAreaSnapshot;
+  } else if (name === 'ladder-wall') {
+    await send('Page.bringToFront');
+    await evaluate("document.querySelector('canvas').focus()")
+    // The building is left of this recovery ladder. A must release climbing
+    // immediately but remain blocked by the wall.
+    await keyEvent('keyDown', 'w', 'KeyW', 87);
+    await keyEvent('keyDown', 'a', 'KeyA', 65);
+    await delay(650);
+    const wallBlocked = JSON.parse(await evaluate('window.render_game_to_text()'));
+    await keyEvent('keyUp', 'a', 'KeyA', 65);
+    await keyEvent('keyUp', 'w', 'KeyW', 87);
+    if (wallBlocked.parkour.player.state === 'climbing'
+      || wallBlocked.parkour.player.x < 1207
+      || !wallBlocked.parkour.player.platformCollisionActive) {
+      throw new Error(`Lateral ladder release clipped into the building wall: ${JSON.stringify(wallBlocked.parkour.player)}`);
+    }
+
+    // Reset to the same mid-ladder height. D points away from the building and
+    // must release the ladder immediately, with ordinary gravity restored.
+    await evaluate("window.game.scene.getScene('CyberpunkParkour').player.body.reset(1210, 350)")
+    await delay(80);
+    await keyEvent('keyDown', 'w', 'KeyW', 87);
+    await delay(80);
+    await keyEvent('keyDown', 'd', 'KeyD', 68);
+    await delay(520);
+    snapshot = JSON.parse(await evaluate('window.render_game_to_text()'));
+    await keyEvent('keyUp', 'd', 'KeyD', 68);
+    await keyEvent('keyUp', 'w', 'KeyW', 87);
+    if (snapshot.parkour.player.state === 'climbing'
+      || snapshot.parkour.player.x <= 1250
+      || !snapshot.parkour.player.platformCollisionActive) {
+      throw new Error(`Player could not leave a ladder laterally at mid-height: ${JSON.stringify(snapshot.parkour.player)}`);
+    }
+    evidence['ladder-wall-blocked'] = wallBlocked;
   } else if (name === 'recovery' || name === 'recovery-car-b' || name === 'recovery-car-d') {
     await send('Page.bringToFront');
     await evaluate("document.querySelector('canvas').focus()")
     await keyEvent('keyDown', 'w', 'KeyW', 87);
     const ladderX = name === 'recovery' ? 1210 : name === 'recovery-car-b' ? 3820 : 6260;
-    const clearRoofY = name === 'recovery' ? 135 : name === 'recovery-car-b' ? 325 : 45;
+    const clearRoofY = name === 'recovery' ? 150 : name === 'recovery-car-b' ? 340 : 60;
     let beforeDismount = null;
     for (const deadline = Date.now() + 5000; Date.now() < deadline;) {
       await delay(25);
@@ -157,6 +192,11 @@ for (const [name, query] of states) {
       }
     }
     if (!beforeDismount) throw new Error(`Ladder never carried the player above its roof: ${name}`);
+    if (beforeDismount.parkour.player.ladderTop === null
+      || beforeDismount.parkour.player.bodyBottom < beforeDismount.parkour.player.ladderTop - 10
+      || beforeDismount.parkour.player.bodyBottom > beforeDismount.parkour.player.ladderTop + 8) {
+      throw new Error(`Player climbed above the visible ladder top: ${JSON.stringify(beforeDismount.parkour.player)}`);
+    }
     await keyEvent('keyDown', 'a', 'KeyA', 65);
     let steppedOff = false;
     for (const deadline = Date.now() + 2000; Date.now() < deadline;) {

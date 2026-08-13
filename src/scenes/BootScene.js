@@ -20,8 +20,8 @@ export default class BootScene extends Phaser.Scene {
     const label = this.add
       .text(GAME_W / 2, GAME_H / 2 + 26, 'loading the first memory', {
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-        fontSize: '13px',
-        color: '#4a545f',
+        fontSize: '16px',
+        color: '#aeb8c5',
       })
       .setOrigin(0.5);
 

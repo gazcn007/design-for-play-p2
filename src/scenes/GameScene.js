@@ -944,6 +944,8 @@ export default class GameScene extends Phaser.Scene {
       .setVisible(false);
     this.echoTimelineLabel = this.add
       .text(480, 178, '', labelStyle)
+      .setFontSize('13px')
+      .setColor('#aebbc2')
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(59)
@@ -1260,10 +1262,10 @@ export default class GameScene extends Phaser.Scene {
     this.underfloorHint = this.add
       .text(GAME_W / 2, GAME_H - 100, '[HOLD S]  INSPECT UNDERCARRIAGE  ▼', {
         fontFamily: 'ui-monospace, Menlo, monospace',
-        fontSize: '20px',
+        fontSize: '22px',
         color: RETRO_TRANSIT_CSS.ivory,
         backgroundColor: RETRO_TRANSIT_CSS.charcoalDeep,
-        padding: { x: 12, y: 7 },
+        padding: { x: 15, y: 9 },
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
@@ -1278,10 +1280,10 @@ export default class GameScene extends Phaser.Scene {
     this.hintBar = this.add
       .text(GAME_W / 2, GAME_H - 28, '', {
         fontFamily: '"American Typewriter", "Courier New", monospace',
-        fontSize: '12px',
-        color: '#e5cf9b',
-        backgroundColor: '#07090d',
-        padding: { x: 14, y: 5 },
+        fontSize: '16px',
+        color: '#f0dfb5',
+        backgroundColor: '#05070bf2',
+        padding: { x: 18, y: 8 },
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
@@ -1947,8 +1949,6 @@ export default class GameScene extends Phaser.Scene {
                   : best.item.def.kind === 'breaker'
                     ? '[E] INVERT'
                 : '[E]';
-      // A null prompt text means the device owns its own in-world prompt (the
-      // Phase II interlock latch/contactor); the shared bubble stays hidden.
       this._updateHintBar(promptText);
     } else {
       this._updateHintBar(null);
