@@ -96,6 +96,8 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     this.finished = false;
     this.transitioningToNextArea = false;
     this.climbing = false;
+    this.activeLadder = null;
+    this.activeLadderPlatform = null;
     this.currentRideId = null;
     this.lastRideId = null;
     this.dragViews = new Map();
@@ -127,7 +129,7 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
       this.player,
       this.fixedSolids,
       null,
-      () => !this.climbing,
+      (_player, platform) => !this.climbing || platform !== this.activeLadderPlatform,
       this,
     );
     this.physics.add.collider(this.player, this.blockGroup);
@@ -202,6 +204,7 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
       body.setStrokeStyle(2, def.accent, 0.45);
       this.fixedSolids.add(body);
       body.body.updateFromGameObject();
+      body.setData('parkourPlatform', def);
 
       this.buildBuildingFacade(def, index);
       const cap = this.add.rectangle(def.x, def.y, def.w, 10, VIOLET_STEEL, 1)
@@ -525,33 +528,33 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
   buildHud() {
     this.add.text(22, 18, 'CHAPTER ONE  //  CYBERPUNK PARKOUR', {
       fontFamily: MONO,
-      fontSize: '12px',
-      color: '#25e6ff',
+      fontSize: '15px',
+      color: '#72efff',
       letterSpacing: 2,
-      backgroundColor: '#03050bdd',
-      padding: { x: 9, y: 6 },
+      backgroundColor: '#03050bf2',
+      padding: { x: 11, y: 8 },
     }).setScrollFactor(0).setDepth(100);
     this.objectiveText = this.add.text(GAME_W - 22, 18, 'REACH THE FINAL BALCONY', {
       fontFamily: MONO,
-      fontSize: '11px',
-      color: '#45ff65',
-      backgroundColor: '#03050bdd',
-      padding: { x: 9, y: 6 },
+      fontSize: '14px',
+      color: '#78ff8d',
+      backgroundColor: '#03050bf2',
+      padding: { x: 11, y: 8 },
     }).setOrigin(1, 0).setScrollFactor(0).setDepth(100);
     this.controlsText = this.add.text(GAME_W / 2, GAME_H - 22,
       'A / D  MOVE     SPACE  JUMP     W / S  CLIMB     CLICK + DRAG  PLACE     R  RESET', {
         fontFamily: MONO,
-        fontSize: '10px',
-        color: '#aeb8c5',
-        backgroundColor: '#03050be8',
-        padding: { x: 12, y: 7 },
+        fontSize: '13px',
+        color: '#d5dce3',
+        backgroundColor: '#03050bf2',
+        padding: { x: 15, y: 9 },
       }).setOrigin(0.5, 1).setScrollFactor(0).setDepth(100);
     this.feedbackText = this.add.text(GAME_W / 2, 74, '', {
       fontFamily: MONO,
-      fontSize: '12px',
-      color: '#ffffff',
-      backgroundColor: '#05050cdd',
-      padding: { x: 9, y: 5 },
+      fontSize: '15px',
+      color: '#edf1f4',
+      backgroundColor: '#05050cf2',
+      padding: { x: 12, y: 7 },
     }).setOrigin(0.5).setScrollFactor(0).setDepth(100).setAlpha(0);
   }
 
@@ -659,25 +662,39 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     const ladder = this.nearbyLadder();
     if (!this.climbing && ladder && (up || down)) {
       this.climbing = true;
-      this.platformCollider.active = false;
+      this.activeLadder = ladder;
+      this.activeLadderPlatform = this.findLadderPlatform(ladder);
     }
     if (this.climbing && !ladder) {
-      this.climbing = false;
-      this.platformCollider.active = true;
+      this.stopClimbing();
+    }
+    // Lateral input always releases the ladder immediately. The normal
+    // building collider is restored before physics advances, so moving toward
+    // the wall is blocked while moving away drops the player naturally.
+    if (this.climbing && (left || right)) {
+      this.stopClimbing();
     }
 
     if (this.climbing && ladder) {
-      const velocityX = (right ? 110 : 0) - (left ? 110 : 0);
-      const velocityY = (down ? 145 : 0) - (up ? 145 : 0);
+      const roofY = this.activeLadderPlatform?.body?.top
+        ?? ladder.y - ladder.height / 2;
+      const distanceToTop = this.player.body.bottom - roofY;
+      const canDismount = distanceToTop <= 0.5;
+      // The visible ladder ends at the roof. Stop upward travel as soon as the
+      // player's feet reach that line; W may remain held while the player
+      // chooses a dismount direction, but it can no longer lift them into the
+      // sky above the ladder.
+      const frameSeconds = Math.max(1, delta) / 1000;
+      const upwardSpeed = Math.min(145, Math.max(0, distanceToTop) / frameSeconds);
+      const velocityY = down ? 145 : up && !canDismount ? -upwardSpeed : 0;
       this.player.body.setGravityY(-GRAVITY);
       this.player.setAcceleration(0, 0);
-      this.player.setVelocity(velocityX, velocityY);
+      this.player.setVelocity(0, velocityY);
       const bottom = ladder.y + ladder.height / 2;
       // Ladder tops do not snap the player to an authored position. Horizontal
       // input remains live, so the player steps naturally onto either roof.
       if (this.player.y >= bottom + 12) {
-        this.climbing = false;
-        this.platformCollider.active = true;
+        this.stopClimbing();
       }
       this.player.updateVisualAnimation(false);
       this.player.applyScale();
@@ -685,7 +702,6 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     }
 
     this.player.body.moves = true;
-    this.platformCollider.active = true;
     this.player.body.setGravityY(0);
     if (this.currentRideId) {
       // A confirmed flying car is real ground for movement feel and jump
@@ -712,13 +728,40 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
       ...this.state.movables.filter((movable) => movable.kind === 'ladder'),
       ...(this.recoveryLadders ?? []),
     ];
-    return ladders.find((movable) =>
-      Math.abs(this.player.x - movable.x) <= movable.width / 2 + 18
-      // Keep the ladder engaged above the roof long enough to clear its side
-      // collider and make a deliberate horizontal step. This replaces the old
-      // instantaneous x/y dismount snap with continuous movement.
-      && this.player.y >= movable.y - movable.height / 2 - 120
-      && this.player.y <= movable.y + movable.height / 2 + 28) ?? null;
+    const halfPlayerHeight = (this.player.body?.height ?? 46) / 2;
+    return ladders.find((movable) => {
+      const ladderTop = movable.y - movable.height / 2;
+      return Math.abs(this.player.x - movable.x) <= movable.width / 2 + 18
+        // Only the player's own height extends beyond the visible ladder: the
+        // centre may rise until their feet meet its top, plus a small tolerance
+        // for a single physics step and continuous sideways dismounting.
+        && this.player.y >= ladderTop - halfPlayerHeight - 8
+        && this.player.y <= movable.y + movable.height / 2 + 28;
+    }) ?? null;
+  }
+
+  findLadderPlatform(ladder) {
+    const ladderTop = ladder.y - ladder.height / 2;
+    let nearest = null;
+    let nearestEdgeDistance = Infinity;
+    this.fixedSolids.children.iterate((platform) => {
+      if (!platform?.body || Math.abs(platform.body.top - ladderTop) > 8) return;
+      const edgeDistance = Math.min(
+        Math.abs(ladder.x - platform.body.left),
+        Math.abs(ladder.x - platform.body.right),
+      );
+      if (edgeDistance < nearestEdgeDistance) {
+        nearest = platform;
+        nearestEdgeDistance = edgeDistance;
+      }
+    });
+    return nearest;
+  }
+
+  stopClimbing() {
+    this.climbing = false;
+    this.activeLadder = null;
+    this.activeLadderPlatform = null;
   }
 
   updateFlyingCars(steps) {
@@ -806,8 +849,9 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     this.player.resetTo(respawn.x, respawn.y, LANE_NEAR);
     this.player.clearTint().setTint(0xd7eaff).setDepth(50);
     this.climbing = false;
+    this.activeLadder = null;
+    this.activeLadderPlatform = null;
     this.player.body.enable = true;
-    this.platformCollider.active = true;
     this.currentRideId = null;
     this.lastRideId = null;
     this.finished = false;
@@ -928,7 +972,7 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
       this.state.movedKinds.push('ladder', 'block');
       const car = this.state.flyingCars[0];
       this.player.body.reset(car.x, car.y - 38);
-    } else if (qa === 'parkour-recovery') {
+    } else if (qa === 'parkour-ladder-wall' || qa === 'parkour-recovery') {
       // Seed the lower wrong-choice platform. Browser QA still climbs the
       // physical RETURN ladder with ordinary W input.
       this.player.body.reset(1210, 430);
@@ -1015,6 +1059,11 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
         blockedUp: Boolean(this.player.body?.blocked.up),
         bodyEnabled: Boolean(this.player.body?.enable),
         platformCollisionActive: Boolean(this.platformCollider?.active),
+        ladderPlatform: this.activeLadderPlatform?.getData('parkourPlatform')?.sign ?? null,
+        bodyBottom: Math.round(this.player.body?.bottom ?? this.player.y),
+        ladderTop: this.activeLadder
+          ? Math.round(this.activeLadder.y - this.activeLadder.height / 2)
+          : null,
       },
       recoveryLadders: (this.recoveryLadders ?? []).map((ladder) => ({
         id: ladder.id,
