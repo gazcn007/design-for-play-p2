@@ -1,74 +1,153 @@
-import { CAR_W } from './paintedCarModel.js';
+// Chapter 4 // THE PAINTED COUNTRY — where everything physically is.
+//
+// The car is a grid of paper cells. The player paints and washes cells freely
+// rather than triggering fixed targets, so this file describes surfaces and
+// contents, never "the third barrier". The model turns it into rules.
 
-// Where the carriage physically is. The model owns what is true about paint;
-// this owns where things sit, and the two must agree — every region rectangle
-// in paintedCarModel.js lands inside one of these bays.
-
+export const CELL = 20;
+export const GRID = { w: 144, h: 30 }; // 2880 x 600
 export const VIEW = { w: 960, h: 600 };
-export const WORLD = { w: CAR_W, h: 600 };
+export const WORLD = { w: GRID.w * CELL, h: GRID.h * CELL };
 
-export const CEILING_Y = 96;
-export const RACK_Y = 118;
-export const WAINSCOT_Y = 344;
-export const FLOOR_Y = 430;
+export const CEILING_Y = 80;
+export const RACK_Y = 104;
+export const WAINSCOT_Y = 340;
+export const FLOOR_ROW = 22;
+export const FLOOR_Y = FLOOR_ROW * CELL; // 440
 
-// Solid ground, in world x. Everything not listed is a hole in the paper.
-export const FLOOR_RUNS = [
-  { x: 0, w: 392 }, // Bay A, up to the first hidden bridge
-  { x: 608, w: 788 }, // across Bay A's far side and into Bay B
-  { x: 1586, w: 974 }, // Bay B's far side, through Bay C to the unfinished end
-  { x: 2760, w: 120 }, // the landing at the coupling
+// Solid floor, in grid columns [from, to). Everything else is a hole in the
+// sheet. Both holes are wider than a jump, so both must be painted across.
+export const FLOOR_SPANS = [
+  { from: 0, to: 20 }, // the cold end
+  { from: 32, to: 96 }, // across the first hole and the whole gallery
+  { from: 104, to: 144 }, // the long wall, the door
 ];
-
-// The three missing strips of floor. Each is bridged only after its marked
-// paper barrier has been washed and the revealed route has been painted.
-export const GAP_A = { x: 392, w: 216 };
-export const TROUGH_B = { x: 1396, w: 190 };
-export const GAP_C = { x: 2560, w: 200 };
-
-export const WINDOWS = [
-  { x: 56, y: 132, w: 244, h: 188 },
-  { x: 344, y: 132, w: 272, h: 188 },
-  { x: 660, y: 132, w: 244, h: 188 },
-  { x: 1000, y: 132, w: 212, h: 188 },
-  { x: 1600, y: 132, w: 264, h: 188 },
-  { x: 1960, y: 132, w: 232, h: 188 },
-];
-
-// The long folds that divide the car into bays. The paper hinges here.
-export const FOLDS = [960, 1920];
 
 export const BAY_TITLES = [
   { x: 40, title: 'BAY A  ·  THE COLD END' },
-  { x: 1000, title: 'BAY B  ·  THE WASHROOM' },
+  { x: 1000, title: 'BAY B  ·  THE GALLERY' },
   { x: 1960, title: 'BAY C  ·  THE LONG WALL' },
 ];
 
-// Where washed ink physically goes. Each path is a polyline on the sheet drawn
-// from the mark that holds the ink to the place it ends up, so the player can
-// read the whole consequence before pressing anything. These are the level
-// design now: change a channel and you change the puzzle.
-export const DRAIN_PATHS = {
-  // Bay A's channel runs AWAY from the route, into a grate. There is no wrong
-  // order to find here, which is the point of a teaching bay.
-  'seal-a': [[264, 424], [180, 424], [180, 434]],
+export const FOLDS = [960, 1920];
 
-  // Bay B: out of the seal, across, and down into the basin at the player's feet.
-  'seal-b': [[1268, 292], [1338, 292], [1338, 300]],
-  // ...and from the basin, a short hop right into the open trough.
-  'blot-b': [[1376, 414], [1462, 414], [1462, 431]],
+export const WINDOWS = [
+  { x: 60, y: 120, w: 240, h: 170 },
+  { x: 620, y: 120, w: 250, h: 170 },
+  { x: 2120, y: 120, w: 250, h: 170 },
+];
 
-  // Bay C: this one is deliberately theatrical. It runs the whole length of the
-  // bay, over the second seal and over the basin, and drops into the last hole.
-  'seal-c1': [[2300, 282], [2660, 282], [2660, 431]],
-  'seal-c2': [[2460, 316], [2508, 316], [2508, 300]],
-  'blot-c': [[2546, 414], [2624, 414], [2624, 431]],
+// Paper blocks: solid, and the only solid thing besides the player's own paint
+// that a wash can remove. Given in cell rectangles.
+export const BLOCK_RECTS = [
+  // Bay A: a stack sealing the way into the gallery. Five cells tall, so it
+  // cannot be jumped — the player has to learn WASH to get past it.
+  { col: 40, row: 17, cols: 3, rows: 5 },
+  // Bay C: the long wall. A slab the player must open a hole through.
+  { col: 110, row: 13, cols: 5, rows: 9 },
+];
+
+// ------------------------------------------------------------ the thread board
+// The lock on the vestibule. Six eyelets in three pairs, and two eyelets torn
+// clean out of the card. Thread each pair together without two cords sharing a
+// hole — which, with the torn ones where they are, means two of the three cords
+// cannot run straight. It is the same card Mara's cyan thread comes off.
+export const BOARD = {
+  x: 2400,
+  y: 230,
+  w: 192,
+  h: 192,
+  cols: 5,
+  rows: 5,
+  pad: 28,
+  pitch: 34,
+  torn: [[2, 0], [2, 2]],
+  pairs: [
+    { id: 'amber', a: [0, 0], b: [4, 0] },
+    { id: 'cyan', a: [0, 2], b: [4, 2] },
+    { id: 'red', a: [0, 4], b: [4, 4] },
+  ],
 };
 
-// A grate in the floor. Not a hole the player can fall through — the floor run
-// is unbroken here — but ink that reaches it is gone for good.
-export const SUMP = { x: 150, y: 430, w: 60, h: 18 };
+export const eyeletAt = (c, r) => ({
+  x: BOARD.x + BOARD.pad + c * BOARD.pitch,
+  y: BOARD.y + BOARD.pad + r * BOARD.pitch,
+});
 
-export const REACH = 200;
+// Varnished paper. Paint slides straight off these cells, so a staircase
+// cannot simply be run up the wall beneath the third picture — the player has
+// to build out to the side and come across the top of it. The door face is
+// varnished too, so the signs on it can never be painted over.
+export const GLAZE_RECTS = [
+  { col: 84, row: 12, cols: 9, rows: 10 },
+  { col: 134, row: 10, cols: 10, rows: 12 },
+  // The thread board's card, so a stray brush stroke can never bury the lock.
+  { col: 119, row: 11, cols: 11, rows: 11 },
+];
+
+export const SIGN = Object.freeze({
+  MOON: 'moon',
+  RIVER: 'river',
+  STAR: 'star',
+  HOUSE: 'house',
+});
+
+// The gallery. Hung high on purpose: the only way to read one is to build up
+// to it. The moon is the only sign in all three, which is the answer the door
+// is asking for.
+export const PAINTINGS = [
+  {
+    id: 'picture-1',
+    title: 'FIRST NIGHT',
+    x: 1020,
+    y: 250,
+    w: 132,
+    h: 96,
+    signs: [SIGN.MOON, SIGN.RIVER, SIGN.HOUSE],
+  },
+  {
+    id: 'picture-2',
+    title: 'THE LONG WINTER',
+    x: 1340,
+    y: 150,
+    w: 132,
+    h: 96,
+    signs: [SIGN.MOON, SIGN.STAR, SIGN.HOUSE],
+  },
+  {
+    id: 'picture-3',
+    title: 'WHAT SHE KEPT',
+    x: 1700,
+    y: 120,
+    w: 132,
+    h: 96,
+    signs: [SIGN.MOON, SIGN.RIVER, SIGN.STAR],
+  },
+];
+
+// How close the player has to get before a picture counts as read. Small
+// enough that none of the three can be read from the floor.
+export const READ_RADIUS = 100;
+
+// The vestibule door. Four signs; the player has to work out which one every
+// picture had in it.
+export const DOOR = {
+  x: 2690,
+  y: 220,
+  w: 180,
+  h: 210,
+  correct: SIGN.MOON,
+  panels: [
+    { sign: SIGN.MOON, x: 2712, y: 250, w: 64, h: 64 },
+    { sign: SIGN.RIVER, x: 2790, y: 250, w: 64, h: 64 },
+    { sign: SIGN.STAR, x: 2712, y: 330, w: 64, h: 64 },
+    { sign: SIGN.HOUSE, x: 2790, y: 330, w: 64, h: 64 },
+  ],
+};
+
+// The brush reaches about a body and a half. Short enough that the player has
+// to climb what they build, long enough that building is never fiddly.
+export const REACH = 180;
 export const MOVE_SPEED = 190;
 export const JUMP_VELOCITY = -560;
+export const GRAVITY_Y = 1700;

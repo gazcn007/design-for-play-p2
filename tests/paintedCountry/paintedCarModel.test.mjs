@@ -1,271 +1,357 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ACTION,
-  ACTION_HOLD_SECONDS,
-  KIND,
+  CELL_SIZE,
   createPaintedCar,
+  idx,
 } from '../../src/chapters/paintedCountry/paintedCarModel.js';
-import { FLOOR_Y, JUMP_VELOCITY } from '../../src/chapters/paintedCountry/carLayout.js';
+import {
+  BOARD,
+  CELL,
+  DOOR,
+  FLOOR_ROW,
+  GRID,
+  PAINTINGS,
+  READ_RADIUS,
+  SIGN,
+} from '../../src/chapters/paintedCountry/carLayout.js';
 
-const FULL = ACTION_HOLD_SECONDS + 0.05;
-const wash = (car, id) => car.wash(id, FULL);
-const paint = (car, id) => car.paint(id, FULL);
-const types = (car) => car.drainEvents().map((event) => event.type);
-const region = (car, id) => car.byId(id);
+// The player's body is 58 tall, so standing on a cell puts their middle here.
+const PLAYER_HALF_HEIGHT = 29;
+const centreOfCellTop = (cx, cy) => ({
+  x: cx * CELL + CELL / 2,
+  y: cy * CELL - PLAYER_HALF_HEIGHT,
+});
 
-// Everything the player must eventually be true to walk from the spawn to the
-// coupling: no seal left standing, no blot left standing, every bridge made.
-const SOLVED = (car) =>
-  car.state.regions.every((r) => {
-    if (r.kind === KIND.SEAL) return r.washed;
-    if (r.kind === KIND.BLOT) return !r.inked;
-    if (r.kind === KIND.ROUTE) return r.painted;
-    return true;
+test('paint is unlimited and the car keeps no inventory', () => {
+  const car = createPaintedCar();
+  const snap = car.snapshot();
+  assert.equal(snap.paintSupply, 'infinite');
+  assert.equal('pigment' in snap, false);
+  assert.equal('brush' in snap, false);
+  assert.equal(CELL_SIZE, CELL);
+});
+
+test('paint has to go on something — a stroke in mid-air is refused', () => {
+  const car = createPaintedCar();
+  // Well clear of the floor and of every wall.
+  assert.equal(car.paintRefusal(10, 4), 'nothing-to-hold-it');
+  assert.equal(car.paint(10, 4), false);
+  assert.equal(car.state.painted.size, 0);
+});
+
+test('a staircase can be drawn up from the floor, one step holding the next', () => {
+  const car = createPaintedCar();
+  // The first step touches the floor; each later one touches the step below it.
+  assert.equal(car.paint(5, FLOOR_ROW - 1), true);
+  assert.equal(car.paint(6, FLOOR_ROW - 2), true, 'diagonals count, so stairs draw as stairs');
+  assert.equal(car.paint(7, FLOOR_ROW - 3), true);
+  assert.equal(car.isSolid(7, FLOOR_ROW - 3), true);
+  // ...and the step you just made is something to stand on.
+  assert.equal(car.isPainted(7, FLOOR_ROW - 3), true);
+});
+
+test('varnished paper refuses paint, and the door face can never be painted over', () => {
+  const car = createPaintedCar();
+  // Directly beneath the third picture.
+  assert.equal(car.isGlaze(88, 15), true);
+  assert.equal(car.paintRefusal(88, 15), 'varnished');
+  // The signs on the door stay readable.
+  const panel = DOOR.panels[0];
+  const pc = Math.floor((panel.x + panel.w / 2) / CELL);
+  const pr = Math.floor((panel.y + panel.h / 2) / CELL);
+  assert.equal(car.isGlaze(pc, pr), true);
+});
+
+test('wash takes back your own paint and eats paper blocks, but never the carriage', () => {
+  const car = createPaintedCar();
+  car.paint(5, FLOOR_ROW - 1);
+  assert.equal(car.wash(5, FLOOR_ROW - 1), true);
+  assert.equal(car.isPainted(5, FLOOR_ROW - 1), false);
+
+  // A block from the bay A wall.
+  assert.equal(car.isBlock(41, 19), true);
+  const before = car.state.blocks.size;
+  assert.equal(car.wash(41, 19), true);
+  assert.equal(car.state.blocks.size, before - 1);
+
+  // The floor is not the player's to undo.
+  car.drainEvents();
+  assert.equal(car.wash(5, FLOOR_ROW), false);
+  assert.equal(car.isTerrain(5, FLOOR_ROW), true);
+  assert.deepEqual(
+    car.drainEvents().map((e) => e.reason),
+    ['that-is-the-carriage'],
+  );
+});
+
+test('the paper blocks are too tall to jump, so WASH is the only way past', () => {
+  const car = createPaintedCar();
+  const GRAVITY = 1700;
+  const JUMP = -560;
+  const rise = (JUMP * JUMP) / (2 * GRAVITY);
+  const feetAtApex = FLOOR_ROW * CELL - rise;
+
+  // Bay A's wall: find its top row and check a jump cannot clear it.
+  let topRow = GRID.h;
+  for (let cy = 0; cy < GRID.h; cy += 1) {
+    if (car.isBlock(41, cy)) topRow = Math.min(topRow, cy);
+  }
+  assert.ok(topRow < GRID.h, 'bay A must actually have a block wall');
+  assert.ok(
+    topRow * CELL < feetAtApex,
+    `wall top y=${topRow * CELL} is above the jump apex y=${feetAtApex.toFixed(1)} — it could be vaulted`,
+  );
+});
+
+test('not one picture can be read from the floor', () => {
+  const car = createPaintedCar();
+  PAINTINGS.forEach((picture) => {
+    const cx = picture.x + picture.w / 2;
+    const cy = picture.y + picture.h / 2;
+    // Stand anywhere along the floor, directly beneath the picture included.
+    const standing = { x: cx, y: FLOOR_ROW * CELL - PLAYER_HALF_HEIGHT };
+    assert.ok(
+      Math.hypot(standing.x - cx, standing.y - cy) > READ_RADIUS,
+      `${picture.id} can be read without building anything`,
+    );
+  });
+  car.look(PAINTINGS[0].x, FLOOR_ROW * CELL - PLAYER_HALF_HEIGHT);
+  assert.equal(car.state.seen.size, 0);
+});
+
+test('every picture is reachable by building, varnish and all', () => {
+  // Grow the set of cells the player could ever paint: anything empty and
+  // unvarnished that touches something solid, then anything touching THAT.
+  // This is exactly what the paint rule allows, so membership is a proof that
+  // a real staircase exists.
+  const car = createPaintedCar();
+  const reachable = new Set();
+  const queue = [];
+  const consider = (cx, cy) => {
+    if (!car.inBounds(cx, cy)) return;
+    const key = idx(cx, cy);
+    if (reachable.has(key)) return;
+    if (car.isGlaze(cx, cy) || car.isSolid(cx, cy)) return;
+    reachable.add(key);
+    queue.push([cx, cy]);
+  };
+
+  for (let cx = 0; cx < GRID.w; cx += 1) {
+    for (let cy = 0; cy < GRID.h; cy += 1) {
+      if (!car.isSolid(cx, cy)) continue;
+      for (let dx = -1; dx <= 1; dx += 1) for (let dy = -1; dy <= 1; dy += 1) consider(cx + dx, cy + dy);
+    }
+  }
+  while (queue.length) {
+    const [cx, cy] = queue.shift();
+    for (let dx = -1; dx <= 1; dx += 1) for (let dy = -1; dy <= 1; dy += 1) consider(cx + dx, cy + dy);
+  }
+
+  PAINTINGS.forEach((picture) => {
+    const px = picture.x + picture.w / 2;
+    const py = picture.y + picture.h / 2;
+    const perch = [...reachable].find((key) => {
+      const cx = key % GRID.w;
+      const cy = Math.floor(key / GRID.w);
+      const stand = centreOfCellTop(cx, cy);
+      return Math.hypot(stand.x - px, stand.y - py) <= READ_RADIUS;
+    });
+    assert.ok(perch !== undefined, `${picture.id} cannot be reached by any legal staircase`);
+  });
+});
+
+test('the puzzle is well posed: exactly one sign is in every picture, and it is the moon', () => {
+  const tally = {};
+  PAINTINGS.forEach((p) => p.signs.forEach((s) => { tally[s] = (tally[s] || 0) + 1; }));
+  const inAll = Object.entries(tally)
+    .filter(([, n]) => n === PAINTINGS.length)
+    .map(([sign]) => sign);
+
+  assert.deepEqual(inAll, [SIGN.MOON], 'the answer must be unique and deducible');
+  assert.equal(DOOR.correct, SIGN.MOON);
+  // Every sign on the door has to appear somewhere, or it is a giveaway.
+  DOOR.panels.forEach((panel) => {
+    assert.ok(tally[panel.sign] > 0, `${panel.sign} is on the door but in no picture`);
+  });
+  // And every wrong sign must be in at least one picture but not all, so the
+  // player has to actually compare rather than spot the odd one out.
+  DOOR.panels
+    .filter((p) => p.sign !== SIGN.MOON)
+    .forEach((panel) => assert.ok(tally[panel.sign] < PAINTINGS.length));
+});
+
+// ------------------------------------------------------------- thread board
+
+// The intended threading. Two of the three cords have to bend around a torn
+// eyelet, and the bends have to bend the opposite way from each other.
+const SOLUTION = {
+  amber: [[0, 0], [1, 0], [1, 1], [2, 1], [3, 1], [3, 0], [4, 0]],
+  cyan: [[0, 2], [1, 2], [1, 3], [2, 3], [3, 3], [3, 2], [4, 2]],
+  red: [[0, 4], [1, 4], [2, 4], [3, 4], [4, 4]],
+};
+
+const thread = (car, pairId, cells) => {
+  car.boardBegin(...cells[0]);
+  cells.slice(1).forEach(([c, r]) => car.boardExtend(c, r));
+  car.boardRelease();
+};
+
+test('the thread board starts empty and refuses torn eyelets', () => {
+  const car = createPaintedCar();
+  assert.equal(car.boardSolved(), false);
+  assert.equal(car.isTorn(2, 0), true);
+  assert.equal(car.isTorn(2, 2), true);
+
+  car.boardBegin(0, 0);
+  assert.equal(car.boardExtend(1, 0), true);
+  assert.equal(car.boardExtend(2, 0), false, 'a cord cannot pass through a torn hole');
+});
+
+test('a cord cannot share a hole with another cord, and dragging back undoes it', () => {
+  const car = createPaintedCar();
+  thread(car, 'amber', SOLUTION.amber);
+  assert.equal(car.cordComplete('amber'), true);
+
+  // Cyan tries to run through amber's cord.
+  car.boardBegin(0, 2);
+  car.boardExtend(1, 2);
+  car.boardExtend(1, 1); // amber is sitting here
+  assert.equal(car.cordCovering(1, 1), 'amber');
+  assert.equal(car.state.board.cords.cyan.length, 2, 'the blocked step was not taken');
+
+  // Backtracking shortens rather than restarting.
+  assert.equal(car.boardExtend(0, 2), true);
+  assert.equal(car.state.board.cords.cyan.length, 1);
+  car.boardRelease();
+  assert.deepEqual(car.state.board.cords.cyan, [], 'a half-drawn cord is not left lying about');
+});
+
+test('the intended threading solves the board', () => {
+  const car = createPaintedCar();
+  Object.entries(SOLUTION).forEach(([id, cells]) => thread(car, id, cells));
+  assert.equal(car.boardSolved(), true);
+  assert.deepEqual(car.snapshot().board.joined.sort(), ['amber', 'cyan', 'red']);
+
+  // And pulling one cord back out unsolves it.
+  car.boardClearAt(...SOLUTION.cyan[3]);
+  assert.equal(car.boardSolved(), false);
+});
+
+test('the board is solvable, and two of the three cords are forced to bend', () => {
+  // Brute force every legal threading, so "solvable" is proved rather than
+  // asserted, and so a future tweak to the torn holes cannot quietly make the
+  // lock impossible.
+  const { cols, rows, pairs, torn } = BOARD;
+  const isTorn = (c, r) => torn.some(([tc, tr]) => tc === c && tr === r);
+  const endpoints = new Set();
+  pairs.forEach((p) => {
+    endpoints.add(`${p.a}`);
+    endpoints.add(`${p.b}`);
   });
 
-test('paint is unlimited and the state hides no inventory', () => {
-  const car = createPaintedCar();
-  const snapshot = car.snapshot();
+  const key = (c, r) => `${c},${r}`;
+  const used = new Set();
+  pairs.forEach((p) => {
+    used.add(key(p.a[0], p.a[1]));
+    used.add(key(p.b[0], p.b[1]));
+  });
 
-  assert.equal(snapshot.paintSupply, 'infinite');
-  assert.equal('brush' in snapshot, false);
-  assert.equal('pigment' in snapshot, false);
-  assert.equal('coverage' in snapshot, false);
-
-  // Painting every route in the car never depletes anything.
-  ['route-a', 'route-b', 'route-c'].forEach((id) => paint(car, id));
-  assert.equal(car.snapshot().paintSupply, 'infinite');
-  assert.ok(['route-a', 'route-b', 'route-c'].every((id) => car.isSolid(id)));
-});
-
-test('the whole puzzle is visible from the first frame — nothing is hidden', () => {
-  const car = createPaintedCar();
-  const live = car.snapshot().regions.filter((r) => r.live).map((r) => r.id);
-  // Every seal and every route is actionable immediately; only the blots wait,
-  // and they wait because they do not exist yet, not because they are secret.
-  assert.deepEqual(live.sort(), [
-    'route-a', 'route-b', 'route-c', 'seal-a', 'seal-c1', 'seal-c2', 'seal-b',
-  ].sort());
-  // Every drain channel is declared, so the scene can draw the consequence.
-  assert.equal(region(car, 'seal-a').drainsTo, 'sump-a');
-  assert.equal(region(car, 'seal-b').drainsTo, 'blot-b');
-  assert.equal(region(car, 'blot-b').drainsTo, 'route-b');
-  assert.equal(region(car, 'seal-c1').drainsTo, 'route-c');
-  assert.equal(region(car, 'seal-c2').drainsTo, 'blot-c');
-  assert.equal(region(car, 'blot-c').drainsTo, 'route-c');
-});
-
-test('bay A teaches the rule and cannot be failed', () => {
-  const car = createPaintedCar();
-  assert.equal(car.isBlocking('seal-a'), true);
-
-  // Painting the bridge first is harmless here: this seal drains to a grate,
-  // not across the route. The teaching bay has no wrong order.
-  paint(car, 'route-a');
-  car.drainEvents();
-  wash(car, 'seal-a');
-
-  assert.deepEqual(types(car), ['seal-washed', 'ink-drained']);
-  assert.equal(car.isBlocking('seal-a'), false);
-  assert.equal(car.isSolid('route-a'), true, 'the bridge survives — nothing drains onto it');
-});
-
-test('bay B: a washed seal becomes a standing blot, and the blot drains into the open trough', () => {
-  const car = createPaintedCar();
-
-  wash(car, 'seal-b');
-  assert.deepEqual(types(car), ['seal-washed', 'blot-formed']);
-  assert.equal(car.isBlocking('blot-b'), true, 'the ink now stands in the way');
-  assert.equal(car.isLive('blot-b'), true);
-
-  wash(car, 'blot-b');
-  assert.deepEqual(types(car), ['blot-washed', 'ink-drained']);
-  assert.equal(car.isBlocking('blot-b'), false);
-
-  paint(car, 'route-b');
-  assert.equal(car.isSolid('route-b'), true);
-});
-
-test('bay B trap: painting the bridge before clearing the blot dissolves the bridge', () => {
-  const car = createPaintedCar();
-  wash(car, 'seal-b');
-  paint(car, 'route-b');
-  assert.equal(car.isSolid('route-b'), true);
-  car.drainEvents();
-
-  wash(car, 'blot-b');
-
-  assert.deepEqual(types(car), ['blot-washed', 'route-dissolved', 'ink-drained']);
-  assert.equal(car.isSolid('route-b'), false, 'the ink took the bridge with it');
-  assert.equal(region(car, 'route-b').progress, 0, 'a dissolved route starts clean, not half-made');
-
-  // And it is only ever a repaint — never a dead end.
-  paint(car, 'route-b');
-  assert.equal(car.isSolid('route-b'), true);
-});
-
-test('bay C is solved by emptying both seals through the hole before painting', () => {
-  const car = createPaintedCar();
-
-  wash(car, 'seal-c1'); // channel runs the length of the bay into the open hole
-  assert.deepEqual(types(car), ['seal-washed', 'ink-drained']);
-
-  wash(car, 'seal-c2'); // this one drops its ink at the player's feet
-  assert.deepEqual(types(car), ['seal-washed', 'blot-formed']);
-  assert.equal(car.isBlocking('blot-c'), true);
-
-  wash(car, 'blot-c');
-  assert.deepEqual(types(car), ['blot-washed', 'ink-drained']);
-
-  paint(car, 'route-c');
-  assert.equal(car.isSolid('route-c'), true);
-  assert.equal(car.enterExit(), true);
-  assert.equal(car.snapshot().complete, true);
-});
-
-test('bay C trap: a bridge painted too early is taken by the next wash', () => {
-  const car = createPaintedCar();
-  wash(car, 'seal-c2'); // forms the blot
-  paint(car, 'route-c'); // tempting, and wrong
-  car.drainEvents();
-
-  wash(car, 'blot-c');
-  assert.deepEqual(types(car), ['blot-washed', 'route-dissolved', 'ink-drained']);
-  assert.equal(car.isSolid('route-c'), false);
-
-  // seal-c1 drains straight onto the same route, so it punishes the same haste.
-  paint(car, 'route-c');
-  car.drainEvents();
-  wash(car, 'seal-c1');
-  assert.deepEqual(types(car), ['seal-washed', 'route-dissolved', 'ink-drained']);
-  assert.equal(car.isSolid('route-c'), false);
-});
-
-test('two lots of ink in one basin stay one blot, and never a dead end', () => {
-  const car = createPaintedCar();
-  wash(car, 'seal-c2');
-  assert.equal(region(car, 'blot-c').inked, true);
-  // Force a second delivery into the same basin.
-  car.drainEvents();
-  wash(car, 'seal-c1');
-  const events = types(car);
-  assert.ok(!events.includes('blot-formed'), 'seal-c1 drains to the route, not the basin');
-  assert.equal(region(car, 'blot-c').inked, true);
-  wash(car, 'blot-c');
-  assert.equal(car.isBlocking('blot-c'), false);
-});
-
-test('the wrong tool does nothing and never consumes or clears progress', () => {
-  const car = createPaintedCar();
-  car.paint('seal-a', ACTION_HOLD_SECONDS);
-  assert.equal(region(car, 'seal-a').progress, 0);
-  assert.equal(car.isBlocking('seal-a'), true);
-  assert.deepEqual(car.drainEvents(), [
-    { type: 'wrong-tool', id: 'seal-a', expected: ACTION.WASH, used: ACTION.PAINT },
-  ]);
-
-  car.wash('route-a', ACTION_HOLD_SECONDS);
-  assert.equal(region(car, 'route-a').progress, 0);
-  assert.deepEqual(car.drainEvents(), [
-    { type: 'wrong-tool', id: 'route-a', expected: ACTION.PAINT, used: ACTION.WASH },
-  ]);
-});
-
-test('a partial gesture is kept, and dead marks cannot be targeted', () => {
-  const car = createPaintedCar();
-  car.wash('seal-a', ACTION_HOLD_SECONDS * 0.4);
-  assert.ok(region(car, 'seal-a').progress > 0 && region(car, 'seal-a').progress < 1);
-  car.wash('seal-a', ACTION_HOLD_SECONDS * 0.7);
-  assert.equal(region(car, 'seal-a').washed, true);
-
-  // A washed seal, a made route and an empty basin are all inert.
-  assert.equal(car.isLive('seal-a'), false);
-  assert.equal(car.regionAt(324, 338), null);
-  assert.equal(car.isLive('blot-b'), false, 'an empty basin is not a target');
-  paint(car, 'route-a');
-  assert.equal(car.isLive('route-a'), false);
-});
-
-test('the generous hit area picks the intended target', () => {
-  const car = createPaintedCar();
-  assert.equal(car.regionAt(258, 338)?.id, 'seal-a', 'the seal has a forgiving edge target');
-  assert.equal(car.regionAt(500, 456)?.id, 'route-a', 'the route has a forgiving lower target');
-  wash(car, 'seal-b');
-  assert.equal(car.regionAt(1338, 390)?.id, 'blot-b', 'a formed blot is targetable');
-});
-
-test('no ordering of legal moves can strand the player', () => {
-  // Explore every reachable configuration of the car, then prove each one can
-  // still be finished. This is the promise the chapter makes: the puzzle is
-  // about order, and a wrong order only ever costs you a repeat.
-  const keyOf = (car) =>
-    car.state.regions.map((r) => `${+r.washed}${+r.painted}${+r.inked}`).join('');
-
-  const replay = (seq) => {
-    const car = createPaintedCar();
-    seq.forEach(([id, action]) => car.act(id, action, FULL));
-    return car;
+  let found = false;
+  const walk = (i, c, r) => {
+    if (found) return;
+    const pair = pairs[i];
+    if (c === pair.b[0] && r === pair.b[1]) {
+      if (i === pairs.length - 1) {
+        found = true;
+        return;
+      }
+      const next = pairs[i + 1];
+      walk(i + 1, next.a[0], next.a[1]);
+      return;
+    }
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nc = c + dx;
+      const nr = r + dy;
+      if (nc < 0 || nr < 0 || nc >= cols || nr >= rows) continue;
+      if (isTorn(nc, nr)) continue;
+      const isTarget = nc === pair.b[0] && nr === pair.b[1];
+      if (!isTarget) {
+        if (used.has(key(nc, nr))) continue;
+        used.add(key(nc, nr));
+      }
+      walk(i, nc, nr);
+      if (!isTarget) used.delete(key(nc, nr));
+      if (found) return;
+    }
   };
-  const liveMoves = (car) =>
-    car.state.regions.filter((r) => car.isLive(r.id)).map((r) => [r.id, r.action]);
+  walk(0, pairs[0].a[0], pairs[0].a[1]);
+  assert.equal(found, true, 'the thread board must have at least one legal threading');
 
-  const seen = new Map([[keyOf(createPaintedCar()), []]]);
-  const queue = [[]];
-  while (queue.length) {
-    const seq = queue.shift();
-    const car = replay(seq);
-    for (const move of liveMoves(car)) {
-      const next = seq.concat([move]);
-      const key = keyOf(replay(next));
-      if (seen.has(key)) continue;
-      seen.set(key, next);
-      queue.push(next);
+  // A cord "bends" if its two ends share a row but a straight run is impossible.
+  const forcedToBend = pairs.filter((p) => {
+    if (p.a[1] !== p.b[1]) return false;
+    const row = p.a[1];
+    for (let c = Math.min(p.a[0], p.b[0]); c <= Math.max(p.a[0], p.b[0]); c += 1) {
+      if (isTorn(c, row)) return true;
     }
-  }
-
-  assert.ok(seen.size > 40, `expected a real state space, explored ${seen.size}`);
-
-  // From every reachable state: wash everything still standing, which pushes
-  // all remaining ink through the holes, then make every bridge.
-  for (const [key, seq] of seen) {
-    const car = replay(seq);
-    for (let pass = 0; pass < 4; pass += 1) {
-      car.state.regions
-        .filter((r) => (r.kind === KIND.SEAL && !r.washed) || (r.kind === KIND.BLOT && r.inked))
-        .forEach((r) => wash(car, r.id));
-    }
-    car.state.regions
-      .filter((r) => r.kind === KIND.ROUTE && !r.painted)
-      .forEach((r) => paint(car, r.id));
-    assert.ok(SOLVED(car), `state ${key} could not be finished`);
-  }
+    return false;
+  });
+  assert.equal(forcedToBend.length, 2, 'two cords should have a torn hole straight across their path');
 });
 
-test('nothing that blocks the way can simply be jumped over', () => {
-  // A blot short enough to vault turns the whole puzzle into an optional
-  // detour, which is exactly how the first build of this mechanic broke.
-  const GRAVITY = 1700; // arcade gravity, set in paintedCountry-main.js
-  const rise = (JUMP_VELOCITY * JUMP_VELOCITY) / (2 * GRAVITY);
-  const feetAtApex = FLOOR_Y - rise;
-
-  createPaintedCar()
-    .state.regions.filter((r) => r.kind === KIND.BLOT || r.kind === KIND.SEAL)
-    .forEach((mark) => {
-      assert.ok(
-        mark.y < feetAtApex,
-        `${mark.id} top is y=${mark.y}; a jump lifts the feet to y=${feetAtApex.toFixed(1)}, so it can be cleared`,
-      );
-    });
-});
-
-test('falling costs nothing but the walk back', () => {
+test('the door is dark until the board is threaded', () => {
   const car = createPaintedCar();
-  wash(car, 'seal-a');
-  paint(car, 'route-a');
-  car.fell();
+  PAINTINGS.forEach((p) => car.look(p.x + p.w / 2, p.y + p.h / 2));
+  assert.equal(car.allSeen(), true);
 
+  car.drainEvents();
+  const answer = car.chooseSign(SIGN.MOON);
+  assert.equal(answer.ok, false);
+  assert.equal(answer.reason, 'board-not-threaded');
+  assert.deepEqual(car.drainEvents().map((e) => e.type), ['door-dark']);
+  assert.equal(car.state.complete, false);
+});
+
+test('the door stays silent until all three pictures have been read', () => {
+  const car = createPaintedCar();
+  Object.entries(SOLUTION).forEach(([id, cells]) => thread(car, id, cells));
+  assert.equal(car.boardSolved(), true);
+
+  car.drainEvents();
+  let answer = car.chooseSign(SIGN.MOON);
+  assert.equal(answer.ok, false);
+  assert.equal(answer.reason, 'not-all-pictures-read');
+  assert.equal(car.state.complete, false);
+  assert.deepEqual(car.drainEvents().map((e) => e.type), ['door-silent']);
+
+  // Read them by standing at each one.
+  PAINTINGS.forEach((p) => car.look(p.x + p.w / 2, p.y + p.h / 2));
+  assert.equal(car.allSeen(), true);
+  assert.deepEqual(car.snapshot().signsSeen, { moon: 3, river: 2, house: 2, star: 2 });
+
+  // A wrong sign is refused and costs nothing.
+  car.drainEvents();
+  answer = car.chooseSign(SIGN.STAR);
+  assert.equal(answer.ok, false);
+  assert.equal(car.state.complete, false);
+  assert.equal(car.state.door.wrongTries, 1);
+  assert.deepEqual(car.drainEvents().map((e) => e.type), ['door-refused']);
+
+  // The moon opens it.
+  answer = car.chooseSign(SIGN.MOON);
+  assert.equal(answer.ok, true);
+  assert.equal(car.state.door.solved, true);
+  assert.equal(car.snapshot().complete, true);
+  assert.deepEqual(car.drainEvents().map((e) => e.type), ['door-opened']);
+});
+
+test('falling costs nothing that was drawn', () => {
+  const car = createPaintedCar();
+  car.paint(5, FLOOR_ROW - 1);
+  car.wash(41, 19);
+  car.fell();
   assert.equal(car.snapshot().falls, 1);
-  assert.equal(car.isSolid('route-a'), true);
-  assert.equal(region(car, 'seal-a').washed, true);
+  assert.equal(car.isPainted(5, FLOOR_ROW - 1), true);
+  assert.equal(car.isBlock(41, 19), false);
 });

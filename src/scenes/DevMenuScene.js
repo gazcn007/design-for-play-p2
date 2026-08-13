@@ -46,7 +46,7 @@ const STANDALONE_SLICES = [
   },
   {
     label: 'CHAPTER 4  //  THE PAINTED COUNTRY',
-    detail: 'Playable. Washed ink does not vanish, it moves — drain it before you build the bridge.',
+    detail: 'Playable. Route the ink, wash the three wall archives, then choose the mark the car remembers.',
     href: '/painted-country.html',
   },
 ];
