@@ -5,7 +5,23 @@
 
 import Phaser from 'phaser';
 import { PaintedCountryScene, PAINTED_COUNTRY_VIEW } from './chapters/paintedCountry/PaintedCountryScene.js';
+import { DrawingStudioScene } from './chapters/paintedCountry/DrawingStudioScene.js';
+import { PigmentTrainScene } from './chapters/paintedCountry/PigmentTrainScene.js';
 import { PAPER_CSS } from './chapters/paintedCountry/paperPalette.js';
+import { installDevMenuReturnControl } from './devMenuReturn.js';
+import { installPauseMenu } from './shell/pauseMenu.js';
+
+installDevMenuReturnControl();
+installPauseMenu({ checkpointId: 'chapter-4-start' });
+
+const qa = import.meta.env.DEV ? new URLSearchParams(window.location.search).get('qa') : null;
+const allScenes = [PaintedCountryScene, DrawingStudioScene, PigmentTrainScene];
+const firstScene = ['drawing', 'drawing-ready', 'drawing-free'].includes(qa)
+  ? DrawingStudioScene
+  : ['pigments', 'build-train', 'ring-press', 'train-ready', 'consequence'].includes(qa)
+    ? PigmentTrainScene
+    : PaintedCountryScene;
+const sceneOrder = [firstScene, ...allScenes.filter((scene) => scene !== firstScene)];
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -21,7 +37,7 @@ const game = new Phaser.Game({
   },
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   physics: { default: 'arcade', arcade: { gravity: { y: 1700 }, debug: false } },
-  scene: [PaintedCountryScene],
+  scene: sceneOrder,
 });
 
 // The brush is aimed with the pointer, so the canvas has to be able to take
@@ -33,7 +49,9 @@ game.canvas.addEventListener('contextmenu', (event) => event.preventDefault());
 window.game = game;
 
 window.render_game_to_text = () => {
-  const scene = game.scene.getScene('PaintedCountry');
+  const scene = ['PigmentTrain', 'DrawingStudio', 'PaintedCountry']
+    .map((key) => game.scene.getScene(key))
+    .find((candidate) => candidate?.sys?.isActive());
   return JSON.stringify(
     scene?.sys?.isActive() ? scene.textState() : { scene: 'booting' },
   );

@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { createSaveStore } from '../shell/saveSystem.js';
+import { CINEMATICS, playCinematic } from '../shell/gameFlow.js';
 import {
   GAME_W,
   GAME_H,
@@ -19,6 +21,7 @@ import { LEVEL } from '../level.js';
 import { PAL } from '../palette.js';
 import Player from '../Player.js';
 import { sfx } from '../sfx.js';
+import { music } from '../shared/musicDirector.js';
 import { NPC_DIALOGUES, STORY_WORLDS } from '../story.js';
 import TutorialCarArt from '../art/tutorialCarArt.js';
 import TutorialTrainRoomsArt from '../art/tutorialTrainRoomsArt.js';
@@ -43,6 +46,10 @@ import {
 
 // Surfaces that get an explicit moonlit lip; the rest read as flat silhouettes.
 const RIMMED = new Set(['ground', 'platform', 'bridge']);
+const PROLOGUE_SCORE = {
+  undertow: 'assets/music/ch1/1.1_train_undertow.mp3',
+  resonance: 'assets/music/ch1/1.2_train_resonance.mp3',
+};
 
 export default class GameScene extends Phaser.Scene {
   constructor() {
@@ -241,6 +248,7 @@ export default class GameScene extends Phaser.Scene {
 
     this.setupInput();
     this.setupTutorialQA();
+    this.refreshPrologueScore();
 
     this.physics.world.createDebugGraphic();
     this.physics.world.drawDebug = false;
@@ -384,6 +392,7 @@ export default class GameScene extends Phaser.Scene {
     this.tutorialTrainRoomsArt?.setVisible(index === 0);
     this.setTutorialPuzzleVisible(index === 0);
     this.setTutorialCameraMode(index);
+    this.refreshPrologueScore();
 
     if (announce) {
       this.game.events.emit('hud:world', world);
@@ -708,7 +717,19 @@ export default class GameScene extends Phaser.Scene {
       this.interactables.push({ def, sprite, fired: false });
     });
 
-
+    this.prompt = this.add
+      .text(0, 0, '[E]', {
+        fontFamily: 'ui-monospace, Menlo, monospace',
+        fontSize: '15px',
+        color: RETRO_TRANSIT_CSS.charcoalDeep,
+        backgroundColor: RETRO_TRANSIT_CSS.ivory,
+        stroke: RETRO_TRANSIT_CSS.orangeShadow,
+        strokeThickness: 1,
+        padding: { x: 7, y: 4 },
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(64)
+      .setVisible(false);
   }
 
   buildTutorialPuzzleProps() {
@@ -1478,9 +1499,16 @@ export default class GameScene extends Phaser.Scene {
     });
 
     this.time.delayedCall(7000, () => {
+      createSaveStore().markCheckpoint('chapter-2-start');
       this.prologueTransitionActive = false;
       onComplete();
-      this.scene.start('CyberpunkParkour');
+      playCinematic({
+        id: 'chapter-1-to-2',
+        src: CINEMATICS.chapter1To2,
+        label: 'Chapter 1 to Chapter 2 transition',
+        preloadChapterId: 'chapter2',
+        onComplete: () => this.scene.start('CyberpunkParkour'),
+      });
     });
   }
 
@@ -2716,6 +2744,7 @@ export default class GameScene extends Phaser.Scene {
 
     this.playTutorialGateOpen(completedIndex, () => {
       puzzle.stageIndex = Math.min(completedIndex + 1, LEVEL.tutorialPuzzle.stages.length - 1);
+      this.refreshPrologueScore();
       puzzle.phase = 'idle';
       puzzle.frames = [];
       puzzle.playbackCursor = 0;
@@ -2740,6 +2769,21 @@ export default class GameScene extends Phaser.Scene {
           ? 'The next car bends the remembered current.'
           : 'The windows go quiet. Something below begins to move.',
       );
+    });
+  }
+
+  refreshPrologueScore() {
+    if (this.skipPrologue || this.activeWorldIndex !== 0) return;
+    const cue = this.tutorialPuzzle.stageIndex >= 3 ? 'resonance' : 'undertow';
+    if (this.prologueScoreCue === cue) return;
+    this.prologueScoreCue = cue;
+    music.play(`prologue-${cue}`, {
+      src: PROLOGUE_SCORE[cue],
+      volume: cue === 'resonance' ? 0.42 : 0.34,
+      fade: cue === 'resonance' ? 5.5 : 6.5,
+      outFade: 5.5,
+      dialogueDuckDb: -7,
+      loop: true,
     });
   }
 

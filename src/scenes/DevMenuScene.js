@@ -30,14 +30,19 @@ const ACCENT = '#c9a227';
 // there is no need to start that car's own Vite config to reach it from here.
 const STANDALONE_SLICES = [
   {
-    label: 'CAR 03  //  ECHO CITY',
-    detail: 'Isolated slice, own entry point. Chapter 3, the city that remembers.',
-    href: '/car03.html',
+    label: 'CHAPTER 1  //  NIGHT SERVICE · ORANGE CARRIAGE',
+    detail: 'Latest playable narrative interior: the Conductor, the power-restoration route, and the retro transit car.',
+    href: '/?chapter=0',
   },
   {
-    label: 'CAR 04  //  THE BORROWED GRID',
-    detail: 'Isolated slice, own entry point. The city still runs. It does not run for you.',
-    href: '/car04.html',
+    label: 'CHAPTER 2  //  CYBERPUNK PARKOUR',
+    detail: 'Direct development route for the movable-route, ladder and flying-car slice.',
+    href: '/?chapter=cyberpunk',
+  },
+  {
+    label: 'CHAPTER 3  //  ECHO CITY 3D',
+    detail: 'Current playable Echo City investigation package with its own 3D runtime.',
+    href: '/car03-3d.html',
   },
   {
     label: 'CHAPTER 6  //  ALL WORLDS AT ONCE',
@@ -48,6 +53,26 @@ const STANDALONE_SLICES = [
     label: 'CHAPTER 4  //  THE PAINTED COUNTRY',
     detail: 'Playable. Route the ink, wash the three wall archives, then choose the mark the car remembers.',
     href: '/painted-country.html',
+  },
+  {
+    label: 'CHAPTER 5  //  THE MUSEUM OF ONE ANSWER',
+    detail: 'The Labyrinth, eight-key collapse gauntlet, and Final Archive exit.',
+    href: '/museum-3d.html',
+  },
+  {
+    label: 'CHAPTER 5  //  DOOR 1 · LABYRINTH',
+    detail: 'Direct development route for the eight-key statue chase and return artifact.',
+    href: '/labyrinth.html',
+  },
+  {
+    label: 'CHAPTER 5  //  DOOR 2 · BORROWED GRID',
+    detail: 'Direct development route for the three-round public-power service shift.',
+    href: '/borrowed-grid.html',
+  },
+  {
+    label: 'CHAPTER 5  //  ECHO CITY REVIEW',
+    detail: 'Direct Chapter 5 reconstruction route. The optional Lev character review remains query-gated.',
+    href: '/museum-3d.html?beat=echo&standalone=1',
   },
 ];
 // ---------------------------------------------------------------------------
@@ -74,11 +99,11 @@ const COLUMN_X = [64, 500];
 const COLUMN_W = 396;
 const HEADING_Y = 168;
 const ROW_TOP = 200;
-const ROW_STEP = 24;
-const GROUP_GAP = 22; // blank space a sub-heading sits in
+const ROW_STEP = 18;
+const GROUP_GAP = 10; // compact gap: the left column includes the active chapter routes
 // The page shell lets the canvas overflow a short window, so the detail block
 // is measured from the longest column rather than pinned to the bottom edge.
-const DETAIL_GAP = 26;
+const DETAIL_GAP = 18;
 const DETAIL_MIN_Y = 440;
 
 export default class DevMenuScene extends Phaser.Scene {

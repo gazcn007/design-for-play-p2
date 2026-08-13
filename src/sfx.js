@@ -6,6 +6,11 @@ let ambient = null;
 let ambientWanted = false;
 let unlockListenersInstalled = false;
 
+function sfxMix() {
+  const settings = globalThis.NIGHTFALL_SETTINGS;
+  return settings ? (settings.masterVolume / 100) * (settings.sfxVolume / 100) : 1;
+}
+
 function audio() {
   if (!ctx) {
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -40,7 +45,7 @@ function tone({
   if (to) osc.frequency.exponentialRampToValueAtTime(Math.max(1, to * detune), t0 + dur);
 
   gain.gain.setValueAtTime(0.0001, t0);
-  gain.gain.exponentialRampToValueAtTime(vol, t0 + 0.012);
+  gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, vol * sfxMix()), t0 + 0.012);
   gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
 
   osc.connect(gain);
@@ -70,7 +75,7 @@ function startAmbient() {
   filter.frequency.setValueAtTime(150, c.currentTime);
   filter.Q.setValueAtTime(0.7, c.currentTime);
   gain.gain.setValueAtTime(0.0001, c.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.012, c.currentTime + 0.8);
+  gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, 0.012 * sfxMix()), c.currentTime + 0.8);
   filter.connect(gain);
   gain.connect(c.destination);
 

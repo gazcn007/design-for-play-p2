@@ -70,7 +70,21 @@ export class PaintedCountryScene extends Phaser.Scene {
     super('PaintedCountry');
   }
 
+  preload() {
+    if (!this.cache.audio.exists('chapter4-drawing-music')) {
+      this.load.audio('chapter4-drawing-music', '/assets/music/ch4/4.3_debussy_reflets_dans_leau.mp3');
+    }
+  }
+
   create() {
+    this.music = this.sound.add('chapter4-drawing-music', { loop: true, volume: 0.28 });
+    const playMusic = () => { if (!this.music?.isPlaying) this.music?.play(); };
+    if (this.sound.locked) this.sound.once('unlocked', playMusic);
+    else playMusic();
+    this.input.once('pointerdown', playMusic);
+    this.input.keyboard.once('keydown', playMusic);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.music?.stop());
+    this.advancingToStudio = false;
     this.rnd = makeRandom(0x9a17);
     this.motes = [];
     this.boilTargets = [];
@@ -1034,7 +1048,13 @@ export class PaintedCountryScene extends Phaser.Scene {
       } else if (event.type === 'door-silent') {
         this.flashMessage(`THE DOOR STAYS SHUT — ${event.seen} OF ${event.of} PICTURES READ.`, '#c8892f');
       } else if (event.type === 'door-refused') this.flashMessage('NOT THAT ONE. LOOK AGAIN.', '#b4453a');
-      else if (event.type === 'door-opened') this.flashMessage('THE MOON. THE DOOR OPENS.', '#6f9c8b');
+      else if (event.type === 'door-opened') {
+        this.flashMessage('THE MOON. THE DOOR OPENS.', '#6f9c8b');
+        if (!this.advancingToStudio) {
+          this.advancingToStudio = true;
+          this.time.delayedCall(1100, () => this.scene.start('DrawingStudio'));
+        }
+      }
       else if (event.type === 'paint-refused' && event.reason === 'varnished') {
         this.flashMessage('THE PAPER IS VARNISHED HERE. PAINT WILL NOT TAKE.', '#c8892f');
       } else if (event.type === 'paint-refused' && event.reason === 'nothing-to-hold-it') {
