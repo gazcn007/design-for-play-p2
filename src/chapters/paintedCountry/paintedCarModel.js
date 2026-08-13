@@ -1,333 +1,328 @@
 // Chapter 4 // THE PAINTED COUNTRY — the whole car, as rules.
 //
-// One rule carries the chapter: WASHING DOES NOT DESTROY INK, IT MOVES IT.
-// Every washable mark has a drain channel drawn on the sheet, and the ink it
-// holds travels that channel the moment the mark is washed.
+// The player draws ANYWHERE rather than triggering fixed targets. Two verbs,
+// both free-hand:
 //
-//   ink that reaches a hole   -> falls through and is gone
-//   ink that reaches paper    -> becomes a new blot the player must now deal with
-//   ink that crosses a route  -> dissolves that route on its way past
+//   LEFT  — paint a cell. It becomes real paper you can stand on.
+//   RIGHT — wash a cell. It removes your own paint, and eats paper blocks.
 //
-// Nothing here is a budget. There is no pigment, no inventory, no counter and
-// no timer; paint is unlimited and every mistake is undoable. The difficulty is
-// entirely in the ORDER the player chooses, and every consequence is drawn on
-// the sheet before they act. Nothing is hidden — a puzzle you cannot see is
-// not a puzzle, it is a memory test.
+// One physical rule keeps free drawing from being a fly cheat, and it is the
+// rule that turns drawing into *building*:
+//
+//   **paint has to go ON something.**
+//
+// A cell can only be painted if it touches paper that is already there — the
+// floor, a wall, a block, or a stroke you painted a moment ago. So a player who
+// wants to be higher up paints a step, climbs onto it, and paints the next one.
+// Staircases are not a special mechanic; they are what the rule makes.
+//
+// Varnished cells refuse paint entirely, which is how the car says "not this
+// way" without taking the brush out of the player's hand.
+//
+// There is no pigment, no inventory, no counter and no timer. What the player
+// has to work out is the gallery: three pictures hung too high to read from the
+// floor, and a door that wants to know which sign was in every one of them.
 
-export const CAR_W = 2880;
+import {
+  BLOCK_RECTS,
+  BOARD,
+  CELL,
+  DOOR,
+  FLOOR_ROW,
+  FLOOR_SPANS,
+  GLAZE_RECTS,
+  GRID,
+  PAINTINGS,
+  READ_RADIUS,
+} from './carLayout.js';
 
-export const ACTION = Object.freeze({
-  PAINT: 'paint',
-  WASH: 'wash',
-});
+export const CELL_SIZE = CELL;
 
-export const KIND = Object.freeze({
-  SEAL: 'seal', // black paper barrier; washing it releases its ink
-  ROUTE: 'route', // a drawn path over a hole; painting it makes it real floor
-  BLOT: 'blot', // a place ink can land and stand as a new barrier
-  SUMP: 'sump', // a grate in the floor: whatever reaches it is gone for good
-});
+// A ceiling on painted cells. Not a resource the player spends — it is far
+// past anything a real solution needs, and exists only so a stuck mouse button
+// cannot fill the car with collision bodies.
+export const MAX_PAINTED = 1500;
 
-// A short hold makes the transformation feel deliberate without asking the
-// player to colour a shape. It is a gesture, never a coverage challenge.
-export const ACTION_HOLD_SECONDS = 0.32;
+export const idx = (cx, cy) => cy * GRID.w + cx;
+export const colOf = (worldX) => Math.floor(worldX / CELL);
+export const rowOf = (worldY) => Math.floor(worldY / CELL);
 
-export const BAYS = Object.freeze({
-  A: { id: 'A', name: 'THE COLD END', x: 0, w: 960 },
-  B: { id: 'B', name: 'THE WASHROOM', x: 960, w: 960 },
-  C: { id: 'C', name: 'THE LONG WALL', x: 1920, w: 960 },
-});
-
-function initialRegions() {
-  return [
-    // ---------------------------------------------------------------- Bay A
-    // The lesson, with no way to get it wrong. The seal's channel runs left,
-    // away from the route entirely, into a grate in the floor. Whatever the
-    // player does here they watch ink travel and disappear, and learn that a
-    // hole is where ink ends up.
-    {
-      id: 'sump-a',
-      bay: 'A',
-      kind: KIND.SUMP,
-      label: 'the floor drain',
-      x: 150,
-      y: 430,
-      w: 60,
-      h: 18,
-    },
-    {
-      id: 'seal-a',
-      bay: 'A',
-      kind: KIND.SEAL,
-      action: ACTION.WASH,
-      prompt: 'WASH SEAL',
-      label: 'the paper seal',
-      x: 264,
-      y: 246,
-      w: 120,
-      h: 184,
-      drainsTo: 'sump-a',
-    },
-    {
-      id: 'route-a',
-      bay: 'A',
-      kind: KIND.ROUTE,
-      action: ACTION.PAINT,
-      prompt: 'PAINT THE BRIDGE',
-      label: 'the first bridge',
-      x: 376,
-      y: 429,
-      w: 248,
-      h: 24,
-    },
-
-    // ---------------------------------------------------------------- Bay B
-    // The twist. This seal's ink does not vanish — it lands between the player
-    // and the trough as a standing blot. Washing THAT blot sends its ink into
-    // the trough, which is only open while the bridge is unpainted. A player
-    // who paints the bridge first watches their own bridge dissolve.
-    {
-      id: 'seal-b',
-      bay: 'B',
-      kind: KIND.SEAL,
-      action: ACTION.WASH,
-      prompt: 'WASH SEAL',
-      label: 'the washroom seal',
-      x: 1148,
-      y: 246,
-      w: 120,
-      h: 184,
-      drainsTo: 'blot-b',
-    },
-    {
-      id: 'blot-b',
-      bay: 'B',
-      kind: KIND.BLOT,
-      action: ACTION.WASH,
-      prompt: 'WASH THE BLOT',
-      label: 'the blot',
-      // Taller than a jump can clear (the player rises ~92px), so standing ink
-      // is a problem to be solved and never an obstacle to be vaulted.
-      x: 1300,
-      y: 300,
-      w: 76,
-      h: 130,
-      drainsTo: 'route-b',
-    },
-    {
-      id: 'route-b',
-      bay: 'B',
-      kind: KIND.ROUTE,
-      action: ACTION.PAINT,
-      prompt: 'PAINT THE BRIDGE',
-      label: 'the washroom bridge',
-      x: 1376,
-      y: 429,
-      w: 230,
-      h: 24,
-    },
-
-    // ---------------------------------------------------------------- Bay C
-    // The exam. Two seals with different channels: the first drains the whole
-    // length of the bay straight into the last hole, the second drops its ink
-    // at the player's feet. Both must be emptied through the hole BEFORE the
-    // last bridge is painted, or the bridge pays for it.
-    {
-      id: 'seal-c1',
-      bay: 'C',
-      kind: KIND.SEAL,
-      action: ACTION.WASH,
-      prompt: 'WASH SEAL',
-      label: 'the long-wall seal',
-      x: 2180,
-      y: 246,
-      w: 120,
-      h: 184,
-      drainsTo: 'route-c',
-    },
-    {
-      id: 'seal-c2',
-      bay: 'C',
-      kind: KIND.SEAL,
-      action: ACTION.WASH,
-      prompt: 'WASH SEAL',
-      label: 'the inner seal',
-      x: 2340,
-      y: 246,
-      w: 120,
-      h: 184,
-      drainsTo: 'blot-c',
-    },
-    {
-      id: 'blot-c',
-      bay: 'C',
-      kind: KIND.BLOT,
-      action: ACTION.WASH,
-      prompt: 'WASH THE BLOT',
-      label: 'the blot',
-      x: 2470,
-      y: 300,
-      w: 76,
-      h: 130,
-      drainsTo: 'route-c',
-    },
-    {
-      id: 'route-c',
-      bay: 'C',
-      kind: KIND.ROUTE,
-      action: ACTION.PAINT,
-      prompt: 'PAINT THE BRIDGE',
-      label: 'the bridge to the vestibule',
-      x: 2540,
-      y: 429,
-      w: 240,
-      h: 24,
-    },
-  ].map((region) => ({
-    ...region,
-    washed: false, // seals only
-    painted: false, // routes only
-    inked: false, // blots only
-    progress: 0,
-  }));
+function rectCells(rects) {
+  const set = new Set();
+  rects.forEach(({ col, row, cols, rows }) => {
+    for (let cx = col; cx < col + cols; cx += 1) {
+      for (let cy = row; cy < row + rows; cy += 1) set.add(idx(cx, cy));
+    }
+  });
+  return set;
 }
 
-function distanceToRect(x, y, region) {
-  const nearX = Math.max(region.x, Math.min(x, region.x + region.w));
-  const nearY = Math.max(region.y, Math.min(y, region.y + region.h));
-  return Math.hypot(x - nearX, y - nearY);
+function terrainCells() {
+  const set = new Set();
+  FLOOR_SPANS.forEach(({ from, to }) => {
+    for (let cx = from; cx < to; cx += 1) {
+      for (let cy = FLOOR_ROW; cy < GRID.h; cy += 1) set.add(idx(cx, cy));
+    }
+  });
+  return set;
 }
 
 export function createPaintedCar() {
+  const terrain = terrainCells();
+  const glaze = rectCells(GLAZE_RECTS);
+
   const state = {
-    regions: initialRegions(),
-    // Kept explicit in the state so text QA can prove this is not secretly a
-    // depleted resource system.
+    painted: new Set(),
+    blocks: rectCells(BLOCK_RECTS),
+    seen: new Set(),
+    // Kept explicit so text QA can prove this is not secretly a resource game.
     paintSupply: 'infinite',
+    board: { cords: {}, drawing: null },
+    door: { chosen: null, solved: false, wrongTries: 0 },
     complete: false,
     falls: 0,
     events: [],
   };
 
-  const byId = (id) => state.regions.find((region) => region.id === id);
   const emit = (type, payload = {}) => state.events.push({ type, ...payload });
 
-  // A region is "live" when the player's verb would currently do something.
-  function isLive(region) {
-    if (!region) return false;
-    if (region.kind === KIND.SEAL) return !region.washed;
-    if (region.kind === KIND.ROUTE) return !region.painted;
-    if (region.kind === KIND.BLOT) return region.inked;
+  const inBounds = (cx, cy) => cx >= 0 && cy >= 0 && cx < GRID.w && cy < GRID.h;
+  const isTerrain = (cx, cy) => terrain.has(idx(cx, cy));
+  const isGlaze = (cx, cy) => glaze.has(idx(cx, cy));
+  const isBlock = (cx, cy) => state.blocks.has(idx(cx, cy));
+  const isPainted = (cx, cy) => state.painted.has(idx(cx, cy));
+  const isSolid = (cx, cy) =>
+    inBounds(cx, cy) && (isTerrain(cx, cy) || isBlock(cx, cy) || isPainted(cx, cy));
+
+  // The rule that makes drawing into building. Diagonals count, so a staircase
+  // can be drawn as a staircase rather than as an L at every step.
+  function touchesSomething(cx, cy) {
+    for (let dx = -1; dx <= 1; dx += 1) {
+      for (let dy = -1; dy <= 1; dy += 1) {
+        if (dx === 0 && dy === 0) continue;
+        if (isSolid(cx + dx, cy + dy)) return true;
+      }
+    }
     return false;
   }
 
-  const isSolid = (region) => Boolean(region?.kind === KIND.ROUTE && region.painted);
-  const isBlocking = (region) =>
-    Boolean(
-      (region?.kind === KIND.SEAL && !region.washed) ||
-        (region?.kind === KIND.BLOT && region.inked),
-    );
-
-  // Ink released by a wash travels its channel and settles — or does not.
-  // This is the whole chapter in one function.
-  function deliver(targetId, fromId) {
-    const target = byId(targetId);
-    if (!target) return;
-
-    if (target.kind === KIND.SUMP) {
-      emit('ink-drained', { at: target.id, from: fromId });
-      return;
-    }
-
-    if (target.kind === KIND.ROUTE) {
-      // Ink crossing a made bridge takes the bridge with it, then keeps
-      // falling — the hole underneath is open again either way.
-      if (target.painted) {
-        target.painted = false;
-        target.progress = 0;
-        emit('route-dissolved', { id: target.id, by: fromId });
-      }
-      emit('ink-drained', { at: target.id, from: fromId });
-      return;
-    }
-
-    if (target.kind === KIND.BLOT) {
-      if (target.inked) {
-        // Two lots of ink in one basin is still one blot. Never a dead end.
-        emit('ink-merged', { at: target.id, from: fromId });
-        return;
-      }
-      target.inked = true;
-      target.progress = 0;
-      emit('blot-formed', { id: target.id, from: fromId });
-    }
+  function paintRefusal(cx, cy) {
+    if (!inBounds(cx, cy)) return 'off-sheet';
+    if (isGlaze(cx, cy)) return 'varnished';
+    if (isSolid(cx, cy)) return 'already-solid';
+    if (!touchesSomething(cx, cy)) return 'nothing-to-hold-it';
+    if (state.painted.size >= MAX_PAINTED) return 'sheet-full';
+    return null;
   }
 
-  // Larger than the art rectangle so the player can use the tools naturally on
-  // a broad route or a tall barrier. The closest matching target wins where
-  // their generous reach areas overlap.
-  function regionAt(x, y, pad = 28) {
-    let closest = null;
-    let closestDistance = Infinity;
-    state.regions.forEach((region) => {
-      if (!isLive(region)) return;
-      const distance = distanceToRect(x, y, region);
-      if (distance > pad || distance >= closestDistance) return;
-      closest = region;
-      closestDistance = distance;
-    });
-    return closest;
-  }
+  const canPaint = (cx, cy) => paintRefusal(cx, cy) === null;
 
-  function act(regionId, action, seconds) {
-    const region = byId(regionId);
-    if (!isLive(region)) return 0;
-    if (region.action !== action) {
-      emit('wrong-tool', { id: region.id, expected: region.action, used: action });
-      return 0;
+  function paint(cx, cy) {
+    const refusal = paintRefusal(cx, cy);
+    if (refusal) {
+      emit('paint-refused', { cx, cy, reason: refusal });
+      return false;
     }
-
-    const amount = Math.max(0, Number(seconds) || 0);
-    if (amount <= 0) return 0;
-    region.progress = Math.min(1, region.progress + amount / ACTION_HOLD_SECONDS);
-    if (region.progress < 1) return amount;
-
-    if (region.kind === KIND.ROUTE) {
-      region.painted = true;
-      emit('route-painted', { id: region.id });
-      return amount;
-    }
-
-    // Both seals and blots are ink held in place. Washing either one releases
-    // it down that mark's own channel.
-    if (region.kind === KIND.SEAL) region.washed = true;
-    else region.inked = false;
-    region.progress = 0;
-    emit(region.kind === KIND.SEAL ? 'seal-washed' : 'blot-washed', { id: region.id });
-    if (region.drainsTo) deliver(region.drainsTo, region.id);
-    return amount;
-  }
-
-  function enterExit() {
-    // Standing at the coupling is proof enough: the only way here is across a
-    // bridge the player made.
-    if (state.complete) return false;
-    state.complete = true;
-    emit('car-complete');
+    state.painted.add(idx(cx, cy));
+    emit('painted', { cx, cy });
     return true;
+  }
+
+  // A wash takes back the player's own paint, and eats paper blocks. It can
+  // never remove the carriage itself — the floor is not the player's to undo.
+  const canWash = (cx, cy) => inBounds(cx, cy) && (isPainted(cx, cy) || isBlock(cx, cy));
+
+  function wash(cx, cy) {
+    if (!inBounds(cx, cy)) return false;
+    const key = idx(cx, cy);
+    if (state.painted.delete(key)) {
+      emit('unpainted', { cx, cy });
+      return true;
+    }
+    if (state.blocks.delete(key)) {
+      emit('block-washed', { cx, cy });
+      return true;
+    }
+    if (isTerrain(cx, cy)) emit('wash-refused', { cx, cy, reason: 'that-is-the-carriage' });
+    return false;
+  }
+
+  // Reading a picture is simply getting your face near it, which is only
+  // possible on something the player built.
+  function look(playerX, playerY) {
+    PAINTINGS.forEach((picture) => {
+      if (state.seen.has(picture.id)) return;
+      const cx = picture.x + picture.w / 2;
+      const cy = picture.y + picture.h / 2;
+      if (Math.hypot(playerX - cx, playerY - cy) > READ_RADIUS) return;
+      state.seen.add(picture.id);
+      emit('picture-read', { id: picture.id, signs: picture.signs });
+    });
+  }
+
+  const allSeen = () => state.seen.size === PAINTINGS.length;
+
+  // ------------------------------------------------------- the thread board
+  BOARD.pairs.forEach((pair) => {
+    state.board.cords[pair.id] = [];
+  });
+
+  const inBoard = (c, r) => c >= 0 && r >= 0 && c < BOARD.cols && r < BOARD.rows;
+  const isTorn = (c, r) => BOARD.torn.some(([tc, tr]) => tc === c && tr === r);
+  const endpointAt = (c, r) => {
+    const pair = BOARD.pairs.find(
+      (p) => (p.a[0] === c && p.a[1] === r) || (p.b[0] === c && p.b[1] === r),
+    );
+    return pair ? pair.id : null;
+  };
+  const cordCovering = (c, r) =>
+    BOARD.pairs.find((p) => state.board.cords[p.id].some(([cc, rr]) => cc === c && rr === r))?.id ??
+    null;
+
+  const cordComplete = (pairId) => {
+    const pair = BOARD.pairs.find((p) => p.id === pairId);
+    const cord = state.board.cords[pairId];
+    if (!pair || cord.length < 2) return false;
+    const [sc, sr] = cord[0];
+    const [ec, er] = cord[cord.length - 1];
+    const isA = sc === pair.a[0] && sr === pair.a[1];
+    const isB = ec === pair.b[0] && er === pair.b[1];
+    const isBA = sc === pair.b[0] && sr === pair.b[1] && ec === pair.a[0] && er === pair.a[1];
+    return (isA && isB) || isBA;
+  };
+
+  const boardSolved = () => BOARD.pairs.every((p) => cordComplete(p.id));
+
+  // Begin a cord. Grabbing either end of a pair starts that pair again from
+  // scratch, so a tangle is undone by simply redrawing it.
+  function boardBegin(c, r) {
+    if (!inBoard(c, r)) return null;
+    const pairId = endpointAt(c, r);
+    if (!pairId) return null;
+    state.board.cords[pairId] = [[c, r]];
+    state.board.drawing = pairId;
+    emit('cord-started', { pair: pairId });
+    return pairId;
+  }
+
+  function boardExtend(c, r) {
+    const pairId = state.board.drawing;
+    if (!pairId || !inBoard(c, r) || isTorn(c, r)) return false;
+    const cord = state.board.cords[pairId];
+    const [lc, lr] = cord[cord.length - 1];
+    if (lc === c && lr === r) return false;
+
+    // Dragging back over yourself shortens the cord — the natural way to fix a
+    // wrong turn without starting over.
+    if (cord.length >= 2) {
+      const [pc, pr] = cord[cord.length - 2];
+      if (pc === c && pr === r) {
+        cord.pop();
+        return true;
+      }
+    }
+    if (Math.abs(c - lc) + Math.abs(r - lr) !== 1) return false;
+
+    const occupant = cordCovering(c, r);
+    if (occupant) {
+      if (occupant !== pairId) emit('cord-blocked', { pair: pairId, by: occupant });
+      return false;
+    }
+    const endpoint = endpointAt(c, r);
+    if (endpoint && endpoint !== pairId) {
+      emit('cord-blocked', { pair: pairId, by: endpoint });
+      return false;
+    }
+
+    cord.push([c, r]);
+    if (cordComplete(pairId)) {
+      state.board.drawing = null;
+      emit('cord-joined', { pair: pairId });
+      if (boardSolved()) emit('board-solved');
+    }
+    return true;
+  }
+
+  // Letting go part-way leaves nothing behind: a half-drawn cord would only sit
+  // in the way of the next attempt.
+  function boardRelease() {
+    const pairId = state.board.drawing;
+    state.board.drawing = null;
+    if (!pairId) return;
+    if (!cordComplete(pairId)) state.board.cords[pairId] = [];
+  }
+
+  function boardClearAt(c, r) {
+    const pairId = cordCovering(c, r);
+    if (!pairId) return false;
+    state.board.cords[pairId] = [];
+    emit('cord-pulled', { pair: pairId });
+    return true;
+  }
+
+  // The door will not answer a player who has not looked at the pictures. That
+  // is the difference between solving it and guessing it one sign in four.
+  function chooseSign(sign) {
+    if (state.door.solved) return { ok: true, reason: 'already-open' };
+    // The board is a shutter over the signs: until it is threaded there is
+    // physically nothing to press.
+    if (!boardSolved()) {
+      emit('door-dark');
+      return { ok: false, reason: 'board-not-threaded' };
+    }
+    if (!allSeen()) {
+      emit('door-silent', { seen: state.seen.size, of: PAINTINGS.length });
+      return { ok: false, reason: 'not-all-pictures-read' };
+    }
+    state.door.chosen = sign;
+    if (sign === DOOR.correct) {
+      state.door.solved = true;
+      state.complete = true;
+      emit('door-opened', { sign });
+      return { ok: true, reason: 'correct' };
+    }
+    state.door.wrongTries += 1;
+    emit('door-refused', { sign, tries: state.door.wrongTries });
+    return { ok: false, reason: 'wrong-sign' };
   }
 
   return {
     state,
-    byId,
-    isLive: (id) => isLive(byId(id)),
-    regionAt,
-    paint: (id, seconds) => act(id, ACTION.PAINT, seconds),
-    wash: (id, seconds) => act(id, ACTION.WASH, seconds),
-    act,
-    isSolid: (id) => isSolid(byId(id)),
-    isBlocking: (id) => isBlocking(byId(id)),
-    enterExit,
+    inBounds,
+    isTerrain,
+    isGlaze,
+    isBlock,
+    isPainted,
+    isSolid,
+    canPaint,
+    canWash,
+    paintRefusal,
+    paint,
+    wash,
+    look,
+    allSeen,
+    chooseSign,
+    inBoard,
+    isTorn,
+    endpointAt,
+    cordCovering,
+    cordComplete,
+    boardSolved,
+    boardBegin,
+    boardExtend,
+    boardRelease,
+    boardClearAt,
+    // Which signs the player has actually seen, so the HUD can show the
+    // evidence without ever showing the answer.
+    signsSeen() {
+      const tally = {};
+      PAINTINGS.filter((p) => state.seen.has(p.id)).forEach((p) =>
+        p.signs.forEach((s) => {
+          tally[s] = (tally[s] || 0) + 1;
+        }),
+      );
+      return tally;
+    },
     fell() {
       state.falls += 1;
       emit('fell', { falls: state.falls });
@@ -340,22 +335,19 @@ export function createPaintedCar() {
     snapshot() {
       return {
         paintSupply: state.paintSupply,
+        painted: state.painted.size,
+        blocksLeft: state.blocks.size,
+        picturesRead: PAINTINGS.map((p) => p.id).filter((id) => state.seen.has(id)),
+        allPicturesRead: allSeen(),
+        signsSeen: this.signsSeen(),
+        board: {
+          solved: boardSolved(),
+          joined: BOARD.pairs.filter((p) => cordComplete(p.id)).map((p) => p.id),
+          drawing: state.board.drawing,
+        },
+        door: { ...state.door },
         complete: state.complete,
         falls: state.falls,
-        regions: state.regions.map((region) => ({
-          id: region.id,
-          bay: region.bay,
-          kind: region.kind,
-          action: region.action ?? null,
-          drainsTo: region.drainsTo ?? null,
-          washed: region.washed,
-          painted: region.painted,
-          inked: region.inked,
-          live: isLive(region),
-          progress: Number(region.progress.toFixed(2)),
-          solid: isSolid(region),
-          blocking: isBlocking(region),
-        })),
       };
     },
   };

@@ -81,13 +81,48 @@ that owns no rules, full `render_game_to_text()` coverage, and a row in
 `STANDALONE_SLICES` so the dev chapter select can reach it.
 
 This does not become `READY` until George accepts or amends the design lock.
-## BUILT — AWAITING GEORGE'S CALL — Chapter 4 `THE PAINTED COUNTRY` ink-displacement puzzle
+## READY — Chapter 4 `THE PAINTED COUNTRY` archive gallery and moon handle
 
-Status: `BUILT, VERIFIED, AWAITING A DIFFICULTY CALL` — 2026-08-11
+Status: `BUILT AND VERIFIED` — 2026-08-12
 
 Owner: `Claude Code` (designed and implemented directly at George's request; this
 is a deliberate step outside the usual product-lead-writes-the-task loop, taken
 because he asked for the change itself rather than for a task to hand to Codex)
+
+## Product decision (2026-08-12)
+
+Keep the built ink-displacement route puzzle as the traversal spine, but add a
+haunted investigation layer rather than another repeated bridge. Three wall
+archives, one in each bay, begin obscured by washable ink. A short WASH removes
+the whole cover and reveals the supplied image on the wall. The player presses
+`E` at a revealed archive to see the full image and a compact, vague horror
+fragment: people built, worshipped, and researched the same presence.
+
+All three archives must be viewed before the final coupling handle accepts an
+answer. `E` at the handle opens a five-icon choice using
+`public/assets/chapter04/icons/`. The **Moon** is the correct icon. It completes
+the car and opens the next-car handoff; every other choice kills the player and
+restarts this standalone car. This death/restart explicitly supersedes the prior
+rule that every Chapter 4 mistake must be undoable.
+
+## Acceptance criteria
+
+1. Each supplied gallery image is visibly installed in a framed wall archive,
+   fully revealed only after its washable ink cover is cleared.
+2. `E` on a revealed archive opens the full image plus a distinct, terse horror
+   fragment about building, worshipping, or researching.
+3. The handle is locked until all three archives have been viewed, with a clear
+   local reason rather than a silent refusal.
+4. The handle popup shows all five supplied icons. Moon completes; each other
+   icon visibly kills then restarts the level.
+5. Archive reveal/view state, handle state, death and completion agree with
+   `window.render_game_to_text()` and deterministic model tests.
+
+---
+
+## Superseded built task — Chapter 4 ink-displacement puzzle
+
+Status: `BUILT, VERIFIED, AND RETAINED AS THE TRAVERSAL SPINE` — 2026-08-11
 
 ## Product decision (2026-08-11, second decision of the day)
 
