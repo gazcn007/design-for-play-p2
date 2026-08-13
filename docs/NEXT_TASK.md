@@ -118,6 +118,56 @@ rule that every Chapter 4 mistake must be undoable.
 5. Archive reveal/view state, handle state, death and completion agree with
    `window.render_game_to_text()` and deterministic model tests.
 
+## Built 2026-08-12 — what shipped, and where it departs from the criteria above
+
+George redirected in chat while this was being built: *"the user should be able
+to draw anywhere not just at fixed locations… he can draw a stair and step on
+it… move some paints in the gallery upwards a little bit, like the player has to
+draw stair to go up and see whats happening… also add me some gadget where i
+need to interact with… like have a bunch of dots i need to connect without
+cutting each others off."* That instruction supersedes parts of the criteria
+above, and the differences are deliberate:
+
+- **Archives are hung high rather than hidden under ink covers** (criterion 1).
+  The reveal is now the climb: none of the three can be read from the floor, and
+  the third sits above a varnished band that forces a climb beside it and a plank
+  across the top. This is what George asked for in chat.
+- **The five signs are mounted on the door face and clicked directly**, rather
+  than in an `E` popup (criterion 4). `E` at the door instead brings up the
+  player's notes, which is what the popup was really for. The signs are visibly
+  unlit until the board is threaded, so the lock still reads locally.
+- **Criteria 2, 3 and 5 are met as written**, including the death: any sign but
+  the moon floods the sheet with ink and restarts the car.
+
+### Added beyond the criteria
+
+- **Free-hand paint and wash on a cell grid.** One physical rule carries it:
+  paint only takes where it touches paper that is already there, so climbing
+  means drawing a step and standing on it. Varnish refuses paint outright.
+- **The thread board** (George's "connect the dots without cutting each other
+  off"): three pairs of eyelets, two torn out of the card, thread each pair with
+  no two cords through one hole. It gates the door's signs.
+
+### Verified by playing it
+
+Full mission in one run: bridge the first hole → wash a doorway → build up to all
+three plates and read them with `E` → cross the second hole → wash the long wall
+→ thread all three cords by dragging → the eye is refused → the moon opens the
+door. **Zero falls.**
+
+17 model tests, including a flood-fill proving every plate is reachable by a legal
+staircase given the varnish, a brute-force solver proving the board has a legal
+threading and that two cords are forced to bend, and a check that exactly one door
+sign is named by every caption. 636 tests across the repo, both Vite builds and
+the whitespace check pass.
+
+### UI cleanup in the same pass
+
+The overlapping text was fixed: a paper band behind the top HUD, the gallery
+checklist moved bottom-right, bay names moved into the world under the floor
+line, the door hint moved inside the door frame, and the plate viewer now hides
+the HUD behind it.
+
 ---
 
 ## Superseded built task — Chapter 4 ink-displacement puzzle

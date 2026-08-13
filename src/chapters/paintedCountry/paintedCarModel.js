@@ -25,7 +25,7 @@
 
 import {
   BLOCK_RECTS,
-  BOARD,
+  BOARDS,
   CELL,
   DOOR,
   FLOOR_ROW,
@@ -77,12 +77,31 @@ export function createPaintedCar() {
     seen: new Set(),
     // Kept explicit so text QA can prove this is not secretly a resource game.
     paintSupply: 'infinite',
-    board: { cords: {}, drawing: null },
+    boards: Object.fromEntries(
+      PAINTINGS.map((picture) => {
+        const board = BOARDS.find((candidate) => candidate.id === picture.board) ?? BOARDS[0];
+        return [
+          picture.id,
+          {
+            cords: Object.fromEntries(board.pairs.map((pair) => [pair.id, []])),
+            drawing: null,
+          },
+        ];
+      }),
+    ),
     door: { chosen: null, solved: false, wrongTries: 0 },
     complete: false,
+    // The one place in this car where a mistake costs something. Recorded as a
+    // deliberate supersede of the "every mistake is undoable" rule: the door is
+    // the only beat the player is asked to *commit* to.
+    killed: false,
     falls: 0,
     events: [],
   };
+
+  // `state.board` remains an alias for the first, easiest card so older
+  // focused tests and tooling can still inspect the original board.
+  state.board = state.boards[PAINTINGS[0].id];
 
   const emit = (type, payload = {}) => state.events.push({ type, ...payload });
 
@@ -147,41 +166,85 @@ export function createPaintedCar() {
     return false;
   }
 
-  // Reading a picture is simply getting your face near it, which is only
-  // possible on something the player built.
-  function look(playerX, playerY) {
-    PAINTINGS.forEach((picture) => {
-      if (state.seen.has(picture.id)) return;
-      const cx = picture.x + picture.w / 2;
-      const cy = picture.y + picture.h / 2;
-      if (Math.hypot(playerX - cx, playerY - cy) > READ_RADIUS) return;
-      state.seen.add(picture.id);
-      emit('picture-read', { id: picture.id, signs: picture.signs });
-    });
+  // Getting close enough to a plate to take it off the wall and look at it,
+  // which is only possible standing on something the player built.
+  function pictureInRange(playerX, playerY) {
+    return (
+      PAINTINGS.find((picture) => {
+        const cx = picture.x + picture.w / 2;
+        const cy = picture.y + picture.h / 2;
+        return Math.hypot(playerX - cx, playerY - cy) <= READ_RADIUS;
+      }) ?? null
+    );
+  }
+
+  function readPicture(id) {
+    const picture = PAINTINGS.find((p) => p.id === id);
+    if (!picture) return false;
+    if (!boardSolved(picture.id)) {
+      emit('picture-locked', { id: picture.id });
+      return false;
+    }
+    if (!state.seen.has(id)) {
+      state.seen.add(id);
+      emit('picture-read', { id });
+    }
+    return true;
   }
 
   const allSeen = () => state.seen.size === PAINTINGS.length;
 
-  // ------------------------------------------------------- the thread board
-  BOARD.pairs.forEach((pair) => {
-    state.board.cords[pair.id] = [];
-  });
+  // ------------------------------------------------------- the color-link boards
+  const pictureForBoard = (value) =>
+    PAINTINGS.find((picture) => picture.id === value || picture.board === value) ?? PAINTINGS[0];
+  const boardForPicture = (pictureId) => {
+    const picture = pictureForBoard(pictureId);
+    return BOARDS.find((board) => board.id === picture.board) ?? BOARDS[0];
+  };
+  const boardStateFor = (pictureId) => state.boards[pictureForBoard(pictureId).id];
 
-  const inBoard = (c, r) => c >= 0 && r >= 0 && c < BOARD.cols && r < BOARD.rows;
-  const isTorn = (c, r) => BOARD.torn.some(([tc, tr]) => tc === c && tr === r);
-  const endpointAt = (c, r) => {
-    const pair = BOARD.pairs.find(
-      (p) => (p.a[0] === c && p.a[1] === r) || (p.b[0] === c && p.b[1] === r),
+  // The optional picture id keeps the original two-number API working for the
+  // first card while allowing the scene to route input to any archive.
+  const boardCall = (pictureIdOrC, maybeC, maybeR) =>
+    typeof pictureIdOrC === 'string'
+      ? { pictureId: pictureForBoard(pictureIdOrC).id, c: maybeC, r: maybeR }
+      : { pictureId: PAINTINGS[0].id, c: pictureIdOrC, r: maybeC };
+
+  const inBoard = (pictureIdOrC, maybeC, maybeR) => {
+    const { pictureId, c, r } = boardCall(pictureIdOrC, maybeC, maybeR);
+    const board = boardForPicture(pictureId);
+    return c >= 0 && r >= 0 && c < board.cols && r < board.rows;
+  };
+  const isTorn = (pictureIdOrC, maybeC, maybeR) => {
+    const { pictureId, c, r } = boardCall(pictureIdOrC, maybeC, maybeR);
+    return boardForPicture(pictureId).torn.some(([tc, tr]) => tc === c && tr === r);
+  };
+  const endpointAt = (pictureIdOrC, maybeC, maybeR) => {
+    const { pictureId, c, r } = boardCall(pictureIdOrC, maybeC, maybeR);
+    const pair = boardForPicture(pictureId).pairs.find(
+      (candidate) =>
+        (candidate.a[0] === c && candidate.a[1] === r) ||
+        (candidate.b[0] === c && candidate.b[1] === r),
     );
     return pair ? pair.id : null;
   };
-  const cordCovering = (c, r) =>
-    BOARD.pairs.find((p) => state.board.cords[p.id].some(([cc, rr]) => cc === c && rr === r))?.id ??
-    null;
+  const cordCovering = (pictureIdOrC, maybeC, maybeR) => {
+    const { pictureId, c, r } = boardCall(pictureIdOrC, maybeC, maybeR);
+    const current = boardStateFor(pictureId);
+    return (
+      boardForPicture(pictureId).pairs.find((pair) =>
+        current.cords[pair.id].some(([cc, rr]) => cc === c && rr === r),
+      )?.id ?? null
+    );
+  };
 
-  const cordComplete = (pairId) => {
-    const pair = BOARD.pairs.find((p) => p.id === pairId);
-    const cord = state.board.cords[pairId];
+  const cordComplete = (pictureIdOrPairId, maybePairId) => {
+    const pictureId = maybePairId === undefined ? PAINTINGS[0].id : pictureForBoard(pictureIdOrPairId).id;
+    const pairId = maybePairId === undefined ? pictureIdOrPairId : maybePairId;
+    const board = boardForPicture(pictureId);
+    const current = boardStateFor(pictureId);
+    const pair = board.pairs.find((candidate) => candidate.id === pairId);
+    const cord = current.cords[pairId];
     if (!pair || cord.length < 2) return false;
     const [sc, sr] = cord[0];
     const [ec, er] = cord[cord.length - 1];
@@ -191,24 +254,33 @@ export function createPaintedCar() {
     return (isA && isB) || isBA;
   };
 
-  const boardSolved = () => BOARD.pairs.every((p) => cordComplete(p.id));
+  const boardSolved = (pictureId = PAINTINGS[0].id) => {
+    const id = pictureForBoard(pictureId).id;
+    return boardForPicture(id).pairs.every((pair) => cordComplete(id, pair.id));
+  };
+  const boardsSolved = () => PAINTINGS.every((picture) => boardSolved(picture.id));
 
   // Begin a cord. Grabbing either end of a pair starts that pair again from
   // scratch, so a tangle is undone by simply redrawing it.
-  function boardBegin(c, r) {
-    if (!inBoard(c, r)) return null;
-    const pairId = endpointAt(c, r);
+  function boardBegin(pictureIdOrC, maybeC, maybeR) {
+    const { pictureId, c, r } = boardCall(pictureIdOrC, maybeC, maybeR);
+    if (!inBoard(pictureId, c, r)) return null;
+    const pairId = endpointAt(pictureId, c, r);
     if (!pairId) return null;
-    state.board.cords[pairId] = [[c, r]];
-    state.board.drawing = pairId;
-    emit('cord-started', { pair: pairId });
+    const current = boardStateFor(pictureId);
+    current.cords[pairId] = [[c, r]];
+    current.drawing = pairId;
+    emit('cord-started', { pictureId, pair: pairId });
     return pairId;
   }
 
-  function boardExtend(c, r) {
-    const pairId = state.board.drawing;
-    if (!pairId || !inBoard(c, r) || isTorn(c, r)) return false;
-    const cord = state.board.cords[pairId];
+  function boardExtend(pictureIdOrC, maybeC, maybeR) {
+    const { pictureId, c, r } = boardCall(pictureIdOrC, maybeC, maybeR);
+    const current = boardStateFor(pictureId);
+    const board = boardForPicture(pictureId);
+    const pairId = current.drawing;
+    if (!pairId || !inBoard(pictureId, c, r) || isTorn(pictureId, c, r)) return false;
+    const cord = current.cords[pairId];
     const [lc, lr] = cord[cord.length - 1];
     if (lc === c && lr === r) return false;
 
@@ -223,40 +295,43 @@ export function createPaintedCar() {
     }
     if (Math.abs(c - lc) + Math.abs(r - lr) !== 1) return false;
 
-    const occupant = cordCovering(c, r);
+    const occupant = cordCovering(pictureId, c, r);
     if (occupant) {
       if (occupant !== pairId) emit('cord-blocked', { pair: pairId, by: occupant });
       return false;
     }
-    const endpoint = endpointAt(c, r);
+    const endpoint = endpointAt(pictureId, c, r);
     if (endpoint && endpoint !== pairId) {
       emit('cord-blocked', { pair: pairId, by: endpoint });
       return false;
     }
 
     cord.push([c, r]);
-    if (cordComplete(pairId)) {
-      state.board.drawing = null;
-      emit('cord-joined', { pair: pairId });
-      if (boardSolved()) emit('board-solved');
+    if (cordComplete(pictureId, pairId)) {
+      current.drawing = null;
+      emit('cord-joined', { pictureId, pair: pairId });
+      if (boardSolved(pictureId)) emit('board-solved', { pictureId, board: board.id });
     }
     return true;
   }
 
   // Letting go part-way leaves nothing behind: a half-drawn cord would only sit
   // in the way of the next attempt.
-  function boardRelease() {
-    const pairId = state.board.drawing;
-    state.board.drawing = null;
+  function boardRelease(pictureId = PAINTINGS[0].id) {
+    const id = pictureForBoard(pictureId).id;
+    const current = boardStateFor(id);
+    const pairId = current.drawing;
+    current.drawing = null;
     if (!pairId) return;
-    if (!cordComplete(pairId)) state.board.cords[pairId] = [];
+    if (!cordComplete(id, pairId)) current.cords[pairId] = [];
   }
 
-  function boardClearAt(c, r) {
-    const pairId = cordCovering(c, r);
+  function boardClearAt(pictureIdOrC, maybeC, maybeR) {
+    const { pictureId, c, r } = boardCall(pictureIdOrC, maybeC, maybeR);
+    const pairId = cordCovering(pictureId, c, r);
     if (!pairId) return false;
-    state.board.cords[pairId] = [];
-    emit('cord-pulled', { pair: pairId });
+    boardStateFor(pictureId).cords[pairId] = [];
+    emit('cord-pulled', { pictureId, pair: pairId });
     return true;
   }
 
@@ -266,7 +341,7 @@ export function createPaintedCar() {
     if (state.door.solved) return { ok: true, reason: 'already-open' };
     // The board is a shutter over the signs: until it is threaded there is
     // physically nothing to press.
-    if (!boardSolved()) {
+    if (!boardsSolved()) {
       emit('door-dark');
       return { ok: false, reason: 'board-not-threaded' };
     }
@@ -282,7 +357,8 @@ export function createPaintedCar() {
       return { ok: true, reason: 'correct' };
     }
     state.door.wrongTries += 1;
-    emit('door-refused', { sign, tries: state.door.wrongTries });
+    state.killed = true;
+    emit('door-killed', { sign, tries: state.door.wrongTries });
     return { ok: false, reason: 'wrong-sign' };
   }
 
@@ -299,7 +375,9 @@ export function createPaintedCar() {
     paintRefusal,
     paint,
     wash,
-    look,
+    pictureInRange,
+    readPicture,
+    picturesRead: () => PAINTINGS.filter((p) => state.seen.has(p.id)),
     allSeen,
     chooseSign,
     inBoard,
@@ -312,17 +390,9 @@ export function createPaintedCar() {
     boardExtend,
     boardRelease,
     boardClearAt,
-    // Which signs the player has actually seen, so the HUD can show the
-    // evidence without ever showing the answer.
-    signsSeen() {
-      const tally = {};
-      PAINTINGS.filter((p) => state.seen.has(p.id)).forEach((p) =>
-        p.signs.forEach((s) => {
-          tally[s] = (tally[s] || 0) + 1;
-        }),
-      );
-      return tally;
-    },
+    boardSpec: (pictureId) => boardForPicture(pictureId),
+    boardState: (pictureId) => boardStateFor(pictureId),
+    boardsSolved,
     fell() {
       state.falls += 1;
       emit('fell', { falls: state.falls });
@@ -339,14 +409,26 @@ export function createPaintedCar() {
         blocksLeft: state.blocks.size,
         picturesRead: PAINTINGS.map((p) => p.id).filter((id) => state.seen.has(id)),
         allPicturesRead: allSeen(),
-        signsSeen: this.signsSeen(),
+        boards: Object.fromEntries(
+          PAINTINGS.map((picture) => [
+            picture.id,
+            {
+              solved: boardSolved(picture.id),
+              joined: boardForPicture(picture.id).pairs
+                .filter((pair) => cordComplete(picture.id, pair.id))
+                .map((pair) => pair.id),
+              drawing: boardStateFor(picture.id).drawing,
+            },
+          ]),
+        ),
         board: {
-          solved: boardSolved(),
-          joined: BOARD.pairs.filter((p) => cordComplete(p.id)).map((p) => p.id),
+          solved: boardSolved(PAINTINGS[0].id),
+          joined: BOARDS[0].pairs.filter((p) => cordComplete(PAINTINGS[0].id, p.id)).map((p) => p.id),
           drawing: state.board.drawing,
         },
         door: { ...state.door },
         complete: state.complete,
+        killed: state.killed,
         falls: state.falls,
       };
     },

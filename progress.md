@@ -14,6 +14,22 @@ Original prompt: 你把管线搭一下但是跟玩法有关的先不用管 因�
 - 2026-07-28: `assets:check`, production build, and dependency audit pass. Visually inspected Tutorial, Medieval, Final Choice, and the shared Cyberpunk asset with no seams or browser console errors. The bundled standalone Playwright client could not resolve its own Playwright package, so browser-backed local QA was used instead.
 - 2026-07-28: Re-ran the full pre-push gate against the latest remote `main`: asset verification, production build, dependency audit, whitespace validation, and fresh browser checks of worlds 1, 5, 8, and 11 all passed with no console warnings or errors.
 
+## Painted Country archive color-link pass
+
+- 2026-08-13: Repaired the standalone page boot failure caused by the incomplete
+  `BOARD` → `BOARDS` gallery refactor. Each of the three supplied archive images
+  now owns a color-link card: the original three-pair card is first and easiest,
+  followed by the six-pair and seven-pair cards.
+- Pressing `E` at a gallery image opens a viewer with a sealed blank archive and
+  its color-link card. Only after solving that card does the artwork render at
+  about 490×276 inside the 960×600 game view, so the image signs remain readable
+  beside the active card. Solving a card develops that archive and unlocks its
+  caption; the door now requires all three cards and archives.
+- Focused Painted Country model tests pass 17/17. Fresh browser QA shows a
+  clean default boot and interactive archive-1 card completion, plus readable
+  archive-2 and archive-3 layouts. `npm run assets:check`, production build,
+  and whitespace validation pass.
+
 ## TODO
 
 ## Chapter 6 pairwise world-fusion slice

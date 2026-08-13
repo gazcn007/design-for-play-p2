@@ -9,6 +9,7 @@ import {
   BOARD,
   CELL,
   DOOR,
+  SIGN_ART,
   FLOOR_ROW,
   GRID,
   PAINTINGS,
@@ -116,7 +117,10 @@ test('not one picture can be read from the floor', () => {
       `${picture.id} can be read without building anything`,
     );
   });
-  car.look(PAINTINGS[0].x, FLOOR_ROW * CELL - PLAYER_HALF_HEIGHT);
+  assert.equal(
+    car.pictureInRange(PAINTINGS[0].x + PAINTINGS[0].w / 2, FLOOR_ROW * CELL - PLAYER_HALF_HEIGHT),
+    null,
+  );
   assert.equal(car.state.seen.size, 0);
 });
 
@@ -161,24 +165,41 @@ test('every picture is reachable by building, varnish and all', () => {
   });
 });
 
-test('the puzzle is well posed: exactly one sign is in every picture, and it is the moon', () => {
-  const tally = {};
-  PAINTINGS.forEach((p) => p.signs.forEach((s) => { tally[s] = (tally[s] || 0) + 1; }));
-  const inAll = Object.entries(tally)
-    .filter(([, n]) => n === PAINTINGS.length)
-    .map(([sign]) => sign);
+test('the puzzle is well posed: exactly one door sign is named by every caption', () => {
+  // The clue lives in the captions, so the captions are what has to be
+  // unambiguous. Every archive must end on the same word, and no other sign on
+  // the door may manage that — otherwise the door has two right answers.
+  const namedIn = (sign) =>
+    PAINTINGS.filter((p) => new RegExp(`\\b${sign}\\b`, 'i').test(p.caption)).length;
 
-  assert.deepEqual(inAll, [SIGN.MOON], 'the answer must be unique and deducible');
+  const inEvery = DOOR.panels.map((p) => p.sign).filter((sign) => namedIn(sign) === PAINTINGS.length);
+  assert.deepEqual(inEvery, [SIGN.MOON], 'the answer must be unique and deducible from the text');
   assert.equal(DOOR.correct, SIGN.MOON);
-  // Every sign on the door has to appear somewhere, or it is a giveaway.
-  DOOR.panels.forEach((panel) => {
-    assert.ok(tally[panel.sign] > 0, `${panel.sign} is on the door but in no picture`);
+
+  // Every caption really does finish on the answer, which is what the door's
+  // prompt promises the player.
+  PAINTINGS.forEach((p) => {
+    assert.match(p.caption.trim(), /MOON\.$/, `${p.id} should end on the answer`);
   });
-  // And every wrong sign must be in at least one picture but not all, so the
-  // player has to actually compare rather than spot the odd one out.
-  DOOR.panels
-    .filter((p) => p.sign !== SIGN.MOON)
-    .forEach((panel) => assert.ok(tally[panel.sign] < PAINTINGS.length));
+
+  // The eye is the New Harmony logo and is all over the artwork, so it has to
+  // be on the door as the trap — but must not be named in every caption.
+  assert.ok(
+    DOOR.panels.some((p) => p.sign === SIGN.EYE),
+    'the obvious wrong answer must be offered',
+  );
+  assert.ok(namedIn(SIGN.EYE) > 0 && namedIn(SIGN.EYE) < PAINTINGS.length);
+});
+
+test('every picture has real artwork and a caption behind it', () => {
+  PAINTINGS.forEach((p) => {
+    assert.match(p.file, /^assets\/chapter04\/gallery\/.+\.(jpg|png|webp)$/);
+    assert.ok(p.caption.length > 120, `${p.id} needs a caption worth climbing for`);
+    assert.ok(p.title.length > 0);
+  });
+  DOOR.panels.forEach((panel) => {
+    assert.match(SIGN_ART[panel.sign], /^assets\/chapter04\/icons\/.+\.webp$/);
+  });
 });
 
 // ------------------------------------------------------------- thread board
@@ -191,10 +212,39 @@ const SOLUTION = {
   red: [[0, 4], [1, 4], [2, 4], [3, 4], [4, 4]],
 };
 
-const thread = (car, pairId, cells) => {
-  car.boardBegin(...cells[0]);
-  cells.slice(1).forEach(([c, r]) => car.boardExtend(c, r));
-  car.boardRelease();
+const BOARD_SOLUTIONS = {
+  nave: SOLUTION,
+  field: {
+    amber: [[0, 6], [1, 6], [2, 6], [3, 6], [3, 5]],
+    orange: [[3, 0], [2, 0], [1, 0], [0, 0], [0, 1]],
+    green: [[4, 0], [4, 1], [4, 2], [4, 3], [4, 4], [4, 5], [4, 6]],
+    cyan: [[3, 1], [2, 1], [1, 1], [1, 2], [0, 2]],
+    violet: [[2, 2], [2, 3], [1, 3], [0, 3], [0, 4], [0, 5], [1, 5], [2, 5]],
+    pink: [[3, 2], [3, 3], [3, 4], [2, 4], [1, 4]],
+  },
+  city: {
+    green: [[3, 1], [4, 1], [5, 1], [5, 2], [5, 3]],
+    violet: [[6, 3], [6, 4], [5, 4], [4, 4]],
+    red: [[4, 3], [3, 3], [3, 4], [3, 5], [4, 5], [5, 5], [6, 5], [6, 6], [5, 6], [4, 6]],
+    amber: [[3, 6], [2, 6], [1, 6], [0, 6], [0, 5], [0, 4], [1, 4]],
+    cyan: [[1, 5], [2, 5], [2, 4], [2, 3], [1, 3], [0, 3], [0, 2]],
+    lime: [[1, 2], [2, 2], [2, 1], [1, 1], [0, 1], [0, 0], [1, 0], [2, 0], [3, 0]],
+    blue: [[4, 0], [5, 0], [6, 0], [6, 1], [6, 2]],
+  },
+};
+
+const thread = (car, pictureId, pairId, cells) => {
+  car.boardBegin(pictureId, ...cells[0]);
+  cells.slice(1).forEach(([c, r]) => car.boardExtend(pictureId, c, r));
+  car.boardRelease(pictureId);
+};
+
+const threadBoard = (car, pictureId, solution) => {
+  Object.entries(solution).forEach(([pairId, cells]) => thread(car, pictureId, pairId, cells));
+};
+
+const threadAllBoards = (car) => {
+  PAINTINGS.forEach((picture) => threadBoard(car, picture.id, BOARD_SOLUTIONS[picture.id]));
 };
 
 test('the thread board starts empty and refuses torn eyelets', () => {
@@ -210,18 +260,18 @@ test('the thread board starts empty and refuses torn eyelets', () => {
 
 test('a cord cannot share a hole with another cord, and dragging back undoes it', () => {
   const car = createPaintedCar();
-  thread(car, 'amber', SOLUTION.amber);
+  thread(car, PAINTINGS[0].id, 'amber', SOLUTION.amber);
   assert.equal(car.cordComplete('amber'), true);
 
   // Cyan tries to run through amber's cord.
-  car.boardBegin(0, 2);
-  car.boardExtend(1, 2);
-  car.boardExtend(1, 1); // amber is sitting here
-  assert.equal(car.cordCovering(1, 1), 'amber');
+  car.boardBegin(PAINTINGS[0].id, 0, 2);
+  car.boardExtend(PAINTINGS[0].id, 1, 2);
+  car.boardExtend(PAINTINGS[0].id, 1, 1); // amber is sitting here
+  assert.equal(car.cordCovering(PAINTINGS[0].id, 1, 1), 'amber');
   assert.equal(car.state.board.cords.cyan.length, 2, 'the blocked step was not taken');
 
   // Backtracking shortens rather than restarting.
-  assert.equal(car.boardExtend(0, 2), true);
+  assert.equal(car.boardExtend(PAINTINGS[0].id, 0, 2), true);
   assert.equal(car.state.board.cords.cyan.length, 1);
   car.boardRelease();
   assert.deepEqual(car.state.board.cords.cyan, [], 'a half-drawn cord is not left lying about');
@@ -229,12 +279,12 @@ test('a cord cannot share a hole with another cord, and dragging back undoes it'
 
 test('the intended threading solves the board', () => {
   const car = createPaintedCar();
-  Object.entries(SOLUTION).forEach(([id, cells]) => thread(car, id, cells));
+  threadBoard(car, PAINTINGS[0].id, SOLUTION);
   assert.equal(car.boardSolved(), true);
   assert.deepEqual(car.snapshot().board.joined.sort(), ['amber', 'cyan', 'red']);
 
   // And pulling one cord back out unsolves it.
-  car.boardClearAt(...SOLUTION.cyan[3]);
+  car.boardClearAt(PAINTINGS[0].id, ...SOLUTION.cyan[3]);
   assert.equal(car.boardSolved(), false);
 });
 
@@ -302,8 +352,8 @@ test('the board is solvable, and two of the three cords are forced to bend', () 
 
 test('the door is dark until the board is threaded', () => {
   const car = createPaintedCar();
-  PAINTINGS.forEach((p) => car.look(p.x + p.w / 2, p.y + p.h / 2));
-  assert.equal(car.allSeen(), true);
+  PAINTINGS.forEach((p) => assert.equal(car.readPicture(p.id), false));
+  assert.equal(car.allSeen(), false);
 
   car.drainEvents();
   const answer = car.chooseSign(SIGN.MOON);
@@ -315,28 +365,45 @@ test('the door is dark until the board is threaded', () => {
 
 test('the door stays silent until all three pictures have been read', () => {
   const car = createPaintedCar();
-  Object.entries(SOLUTION).forEach(([id, cells]) => thread(car, id, cells));
+  threadBoard(car, PAINTINGS[0].id, SOLUTION);
   assert.equal(car.boardSolved(), true);
+  assert.equal(car.boardsSolved(), false);
 
   car.drainEvents();
   let answer = car.chooseSign(SIGN.MOON);
+  assert.equal(answer.ok, false);
+  assert.equal(answer.reason, 'board-not-threaded');
+  assert.equal(car.state.complete, false);
+  assert.deepEqual(car.drainEvents().map((e) => e.type), ['door-dark']);
+
+  threadBoard(car, PAINTINGS[1].id, BOARD_SOLUTIONS.field);
+  threadBoard(car, PAINTINGS[2].id, BOARD_SOLUTIONS.city);
+  assert.equal(car.boardsSolved(), true);
+
+  car.drainEvents();
+  answer = car.chooseSign(SIGN.MOON);
   assert.equal(answer.ok, false);
   assert.equal(answer.reason, 'not-all-pictures-read');
   assert.equal(car.state.complete, false);
   assert.deepEqual(car.drainEvents().map((e) => e.type), ['door-silent']);
 
-  // Read them by standing at each one.
-  PAINTINGS.forEach((p) => car.look(p.x + p.w / 2, p.y + p.h / 2));
+  // Read them by standing at each one and taking the plate down.
+  PAINTINGS.forEach((p) => {
+    assert.ok(car.pictureInRange(p.x + p.w / 2, p.y + p.h / 2), `${p.id} should be in range`);
+    car.readPicture(p.id);
+  });
   assert.equal(car.allSeen(), true);
-  assert.deepEqual(car.snapshot().signsSeen, { moon: 3, river: 2, house: 2, star: 2 });
+  assert.deepEqual(car.snapshot().picturesRead, PAINTINGS.map((p) => p.id));
 
-  // A wrong sign is refused and costs nothing.
+  // A wrong sign is the one commitment in the car: it kills and restarts.
   car.drainEvents();
-  answer = car.chooseSign(SIGN.STAR);
+  answer = car.chooseSign(SIGN.EYE);
   assert.equal(answer.ok, false);
+  assert.equal(answer.reason, 'wrong-sign');
   assert.equal(car.state.complete, false);
+  assert.equal(car.state.killed, true, 'the wrong sign must cost the run');
   assert.equal(car.state.door.wrongTries, 1);
-  assert.deepEqual(car.drainEvents().map((e) => e.type), ['door-refused']);
+  assert.deepEqual(car.drainEvents().map((e) => e.type), ['door-killed']);
 
   // The moon opens it.
   answer = car.chooseSign(SIGN.MOON);

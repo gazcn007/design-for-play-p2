@@ -47,32 +47,84 @@ export const BLOCK_RECTS = [
   { col: 110, row: 13, cols: 5, rows: 9 },
 ];
 
-// ------------------------------------------------------------ the thread board
-// The lock on the vestibule. Six eyelets in three pairs, and two eyelets torn
-// clean out of the card. Thread each pair together without two cords sharing a
-// hole — which, with the torn ones where they are, means two of the three cords
-// cannot run straight. It is the same card Mara's cyan thread comes off.
-export const BOARD = {
-  x: 2400,
-  y: 230,
+// ------------------------------------------------------------ the thread boards
+// Each archive has its own color-link card. The first card is the existing
+// three-pair teaching board; the later cards add more pairs and turns. The
+// model owns the rules, while the scene places the active card inside the E
+// viewer beside the image it develops.
+export const BOARDS = [
+  {
+    id: 'board-nave',
+    cols: 5,
+    rows: 5,
+    torn: [[2, 0], [2, 2]],
+    pairs: [
+      { id: 'amber', a: [0, 0], b: [4, 0] },
+      { id: 'cyan', a: [0, 2], b: [4, 2] },
+      { id: 'red', a: [0, 4], b: [4, 4] },
+    ],
+  },
+  {
+    id: 'board-field',
+    cols: 5,
+    rows: 7,
+    torn: [],
+    pairs: [
+      { id: 'amber', a: [0, 6], b: [3, 5] },
+      { id: 'orange', a: [3, 0], b: [0, 1] },
+      { id: 'green', a: [4, 0], b: [4, 6] },
+      { id: 'cyan', a: [3, 1], b: [0, 2] },
+      { id: 'violet', a: [2, 2], b: [2, 5] },
+      { id: 'pink', a: [3, 2], b: [1, 4] },
+    ],
+  },
+  {
+    id: 'board-city',
+    cols: 7,
+    rows: 7,
+    torn: [],
+    // Carved from a single path that covers every hole in the card, then cut
+    // into seven, so it is solvable by construction and every cord has to weave.
+    pairs: [
+      { id: 'green', a: [3, 1], b: [5, 3] },
+      { id: 'violet', a: [6, 3], b: [4, 4] },
+      { id: 'red', a: [4, 3], b: [4, 6] },
+      { id: 'amber', a: [3, 6], b: [1, 4] },
+      { id: 'cyan', a: [1, 5], b: [0, 2] },
+      { id: 'lime', a: [1, 2], b: [3, 0] },
+      { id: 'blue', a: [4, 0], b: [6, 2] },
+    ],
+  },
+];
+
+// Compatibility data for focused tests and old tooling. The first archive's
+// board is intentionally the easiest one.
+export const BOARD = Object.freeze({
+  ...BOARDS[0],
+  x: 0,
+  y: 0,
   w: 192,
   h: 192,
-  cols: 5,
-  rows: 5,
   pad: 28,
   pitch: 34,
-  torn: [[2, 0], [2, 2]],
-  pairs: [
-    { id: 'amber', a: [0, 0], b: [4, 0] },
-    { id: 'cyan', a: [0, 2], b: [4, 2] },
-    { id: 'red', a: [0, 4], b: [4, 4] },
-  ],
-};
-
-export const eyeletAt = (c, r) => ({
-  x: BOARD.x + BOARD.pad + c * BOARD.pitch,
-  y: BOARD.y + BOARD.pad + r * BOARD.pitch,
 });
+
+export const eyeletAt = (c, r, board = BOARD) => ({
+  x: board.x + board.pad + c * board.pitch,
+  y: board.y + board.pad + r * board.pitch,
+});
+
+export const CORD_COLOURS = {
+  amber: 0xc8892f,
+  cyan: 0x2f8c9e,
+  red: 0xb4453a,
+  orange: 0xd4772f,
+  green: 0x4f9d5d,
+  violet: 0x8a5cc4,
+  pink: 0xd06ba8,
+  lime: 0xa8b83c,
+  blue: 0x3f7fc4,
+};
 
 // Varnished paper. Paint slides straight off these cells, so a staircase
 // cannot simply be run up the wall beneath the third picture — the player has
@@ -80,48 +132,83 @@ export const eyeletAt = (c, r) => ({
 // varnished too, so the signs on it can never be painted over.
 export const GLAZE_RECTS = [
   { col: 84, row: 12, cols: 9, rows: 10 },
-  { col: 134, row: 10, cols: 10, rows: 12 },
-  // The thread board's card, so a stray brush stroke can never bury the lock.
-  { col: 119, row: 11, cols: 11, rows: 11 },
+  // The door face, so the signs can never be painted over.
+  { col: 129, row: 8, cols: 15, rows: 14 },
 ];
 
 export const SIGN = Object.freeze({
   MOON: 'moon',
-  RIVER: 'river',
-  STAR: 'star',
-  HOUSE: 'house',
+  EYE: 'eye',
+  HEIR: 'heir',
+  RAPTURE: 'rapture',
+  OEDON: 'oedon',
 });
+
+// The five signs cut into the vestibule door. The eye is the New Harmony logo
+// and is all over every picture in the gallery, which is exactly why it is the
+// wrong answer: the player who only looks will pick it, and the player who
+// reads will not.
+export const SIGN_ART = {
+  [SIGN.MOON]: 'assets/chapter04/icons/Moon.webp',
+  [SIGN.EYE]: 'assets/chapter04/icons/Eye_Tier_3.webp',
+  [SIGN.HEIR]: 'assets/chapter04/icons/Heir.webp',
+  [SIGN.RAPTURE]: 'assets/chapter04/icons/Blood_Rapture.webp',
+  [SIGN.OEDON]: 'assets/chapter04/icons/Formless_Oedon.webp',
+};
 
 // The gallery. Hung high on purpose: the only way to read one is to build up
 // to it. The moon is the only sign in all three, which is the answer the door
 // is asking for.
+// Three pictures of the same institution, three ages apart — which is the whole
+// reason this car is on a train travelling backwards. Each one is hung too high
+// to read from the floor. Standing close enough lets the player press E and see
+// the plate full size with its archive caption underneath, and every caption
+// ends on the same word.
 export const PAINTINGS = [
   {
-    id: 'picture-1',
-    title: 'FIRST NIGHT',
-    x: 1020,
-    y: 250,
-    w: 132,
-    h: 96,
-    signs: [SIGN.MOON, SIGN.RIVER, SIGN.HOUSE],
+    id: 'nave',
+    board: 'board-nave',
+    key: 'plate-nave',
+    file: 'assets/chapter04/gallery/middleage.jpg',
+    title: 'YEAR ONE  ·  THE NAVE',
+    x: 1000,
+    y: 240,
+    w: 200,
+    h: 112,
+    caption:
+      'They pulled out the altar and set the instruments where it had stood, and they cut their eye into every banner in the hall.\n' +
+      'Nothing in the building ever answered them. The only thing that did came through the high window on a clear night, and the ledger for that year enters it under one word:\n' +
+      'MOON.',
   },
   {
-    id: 'picture-2',
-    title: 'THE LONG WINTER',
-    x: 1340,
-    y: 150,
-    w: 132,
-    h: 96,
-    signs: [SIGN.MOON, SIGN.STAR, SIGN.HOUSE],
+    id: 'field',
+    board: 'board-field',
+    key: 'plate-field',
+    file: 'assets/chapter04/gallery/duga.jpg',
+    title: 'YEAR FORTY  ·  THE LISTENING FIELD',
+    x: 1320,
+    y: 148,
+    w: 200,
+    h: 112,
+    caption:
+      'Three hundred metres of aerial pointed at everything, logging every signal that crossed the commune for forty years.\n' +
+      'Exactly one of them came back on schedule, every twenty-nine days. The duty officer was not permitted to write down what he believed it was, so he wrote:\n' +
+      'MOON.',
   },
   {
-    id: 'picture-3',
-    title: 'WHAT SHE KEPT',
-    x: 1700,
-    y: 120,
-    w: 132,
-    h: 96,
-    signs: [SIGN.MOON, SIGN.RIVER, SIGN.STAR],
+    id: 'city',
+    board: 'board-city',
+    key: 'plate-city',
+    file: 'assets/chapter04/gallery/cyberpunk.jpg',
+    title: 'THE LAST CITY',
+    x: 1660,
+    y: 110,
+    w: 200,
+    h: 112,
+    caption:
+      'Ninety storeys of him, with a world held up in each hand. Everyone agreed the right hand was the earth.\n' +
+      'Nobody could agree about the left, so the plaque stayed blank for eleven years — until somebody climbed up in the dark and finished it:\n' +
+      'MOON.',
   },
 ];
 
@@ -132,16 +219,18 @@ export const READ_RADIUS = 100;
 // The vestibule door. Four signs; the player has to work out which one every
 // picture had in it.
 export const DOOR = {
-  x: 2690,
-  y: 220,
-  w: 180,
-  h: 210,
+  x: 2600,
+  y: 186,
+  w: 260,
+  h: 254,
   correct: SIGN.MOON,
+  prompt: 'ALL THREE ARCHIVES END ON\nTHE SAME WORD. PRESS IT.',
   panels: [
-    { sign: SIGN.MOON, x: 2712, y: 250, w: 64, h: 64 },
-    { sign: SIGN.RIVER, x: 2790, y: 250, w: 64, h: 64 },
-    { sign: SIGN.STAR, x: 2712, y: 330, w: 64, h: 64 },
-    { sign: SIGN.HOUSE, x: 2790, y: 330, w: 64, h: 64 },
+    { sign: SIGN.EYE, x: 2626, y: 238, w: 56, h: 56 },
+    { sign: SIGN.MOON, x: 2702, y: 238, w: 56, h: 56 },
+    { sign: SIGN.HEIR, x: 2778, y: 238, w: 56, h: 56 },
+    { sign: SIGN.RAPTURE, x: 2664, y: 318, w: 56, h: 56 },
+    { sign: SIGN.OEDON, x: 2740, y: 318, w: 56, h: 56 },
   ],
 };
 

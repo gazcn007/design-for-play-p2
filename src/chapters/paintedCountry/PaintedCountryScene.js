@@ -1,11 +1,10 @@
 import Phaser from 'phaser';
 import {
   BAY_TITLES,
-  BOARD,
   CEILING_Y,
   CELL,
+  CORD_COLOURS,
   DOOR,
-  eyeletAt,
   FLOOR_ROW,
   FLOOR_SPANS,
   FLOOR_Y,
@@ -18,7 +17,7 @@ import {
   RACK_Y,
   READ_RADIUS,
   REACH,
-  SIGN,
+  SIGN_ART,
   VIEW,
   WAINSCOT_Y,
   WINDOWS,
@@ -70,6 +69,11 @@ export class PaintedCountryScene extends Phaser.Scene {
     super('PaintedCountry');
   }
 
+  preload() {
+    PAINTINGS.forEach((picture) => this.load.image(picture.key, picture.file));
+    Object.entries(SIGN_ART).forEach(([sign, file]) => this.load.image(`sign-${sign}`, file));
+  }
+
   create() {
     this.rnd = makeRandom(0x9a17);
     this.motes = [];
@@ -90,23 +94,26 @@ export class PaintedCountryScene extends Phaser.Scene {
     this.buildGrid();
     this.buildGlaze();
     this.buildGallery();
-    this.buildBoard();
     this.buildDoor();
     this.buildSolids();
     this.buildPlayer();
 
     this.paintLayer = this.graphics(DEPTH.PAINT);
     this.blockLayer = this.graphics(DEPTH.BLOCK);
-    this.cordLayer = this.graphics(DEPTH.CORD);
     this.brushCursor = this.graphics(DEPTH.CURSOR);
     this.doorLayer = this.graphics(DEPTH.DOOR);
 
     this.buildGrain();
     this.buildAir();
     this.buildHud();
+    this.buildViewer();
+    this.applyQaRoute();
 
     this.car.state.blocks.forEach((key) => this.addCellBody(key % GRID.w, Math.floor(key / GRID.w)));
     this.input.mouse?.disableContextMenu();
+    this.input.on('pointerdown', this.handleViewerPointerDown, this);
+    this.input.on('pointermove', this.handleViewerPointerMove, this);
+    this.input.on('pointerup', this.handleViewerPointerUp, this);
 
     this.time.addEvent({
       delay: 1000 / 12,
@@ -117,6 +124,14 @@ export class PaintedCountryScene extends Phaser.Scene {
 
   graphics(depth) {
     return this.add.graphics().setDepth(depth);
+  }
+
+  applyQaRoute() {
+    const qa = new URLSearchParams(window.location.search).get('qa');
+    const match = qa?.match(/^archive-([123])$/);
+    if (!match) return;
+    const picture = PAINTINGS[Number(match[1]) - 1];
+    if (picture) this.openPicture(picture);
   }
 
   // =========================================================== the sheet
@@ -282,35 +297,47 @@ export class PaintedCountryScene extends Phaser.Scene {
     this.pictureLabels = {};
 
     PAINTINGS.forEach((picture) => {
-      // Frame.
-      g.fillStyle(PAPER.sheetHigh, 1);
-      g.fillRect(picture.x, picture.y, picture.w, picture.h);
-      g.lineStyle(2.6, PAPER.graphite, 0.92);
+      const inset = 8;
+      // The plate itself, cropped to sit inside its frame.
+      const plate = this.add
+        .image(picture.x + picture.w / 2, picture.y + picture.h / 2, picture.key)
+        .setDepth(DEPTH.PICTURE)
+        .setDisplaySize(picture.w - inset * 2, picture.h - inset * 2)
+        .setVisible(false);
+      const cover = this.add
+        .rectangle(
+          picture.x + picture.w / 2,
+          picture.y + picture.h / 2,
+          picture.w - inset * 2,
+          picture.h - inset * 2,
+          PAPER.sheetHigh,
+          1,
+        )
+        .setStrokeStyle(1, PAPER.deckle, 0.8)
+        .setDepth(DEPTH.PICTURE + 0.5);
+
+      // Frame over the top of it.
+      g.lineStyle(3, PAPER.graphite, 0.94);
       draftRect(g, this.rnd, picture.x, picture.y, picture.w, picture.h, { overshoot: 5, jitter: 0.6 });
       g.lineStyle(1.2, PAPER.graphiteSoft, 0.7);
-      draftRect(g, this.rnd, picture.x + 7, picture.y + 7, picture.w - 14, picture.h - 14, {
+      draftRect(g, this.rnd, picture.x + inset, picture.y + inset, picture.w - inset * 2, picture.h - inset * 2, {
         overshoot: 2,
         jitter: 0.5,
       });
-      // A dark night ground so the signs read.
-      g.fillStyle(PAPER.indigo, 0.14);
-      g.fillRect(picture.x + 9, picture.y + 9, picture.w - 18, picture.h - 18);
-
-      // The signs, spaced across the picture.
-      const slots = picture.signs.length;
-      picture.signs.forEach((sign, i) => {
-        const sx = picture.x + (picture.w * (i + 0.5)) / slots;
-        const sy = picture.y + picture.h * 0.5;
-        this.drawSign(g, sign, sx, sy, 20, PAPER.graphite, 0.95);
-      });
+      // Mount board around the plate.
+      g.fillStyle(PAPER.sheetHigh, 1);
+      g.fillRect(picture.x, picture.y, picture.w, inset);
+      g.fillRect(picture.x, picture.y + picture.h - inset, picture.w, inset);
+      g.fillRect(picture.x, picture.y, inset, picture.h);
+      g.fillRect(picture.x + picture.w - inset, picture.y, inset, picture.h);
 
       // The hanging wire.
       g.lineStyle(1.1, PAPER.graphiteSoft, 0.8);
-      g.lineBetween(picture.x + picture.w / 2, picture.y, picture.x + picture.w / 2 - 16, RACK_Y);
-      g.lineBetween(picture.x + picture.w / 2, picture.y, picture.x + picture.w / 2 + 16, RACK_Y);
+      g.lineBetween(picture.x + picture.w / 2, picture.y, picture.x + picture.w / 2 - 18, RACK_Y);
+      g.lineBetween(picture.x + picture.w / 2, picture.y, picture.x + picture.w / 2 + 18, RACK_Y);
 
       this.add
-        .text(picture.x + picture.w / 2, picture.y + picture.h + 7, picture.title, {
+        .text(picture.x + picture.w / 2, picture.y + picture.h + 8, picture.title, {
           fontFamily: mono,
           fontSize: '10px',
           color: '#8d8579',
@@ -319,194 +346,159 @@ export class PaintedCountryScene extends Phaser.Scene {
         .setOrigin(0.5, 0)
         .setDepth(DEPTH.PICTURE);
 
-      // "TOO FAR TO SEE" until the player gets up to it.
+      // The prompt that appears when the player has climbed close enough.
       const hint = this.add
-        .text(picture.x + picture.w / 2, picture.y - 20, '', {
+        .text(picture.x + picture.w / 2, picture.y - 12, '', {
           fontFamily: mono,
-          fontSize: '10px',
+          fontSize: '11px',
           color: '#2f8c9e',
+          align: 'center',
           letterSpacing: 1.4,
         })
         .setOrigin(0.5, 1)
-        .setDepth(DEPTH.PICTURE);
-      this.pictureLabels[picture.id] = hint;
+        .setDepth(DEPTH.PICTURE + 1);
+      hint.setPadding(6, 4, 6, 4).setBackgroundColor('#f7f4ec');
+      this.pictureLabels[picture.id] = { hint, plate, cover };
     });
   }
 
-  // The four signs, drawn rather than typed so they read at a glance and match
-  // the rest of the car's hand.
-  drawSign(g, sign, cx, cy, size, color, alpha = 1) {
-    const r = size / 2;
-    if (sign === SIGN.MOON) {
-      // A crescent: an ink disc with a paper disc bitten out of it.
-      g.fillStyle(color, alpha);
-      g.fillCircle(cx, cy, r);
-      g.fillStyle(PAPER.sheetHigh, 1);
-      g.fillCircle(cx + r * 0.52, cy - r * 0.24, r * 0.92);
-      return;
-    }
-    if (sign === SIGN.RIVER) {
-      g.lineStyle(2.2, color, alpha);
-      for (let row = -1; row <= 1; row += 1) {
-        const y = cy + row * r * 0.55;
-        g.beginPath();
-        g.moveTo(cx - r, y);
-        for (let s = 0; s <= 8; s += 1) {
-          const t = s / 8;
-          g.lineTo(cx - r + t * size, y + Math.sin(t * Math.PI * 2) * r * 0.24);
-        }
-        g.strokePath();
-      }
-      return;
-    }
-    if (sign === SIGN.STAR) {
-      g.fillStyle(color, alpha);
-      g.beginPath();
-      for (let p = 0; p < 10; p += 1) {
-        const rad = p % 2 === 0 ? r : r * 0.42;
-        const a = -Math.PI / 2 + (p * Math.PI) / 5;
-        const px = cx + Math.cos(a) * rad;
-        const py = cy + Math.sin(a) * rad;
-        if (p === 0) g.moveTo(px, py);
-        else g.lineTo(px, py);
-      }
-      g.closePath();
-      g.fillPath();
-      return;
-    }
-    // HOUSE
-    g.fillStyle(color, alpha);
-    g.beginPath();
-    g.moveTo(cx - r, cy - r * 0.05);
-    g.lineTo(cx, cy - r);
-    g.lineTo(cx + r, cy - r * 0.05);
-    g.closePath();
-    g.fillPath();
-    g.fillRect(cx - r * 0.68, cy - r * 0.05, r * 1.36, r * 1.05);
-  }
-
-  // ======================================================= the thread board
+  // ======================================================= the color-link board
 
   cordColor(pairId) {
-    if (pairId === 'amber') return PAPER.amber;
-    if (pairId === 'cyan') return PAPER.cyan;
-    return PAPER.fault;
+    return CORD_COLOURS[pairId] ?? PAPER.fault;
   }
 
-  buildBoard() {
-    const g = this.graphics(DEPTH.BOARD);
-    const mono = 'ui-monospace, SFMono-Regular, Menlo, monospace';
+  boardLayout(pictureId) {
+    const board = this.car.boardSpec(pictureId);
+    const x = 584;
+    const y = 150;
+    const availableW = 276;
+    const availableH = 258;
+    const pad = 22;
+    const pitch = Math.min(
+      38,
+      (availableW - pad * 2) / Math.max(1, board.cols - 1),
+      (availableH - pad * 2) / Math.max(1, board.rows - 1),
+    );
+    const w = pad * 2 + (board.cols - 1) * pitch;
+    const h = pad * 2 + (board.rows - 1) * pitch;
+    return {
+      board,
+      x: x + (availableW - w) / 2,
+      y: y + (availableH - h) / 2,
+      w,
+      h,
+      pad,
+      pitch,
+    };
+  }
 
-    // The card it is all punched into.
-    g.fillStyle(PAPER.manilla, 0.96);
-    g.fillRect(BOARD.x, BOARD.y, BOARD.w, BOARD.h);
-    g.lineStyle(2.4, PAPER.graphite, 0.92);
-    draftRect(g, this.rnd, BOARD.x, BOARD.y, BOARD.w, BOARD.h, { overshoot: 5, jitter: 0.7 });
-    g.lineStyle(1, PAPER.graphiteFaint, 0.5);
-    draftRect(g, this.rnd, BOARD.x + 9, BOARD.y + 9, BOARD.w - 18, BOARD.h - 18, {
-      overshoot: 2,
-      jitter: 0.5,
-    });
-
-    // Every hole in the card, then the torn ones, then the coloured ends.
-    for (let c = 0; c < BOARD.cols; c += 1) {
-      for (let r = 0; r < BOARD.rows; r += 1) {
-        const at = eyeletAt(c, r);
-        if (this.car.isTorn(c, r)) {
-          // A hole ripped right through the card — no cord can pass.
-          g.fillStyle(PAPER.sheetHigh, 1);
-          g.fillCircle(at.x, at.y, 9);
-          g.lineStyle(1.6, PAPER.deckle, 0.95);
-          for (let i = 0; i < 9; i += 1) {
-            const a0 = (i / 9) * Math.PI * 2;
-            const a1 = ((i + 1) / 9) * Math.PI * 2;
-            const r0 = 8 + this.rnd() * 3;
-            const r1 = 8 + this.rnd() * 3;
-            g.lineBetween(
-              at.x + Math.cos(a0) * r0,
-              at.y + Math.sin(a0) * r0,
-              at.x + Math.cos(a1) * r1,
-              at.y + Math.sin(a1) * r1,
-            );
-          }
-          continue;
-        }
-        g.lineStyle(1.4, PAPER.graphiteSoft, 0.8);
-        g.strokeCircle(at.x, at.y, 5.5);
-      }
-    }
-
-    BOARD.pairs.forEach((pair) => {
-      [pair.a, pair.b].forEach(([c, r]) => {
-        const at = eyeletAt(c, r);
-        g.fillStyle(this.cordColor(pair.id), 0.95);
-        g.fillCircle(at.x, at.y, 9);
-        g.lineStyle(1.4, PAPER.graphite, 0.85);
-        g.strokeCircle(at.x, at.y, 9);
-        g.fillStyle(PAPER.manilla, 1);
-        g.fillCircle(at.x, at.y, 2.6);
-      });
-    });
-
-    this.add
-      .text(BOARD.x + BOARD.w / 2, BOARD.y - 30, 'THREAD EACH PAIR.\nNO TWO CORDS THROUGH ONE HOLE.', {
-        fontFamily: mono,
-        fontSize: '10px',
-        color: '#5c574f',
-        align: 'center',
-        lineSpacing: 3,
-        letterSpacing: 1.2,
-      })
-      .setOrigin(0.5, 1)
-      .setDepth(DEPTH.BOARD);
+  boardEyeletAt(layout, c, r) {
+    return {
+      x: layout.x + layout.pad + c * layout.pitch,
+      y: layout.y + layout.pad + r * layout.pitch,
+    };
   }
 
   boardCellAt(wx, wy) {
-    if (wx < BOARD.x || wx > BOARD.x + BOARD.w || wy < BOARD.y || wy > BOARD.y + BOARD.h) return null;
-    const c = Math.round((wx - BOARD.x - BOARD.pad) / BOARD.pitch);
-    const r = Math.round((wy - BOARD.y - BOARD.pad) / BOARD.pitch);
-    if (!this.car.inBoard(c, r)) return null;
-    const at = eyeletAt(c, r);
-    // Only count as "on a hole" if the pointer is genuinely near one, so a
-    // drag across the card cannot skip diagonally between holes.
-    if (Phaser.Math.Distance.Between(wx, wy, at.x, at.y) > BOARD.pitch * 0.62) return null;
+    const picture = this.viewer?.picture;
+    if (!picture) return null;
+    const layout = this.boardLayout(picture.id);
+    if (wx < layout.x - 18 || wx > layout.x + layout.w + 18 || wy < layout.y - 18 || wy > layout.y + layout.h + 18) {
+      return null;
+    }
+    const c = Math.round((wx - layout.x - layout.pad) / layout.pitch);
+    const r = Math.round((wy - layout.y - layout.pad) / layout.pitch);
+    if (!this.car.inBoard(picture.id, c, r)) return null;
+    const at = this.boardEyeletAt(layout, c, r);
+    if (Phaser.Math.Distance.Between(wx, wy, at.x, at.y) > layout.pitch * 0.62) return null;
     return { c, r };
   }
 
-  drawCords() {
-    const g = this.cordLayer;
-    g.clear();
-    const solved = this.car.boardSolved();
+  drawViewerBoard() {
+    if (!this.viewer?.boardLayer || !this.viewer?.cordLayer) return;
+    const base = this.viewer.boardLayer;
+    const cords = this.viewer.cordLayer;
+    base.clear();
+    cords.clear();
+    const picture = this.viewer.picture;
+    if (!this.viewer.open || !picture) return;
 
-    BOARD.pairs.forEach((pair) => {
-      const cord = this.car.state.board.cords[pair.id];
+    const layout = this.boardLayout(picture.id);
+    const { board } = layout;
+    const current = this.car.boardState(picture.id);
+    const solved = this.car.boardSolved(picture.id);
+
+    base.fillStyle(PAPER.manilla, 0.98);
+    base.fillRect(layout.x - 18, layout.y - 18, layout.w + 36, layout.h + 36);
+    base.lineStyle(2, PAPER.graphite, 0.9);
+    draftRect(base, this.rnd, layout.x - 18, layout.y - 18, layout.w + 36, layout.h + 36, {
+      overshoot: 4,
+      jitter: 0.6,
+    });
+
+    for (let c = 0; c < board.cols; c += 1) {
+      for (let r = 0; r < board.rows; r += 1) {
+        const at = this.boardEyeletAt(layout, c, r);
+        if (this.car.isTorn(picture.id, c, r)) {
+          base.fillStyle(PAPER.sheetHigh, 1);
+          base.fillCircle(at.x, at.y, Math.max(7, layout.pitch * 0.27));
+          base.lineStyle(1.2, PAPER.deckle, 0.9);
+          for (let i = 0; i < 8; i += 1) {
+            const a0 = (i / 8) * Math.PI * 2;
+            const a1 = ((i + 1) / 8) * Math.PI * 2;
+            base.lineBetween(
+              at.x + Math.cos(a0) * layout.pitch * 0.25,
+              at.y + Math.sin(a0) * layout.pitch * 0.25,
+              at.x + Math.cos(a1) * layout.pitch * 0.25,
+              at.y + Math.sin(a1) * layout.pitch * 0.25,
+            );
+          }
+        } else {
+          base.lineStyle(1.2, PAPER.graphiteSoft, 0.8);
+          base.strokeCircle(at.x, at.y, Math.max(4.5, layout.pitch * 0.16));
+        }
+      }
+    }
+
+    board.pairs.forEach((pair) => {
+      [pair.a, pair.b].forEach(([c, r]) => {
+        const at = this.boardEyeletAt(layout, c, r);
+        base.fillStyle(this.cordColor(pair.id), 0.96);
+        base.fillCircle(at.x, at.y, Math.max(7, layout.pitch * 0.25));
+        base.lineStyle(1.2, PAPER.graphite, 0.85);
+        base.strokeCircle(at.x, at.y, Math.max(7, layout.pitch * 0.25));
+        base.fillStyle(PAPER.manilla, 1);
+        base.fillCircle(at.x, at.y, 2.2);
+      });
+    });
+
+    board.pairs.forEach((pair) => {
+      const cord = current.cords[pair.id];
       if (!cord || cord.length < 2) return;
+      const done = this.car.cordComplete(picture.id, pair.id);
       const color = this.cordColor(pair.id);
-      const done = this.car.cordComplete(pair.id);
-
-      // A soft shadow under the cord so it reads as thread lying on the card.
-      g.lineStyle(7, PAPER.graphite, 0.14);
-      g.beginPath();
+      cords.lineStyle(7, PAPER.graphite, 0.14);
+      cords.beginPath();
       cord.forEach(([c, r], i) => {
-        const at = eyeletAt(c, r);
-        if (i === 0) g.moveTo(at.x, at.y + 2);
-        else g.lineTo(at.x, at.y + 2);
+        const at = this.boardEyeletAt(layout, c, r);
+        if (i === 0) cords.moveTo(at.x, at.y + 2);
+        else cords.lineTo(at.x, at.y + 2);
       });
-      g.strokePath();
-
-      g.lineStyle(done ? 5.5 : 4, color, done ? 0.95 : 0.7);
-      g.beginPath();
+      cords.strokePath();
+      cords.lineStyle(done ? 5.5 : 4, color, done ? 0.95 : 0.76);
+      cords.beginPath();
       cord.forEach(([c, r], i) => {
-        const at = eyeletAt(c, r);
-        if (i === 0) g.moveTo(at.x, at.y);
-        else g.lineTo(at.x, at.y);
+        const at = this.boardEyeletAt(layout, c, r);
+        if (i === 0) cords.moveTo(at.x, at.y);
+        else cords.lineTo(at.x, at.y);
       });
-      g.strokePath();
+      cords.strokePath();
     });
 
     if (solved) {
-      g.lineStyle(2, PAPER.verdigris, 0.85);
-      draftRect(g, makeRandom(0x77aa), BOARD.x + 4, BOARD.y + 4, BOARD.w - 8, BOARD.h - 8, {
+      cords.lineStyle(2, PAPER.verdigris, 0.85);
+      draftRect(cords, makeRandom(0x77aa), layout.x - 12, layout.y - 12, layout.w + 24, layout.h + 24, {
         overshoot: 3,
         jitter: 0.8,
       });
@@ -528,16 +520,39 @@ export class PaintedCountryScene extends Phaser.Scene {
 
     const mono = 'ui-monospace, SFMono-Regular, Menlo, monospace';
     this.add
-      .text(DOOR.x + DOOR.w / 2, DOOR.y - 34, 'WHICH SIGN WAS IN\nEVERY PICTURE?', {
+      .text(DOOR.x + DOOR.w / 2, DOOR.y - 12, DOOR.prompt, {
         fontFamily: mono,
         fontSize: '11px',
         color: '#5c574f',
         align: 'center',
-        lineSpacing: 3,
+        lineSpacing: 4,
         letterSpacing: 1.4,
       })
-      .setOrigin(0.5, 0)
+      .setOrigin(0.5, 1)
       .setDepth(DEPTH.DOOR);
+
+    // The five signs, as real plates screwed to the door.
+    this.panelArt = {};
+    DOOR.panels.forEach((panel) => {
+      const art = this.add
+        .image(panel.x + panel.w / 2, panel.y + panel.h / 2, `sign-${panel.sign}`)
+        .setDepth(DEPTH.DOOR + 1)
+        .setDisplaySize(panel.w - 10, panel.h - 10);
+      this.panelArt[panel.sign] = art;
+    });
+
+    this.doorHint = this.add
+      .text(DOOR.x + DOOR.w / 2, DOOR.y + DOOR.h - 32, '', {
+        fontFamily: mono,
+        fontSize: '10px',
+        color: '#2f8c9e',
+        align: 'center',
+        lineSpacing: 3,
+        letterSpacing: 1.2,
+      })
+      .setOrigin(0.5, 0.5)
+      .setDepth(DEPTH.DOOR + 2);
+    this.doorHint.setPadding(6, 4, 6, 4).setBackgroundColor('#f7f4ec');
   }
 
   // ============================================================== physics
@@ -595,9 +610,10 @@ export class PaintedCountryScene extends Phaser.Scene {
       up: 'UP',
       w: 'W',
       space: 'SPACE',
+      read: 'E',
       restart: 'R',
     });
-    this.input.keyboard.addCapture(['LEFT', 'RIGHT', 'UP', 'DOWN', 'SPACE']);
+    this.input.keyboard.addCapture(['LEFT', 'RIGHT', 'UP', 'DOWN', 'SPACE', 'E', 'R']);
   }
 
   // ============================================================== surface
@@ -642,8 +658,11 @@ export class PaintedCountryScene extends Phaser.Scene {
     band.lineStyle(1.4, 0xd8cfb9, 0.9);
     band.lineBetween(0, 74, VIEW.w, 74);
 
-    fixed(24, 14, 'A / D  ←→  walk     SPACE  jump     R  restart', '#a49c8d');
-    fixed(24, 30, 'HOLD LEFT  draw paper (∞)      HOLD RIGHT  wash it away', '#a49c8d');
+    this.hudBand = band;
+    this.controlLines = [
+      fixed(24, 14, 'A / D  ←→  walk     SPACE  jump     E  look / read     R  restart', '#a49c8d'),
+      fixed(24, 30, 'HOLD LEFT  draw paper (∞)      HOLD RIGHT  wash it away', '#a49c8d'),
+    ];
     this.objective = fixed(24, 50, '', '#4a4640', 12);
     this.bayLabel = fixed(VIEW.w - 24, 14, '', '#a49c8d', 11, 1);
 
@@ -667,6 +686,229 @@ export class PaintedCountryScene extends Phaser.Scene {
         })
         .setDepth(DEPTH.WALL + 2),
     );
+  }
+
+  // The archive viewer: the image stays large on the left while its color-link
+  // card stays live on the right. The signs in the supplied artwork are the
+  // clue, so the puzzle never covers or shrinks the image into a thumbnail.
+  buildViewer() {
+    const mono = 'ui-monospace, SFMono-Regular, Menlo, monospace';
+    const D = DEPTH.HUD + 10;
+    this.viewer = { open: false, picture: null, wasLeftDown: false };
+
+    this.viewer.scrim = this.add
+      .rectangle(0, 0, VIEW.w, VIEW.h, 0x2c2823, 0.72)
+      .setOrigin(0)
+      .setScrollFactor(0)
+      .setDepth(D);
+
+    this.viewer.card = this.add
+      .rectangle(VIEW.w / 2, VIEW.h / 2, VIEW.w - 84, VIEW.h - 62, 0xf3efe4, 1)
+      .setScrollFactor(0)
+      .setDepth(D + 1);
+
+    this.viewer.imageFrame = this.add
+      .rectangle(306, 226, 506, 292)
+      .setStrokeStyle(1.5, 0xd8cfb9, 1)
+      .setFillStyle(0xf7f4ec, 1)
+      .setScrollFactor(0)
+      .setDepth(D + 2);
+    this.viewer.plate = this.add.image(306, 226, PAINTINGS[0].key).setScrollFactor(0).setDepth(D + 3);
+    this.viewer.imageCover = this.add
+      .rectangle(306, 226, 490, 276, PAPER.sheetHigh, 1)
+      .setStrokeStyle(1, PAPER.deckle, 0.8)
+      .setScrollFactor(0)
+      .setDepth(D + 4);
+    this.viewer.coverText = this.add
+      .text(306, 226, 'ARCHIVE SEALED\nSOLVE THE COLOR LINK TO REVEAL IT', {
+        fontFamily: mono,
+        fontSize: '12px',
+        color: '#8d8579',
+        align: 'center',
+        lineSpacing: 5,
+        letterSpacing: 1.4,
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(D + 5);
+    this.viewer.frame = this.add
+      .rectangle(VIEW.w / 2, VIEW.h / 2, VIEW.w - 84, VIEW.h - 62)
+      .setStrokeStyle(1.5, 0xd8cfb9, 1)
+      .setScrollFactor(0)
+      .setDepth(D + 5);
+
+    this.viewer.title = this.add
+      .text(VIEW.w / 2, 44, '', {
+        fontFamily: mono,
+        fontSize: '14px',
+        color: '#4a4640',
+        align: 'center',
+        letterSpacing: 2.4,
+      })
+      .setOrigin(0.5, 0)
+      .setScrollFactor(0)
+      .setDepth(D + 4);
+
+    this.viewer.caption = this.add
+      .text(62, 386, '', {
+        fontFamily: mono,
+        fontSize: '10px',
+        color: '#4a4640',
+        align: 'left',
+        lineSpacing: 4,
+        wordWrap: { width: 490 },
+      })
+      .setOrigin(0, 0)
+      .setScrollFactor(0)
+      .setDepth(D + 4);
+
+    this.viewer.boardCard = this.add
+      .rectangle(734, 294, 330, 420, PAPER.manilla, 0.96)
+      .setStrokeStyle(1.5, 0xd8cfb9, 1)
+      .setScrollFactor(0)
+      .setDepth(D + 2);
+    this.viewer.boardTitle = this.add
+      .text(734, 104, 'COLOR LINK', {
+        fontFamily: mono,
+        fontSize: '12px',
+        color: '#4a4640',
+        align: 'center',
+        letterSpacing: 2,
+      })
+      .setOrigin(0.5, 0)
+      .setScrollFactor(0)
+      .setDepth(D + 4);
+    this.viewer.boardStatus = this.add
+      .text(734, 484, '', {
+        fontFamily: mono,
+        fontSize: '9px',
+        color: '#2f8c9e',
+        align: 'center',
+        lineSpacing: 3,
+        letterSpacing: 1,
+      })
+      .setOrigin(0.5, 0)
+      .setScrollFactor(0)
+      .setDepth(D + 4);
+    this.viewer.boardLayer = this.add.graphics().setScrollFactor(0).setDepth(D + 3);
+    this.viewer.cordLayer = this.add.graphics().setScrollFactor(0).setDepth(D + 4);
+
+    this.viewer.close = this.add
+      .text(VIEW.w / 2, VIEW.h - 30, 'PRESS  E  TO PUT IT BACK', {
+        fontFamily: mono,
+        fontSize: '11px',
+        color: '#8d8579',
+        letterSpacing: 2,
+      })
+      .setOrigin(0.5, 0)
+      .setScrollFactor(0)
+      .setDepth(D + 4);
+
+    this.setViewerVisible(false);
+  }
+
+  setViewerVisible(on) {
+    this.viewer.open = on;
+    [
+      this.viewer.scrim,
+      this.viewer.card,
+      this.viewer.imageFrame,
+      this.viewer.frame,
+      this.viewer.plate,
+      this.viewer.imageCover,
+      this.viewer.coverText,
+      this.viewer.title,
+      this.viewer.caption,
+      this.viewer.boardCard,
+      this.viewer.boardTitle,
+      this.viewer.boardStatus,
+      this.viewer.close,
+    ].forEach((obj) => obj.setVisible(on));
+    this.viewer.boardLayer.setVisible(on && Boolean(this.viewer.picture));
+    this.viewer.cordLayer.setVisible(on && Boolean(this.viewer.picture));
+    // Everything else gets out of the way, so nothing shows through the sheet.
+    [this.objective, this.notebook, this.flash, this.bayLabel, this.hudBand, this.doorHint].forEach(
+      (obj) => obj && obj.setVisible(!on),
+    );
+    this.controlLines.forEach((obj) => obj.setVisible(!on));
+    Object.values(this.pictureLabels).forEach((entry) => entry.hint.setVisible(false));
+    if (on) this.brushCursor.clear();
+    if (!on) {
+      this.viewer.wasLeftDown = false;
+      this.viewer.boardLayer.clear();
+      this.viewer.cordLayer.clear();
+    }
+  }
+
+  openPicture(picture) {
+    this.viewer.picture = picture;
+    this.viewer.wasLeftDown = false;
+    const archiveNumber = PAINTINGS.findIndex((candidate) => candidate.id === picture.id) + 1;
+    this.viewer.title.setText(`${picture.title}  ·  ARCHIVE ${archiveNumber} / ${PAINTINGS.length}`);
+
+    // Fit the full artwork into a deliberately generous image well without
+    // distorting it. At 1672×941 this renders at roughly 490×276 in the 960px
+    // game view, so the signs remain legible while the board stays visible.
+    const tex = this.textures.get(picture.key).getSourceImage();
+    const maxW = 490;
+    const maxH = 276;
+    const scale = Math.min(maxW / tex.width, maxH / tex.height);
+    this.viewer.plate
+      .setTexture(picture.key)
+      .setDisplaySize(tex.width * scale, tex.height * scale)
+      .setPosition(306, 82 + (tex.height * scale) / 2);
+
+    this.setViewerVisible(true);
+    this.viewer.imageFrame.setVisible(true);
+    this.viewer.boardTitle.setText(`COLOR LINK  ·  ${this.car.boardSpec(picture.id).pairs.length} PAIRS`);
+    this.updateViewerArchive();
+    this.drawViewerBoard();
+  }
+
+  updateViewerArchive() {
+    const picture = this.viewer.picture;
+    if (!picture) return;
+    const solved = this.car.boardSolved(picture.id);
+    this.viewer.plate.setVisible(solved);
+    this.viewer.imageCover.setVisible(!solved);
+    this.viewer.coverText.setVisible(!solved);
+    this.viewer.caption.setText(
+      solved
+        ? picture.caption
+        : 'THE ARCHIVE IS SEALED.\nSOLVE THE COLOR LINK TO REVEAL THE IMAGE.',
+    );
+    this.viewer.boardStatus.setText(
+      solved
+        ? 'ARCHIVE DEVELOPED\nTHE CAPTION IS NOW IN YOUR NOTES.'
+        : 'DRAG FROM ONE COLORED DOT\nTO ITS MATCH. DO NOT SHARE A HOLE.',
+    ).setColor(solved ? '#6f9c8b' : '#8d8579');
+  }
+
+  // At the door, E brings up everything already read, so the answer is a matter
+  // of comparing rather than of remembering.
+  openNotes() {
+    const read = this.car.picturesRead();
+    this.viewer.picture = null;
+    this.viewer.wasLeftDown = false;
+    this.viewer.title.setText('WHAT THE ARCHIVES SAY');
+    this.viewer.plate.setVisible(false);
+    this.viewer.caption
+      .setText(
+        read.length
+          ? read.map((p) => `${p.title}\n${p.caption.split('\n').slice(-2).join(' ')}`).join('\n\n')
+          : 'YOU HAVE NOT READ ANY OF THEM YET.',
+      )
+      .setPosition(62, 110);
+    this.setViewerVisible(true);
+    this.viewer.imageFrame.setVisible(false);
+    this.viewer.plate.setVisible(false);
+    this.viewer.imageCover.setVisible(false);
+    this.viewer.coverText.setVisible(false);
+    this.viewer.boardCard.setVisible(false);
+    this.viewer.boardTitle.setVisible(false);
+    this.viewer.boardStatus.setVisible(false);
+    this.viewer.boardLayer.setVisible(false);
+    this.viewer.cordLayer.setVisible(false);
   }
 
   flashMessage(text, color = '#b4453a') {
@@ -757,17 +999,6 @@ export class PaintedCountryScene extends Phaser.Scene {
     g.lineStyle(1, PAPER.graphiteFaint, inReach ? 0.18 : 0.4);
     g.strokeCircle(this.walker.x, this.walker.y, REACH);
 
-    if (this.overBoard(pointer.worldX, pointer.worldY)) {
-      const hole = this.boardCellAt(pointer.worldX, pointer.worldY);
-      if (!hole) return;
-      const at = eyeletAt(hole.c, hole.r);
-      const torn = this.car.isTorn(hole.c, hole.r);
-      const color = torn ? PAPER.fault : inReach ? PAPER.cyan : PAPER.graphiteFaint;
-      g.lineStyle(2.4, color, inReach ? 0.95 : 0.4);
-      g.strokeCircle(at.x, at.y, 13);
-      return;
-    }
-
     if (panel) {
       g.lineStyle(2.4, inReach ? PAPER.cyan : PAPER.graphiteFaint, inReach ? 0.95 : 0.4);
       g.strokeRect(panel.x - 4, panel.y - 4, panel.w + 8, panel.h + 8);
@@ -817,15 +1048,15 @@ export class PaintedCountryScene extends Phaser.Scene {
     );
   }
 
-  // Painting a cell the player is standing inside would shove them out of it,
-  // so the brush politely refuses to draw on top of its own painter.
+  // Only the one cell the player is actually standing in is off limits. Being
+  // stricter than this meant a player at the very lip of a hole could not draw
+  // the first plank of their own bridge, because their toes were grazing it.
   overlapsPlayer(cx, cy) {
-    const body = this.walker.body;
-    return !(
-      cx * CELL >= body.right ||
-      cx * CELL + CELL <= body.x ||
-      cy * CELL >= body.bottom ||
-      cy * CELL + CELL <= body.y
+    return (
+      this.walker.x >= cx * CELL &&
+      this.walker.x < cx * CELL + CELL &&
+      this.walker.y >= cy * CELL &&
+      this.walker.y < cy * CELL + CELL
     );
   }
 
@@ -845,10 +1076,6 @@ export class PaintedCountryScene extends Phaser.Scene {
     }
   }
 
-  overBoard(wx, wy) {
-    return wx >= BOARD.x && wx <= BOARD.x + BOARD.w && wy >= BOARD.y && wy <= BOARD.y + BOARD.h;
-  }
-
   stepBrush() {
     const pointer = this.input.activePointer;
     const left = pointer.leftButtonDown();
@@ -856,31 +1083,14 @@ export class PaintedCountryScene extends Phaser.Scene {
     const freshLeft = left && !this.wasLeftDown;
     const inReach = this.pointerInReach();
 
-    // Letting go always tidies a half-drawn cord away.
-    if (!left && this.car.state.board.drawing) this.car.boardRelease();
-
-    // The thread board takes the mouse before the brush does, and the whole
-    // card is off limits to paint so a stroke can never bury the lock.
-    if (this.overBoard(pointer.worldX, pointer.worldY)) {
-      const hole = this.boardCellAt(pointer.worldX, pointer.worldY);
-      if (hole && inReach) {
-        if (right) this.car.boardClearAt(hole.c, hole.r);
-        else if (freshLeft) this.car.boardBegin(hole.c, hole.r);
-        else if (left) this.car.boardExtend(hole.c, hole.r);
-      }
+    // A left click on a door sign is an answer, never a brush stroke — and
+    // holding the button there must not nag about varnish either.
+    const panel = this.panelAt(pointer.worldX, pointer.worldY);
+    if (panel) {
+      if (freshLeft && inReach) this.answerDoor(panel.sign);
       this.wasLeftDown = left;
       this.lastBrushCell = null;
       return;
-    }
-
-    // A fresh left click on a door sign is an answer, not a brush stroke.
-    if (freshLeft) {
-      const panel = this.panelAt(pointer.worldX, pointer.worldY);
-      if (panel && inReach) {
-        this.answerDoor(panel.sign);
-        this.wasLeftDown = true;
-        return;
-      }
     }
     this.wasLeftDown = left;
 
@@ -914,6 +1124,40 @@ export class PaintedCountryScene extends Phaser.Scene {
     this.lastBrushCell = { cx, cy };
   }
 
+  stepViewerBoard() {
+    const picture = this.viewer.picture;
+    if (!picture) return;
+    const pointer = this.input.activePointer;
+    const left = pointer.leftButtonDown();
+
+    if (!left && this.car.boardState(picture.id).drawing) this.car.boardRelease(picture.id);
+    this.viewer.wasLeftDown = left;
+  }
+
+  handleViewerPointerDown(pointer) {
+    const picture = this.viewer?.picture;
+    if (!this.viewer?.open || !picture) return;
+    const hole = this.boardCellAt(pointer.x, pointer.y);
+    if (!hole) return;
+    if (pointer.rightButtonDown()) this.car.boardClearAt(picture.id, hole.c, hole.r);
+    else this.car.boardBegin(picture.id, hole.c, hole.r);
+    this.viewer.wasLeftDown = pointer.leftButtonDown();
+  }
+
+  handleViewerPointerMove(pointer) {
+    const picture = this.viewer?.picture;
+    if (!this.viewer?.open || !picture || !pointer.leftButtonDown()) return;
+    const hole = this.boardCellAt(pointer.x, pointer.y);
+    if (hole) this.car.boardExtend(picture.id, hole.c, hole.r);
+  }
+
+  handleViewerPointerUp(pointer) {
+    const picture = this.viewer?.picture;
+    if (!picture) return;
+    this.car.boardRelease(picture.id);
+    this.viewer.wasLeftDown = false;
+  }
+
   answerDoor(sign) {
     const result = this.car.chooseSign(sign);
     if (result.ok && result.reason === 'correct') this.playCompletion();
@@ -936,6 +1180,36 @@ export class PaintedCountryScene extends Phaser.Scene {
       this.walker.setPosition(bay, 360);
       body.setVelocity(0, 0);
     }
+  }
+
+  // The wrong sign is the only thing in this car that costs the player anything.
+  // The sheet floods with ink and the whole drawing starts again.
+  playDeath(sign) {
+    if (this.dying) return;
+    this.dying = true;
+    this.flashMessage(`${String(sign).toUpperCase()} WAS NOT IT. THE INK TAKES THE CAR.`, '#b4453a');
+    // The flood is decoration; the restart is driven from update() on the
+    // scene clock, so it cannot be lost if a tween callback never lands.
+    this.deathFlood = this.add
+      .rectangle(0, 0, VIEW.w, VIEW.h, PAPER.boneBlack, 0)
+      .setOrigin(0)
+      .setScrollFactor(0)
+      .setDepth(DEPTH.HUD + 30);
+    this.deathStartedAt = this.time.now;
+  }
+
+  stepDeath(time) {
+    if (!this.dying) return false;
+    const elapsed = time - this.deathStartedAt;
+    const k = Phaser.Math.Clamp(elapsed / 900, 0, 1);
+    if (this.deathFlood) this.deathFlood.setFillStyle(PAPER.boneBlack, k * k);
+    this.walker.body.setVelocityX(0);
+    if (elapsed >= 1100) {
+      this.dying = false;
+      this.scene.restart();
+      return true;
+    }
+    return true;
   }
 
   playCompletion() {
@@ -965,42 +1239,117 @@ export class PaintedCountryScene extends Phaser.Scene {
     const read = car.state.seen.size;
     if (read < PAINTINGS.length) {
       if (this.bayId() === 'A') return 'DRAW PAPER TO CROSS — IT ONLY TAKES WHERE IT TOUCHES SOMETHING.';
+      const nearby = car.pictureInRange(this.walker.x, this.walker.y);
+      if (nearby && !car.boardSolved(nearby.id)) return 'PRESS E — COLOR-LINK THE ARCHIVE BESIDE ITS IMAGE.';
       return `BUILD UP TO THE PICTURES AND READ THEM — ${read} OF ${PAINTINGS.length} SO FAR.`;
     }
-    if (!car.boardSolved()) return 'THREAD THE BOARD BY THE DOOR — NO TWO CORDS THROUGH ONE HOLE.';
+    if (!car.boardsSolved()) return 'FINISH THE COLOR LINKS — EACH ARCHIVE HAS ITS OWN CARD.';
     return 'THE DOOR WANTS THE SIGN THAT WAS IN EVERY PICTURE.';
   }
 
   updateNotebook() {
-    const read = PAINTINGS.filter((p) => this.car.state.seen.has(p.id));
-    if (!read.length) {
-      this.notebook.setAlpha(0);
+    const lines = PAINTINGS.map(
+      (p) => `${this.car.state.seen.has(p.id) ? '[x]' : '[ ]'}  ${p.title}`,
+    );
+    this.notebook.setText(['THE GALLERY', ...lines].join('\n')).setAlpha(0.96);
+  }
+
+  nearDoor() {
+    return (
+      Phaser.Math.Distance.Between(
+        this.walker.x,
+        this.walker.y,
+        DOOR.x + DOOR.w / 2,
+        DOOR.y + DOOR.h / 2,
+      ) <= 280
+    );
+  }
+
+  toggleViewer() {
+    if (this.viewer.open) {
+      this.setViewerVisible(false);
       return;
     }
-    const width = Math.max(...PAINTINGS.map((p) => p.title.length));
-    const lines = read.map(
-      (p) => `${p.title.padEnd(width, ' ')}   ${p.signs.map((s) => s.toUpperCase()).join('  ')}`,
-    );
-    this.notebook.setText(['WHAT YOU HAVE SEEN', ...lines].join('\n'));
-    this.notebook.setAlpha(0.96);
+    const picture = this.car.pictureInRange(this.walker.x, this.walker.y);
+    if (picture) {
+      this.openPicture(picture);
+      return;
+    }
+    if (this.nearDoor()) {
+      this.openNotes();
+      return;
+    }
+    this.flashMessage('NOTHING TO READ HERE.', '#a49c8d');
   }
 
   updatePictureHints() {
+    const inRange = this.car.pictureInRange(this.walker.x, this.walker.y);
     PAINTINGS.forEach((picture) => {
-      const label = this.pictureLabels[picture.id];
-      if (!label) return;
-      if (this.car.state.seen.has(picture.id)) {
-        label.setText('READ').setColor('#6f9c8b');
-        return;
+      const entry = this.pictureLabels[picture.id];
+      if (!entry) return;
+      const here = inRange && inRange.id === picture.id;
+      const seen = this.car.state.seen.has(picture.id);
+      entry.hint.setVisible(here);
+      if (here) {
+        entry.hint.setText(
+          seen
+            ? 'PRESS  E  TO REVIEW'
+            : this.car.boardSolved(picture.id)
+              ? 'PRESS  E  TO READ'
+              : 'PRESS  E  TO COLOR LINK',
+        );
       }
-      const d = Phaser.Math.Distance.Between(
-        this.walker.x,
-        this.walker.y,
-        picture.x + picture.w / 2,
-        picture.y + picture.h / 2,
-      );
-      label.setText(d > READ_RADIUS * 2.4 ? '' : 'TOO FAR TO SEE — GET UP TO IT').setColor('#2f8c9e');
+      const revealed = seen || this.car.boardSolved(picture.id);
+      entry.plate.setVisible(revealed).setAlpha(revealed ? 1 : 0);
+      entry.cover.setVisible(!revealed);
     });
+
+    if (!this.doorHint) return;
+    const near = this.nearDoor();
+    this.doorHint.setVisible(near);
+    if (!near) return;
+    // Kept to two short lines so it always sits inside the door frame.
+    if (this.car.state.door.solved) this.doorHint.setText('OPEN');
+    else if (!this.car.boardsSolved()) {
+      const solved = PAINTINGS.filter((picture) => this.car.boardSolved(picture.id)).length;
+      this.doorHint.setText(`COLOR LINKS\n${solved} OF ${PAINTINGS.length} DONE`);
+    }
+    else if (!this.car.allSeen()) {
+      this.doorHint.setText(`READ THE ARCHIVES\n${this.car.state.seen.size} OF 3`);
+    } else this.doorHint.setText('E FOR NOTES\nCLICK A SIGN');
+  }
+
+  processCarEvents() {
+    let events = this.car.drainEvents();
+    while (events.length) {
+      events.forEach((event) => {
+        if (event.type === 'picture-read') {
+          this.flashMessage('ARCHIVE DEVELOPED. THE IMAGE IS IN YOUR NOTES.', '#6f9c8b');
+          if (this.viewer.picture?.id === event.id) this.updateViewerArchive();
+        } else if (event.type === 'cord-joined') {
+          this.flashMessage('THAT COLOR PAIR IS THREADED.', '#6f9c8b');
+        } else if (event.type === 'board-solved') {
+          this.flashMessage('COLOR LINK COMPLETE. THE ARCHIVE DEVELOPS.', '#6f9c8b');
+          this.car.readPicture(event.pictureId);
+          if (this.viewer.picture?.id === event.pictureId) this.updateViewerArchive();
+        } else if (event.type === 'cord-blocked') {
+          this.flashMessage('ANOTHER CORD IS ALREADY IN THAT HOLE.', '#c8892f');
+        } else if (event.type === 'door-dark') {
+          this.flashMessage('THE SIGNS ARE DARK — FINISH EVERY COLOR LINK FIRST.', '#c8892f');
+        } else if (event.type === 'door-silent') {
+          this.flashMessage(`THE DOOR STAYS SHUT — ${event.seen} OF ${event.of} ARCHIVES READ.`, '#c8892f');
+        } else if (event.type === 'door-killed') {
+          this.playDeath(event.sign);
+        } else if (event.type === 'door-opened') {
+          this.flashMessage('THE MOON. THE DOOR OPENS.', '#6f9c8b');
+        } else if (event.type === 'paint-refused' && event.reason === 'varnished') {
+          this.flashMessage('THE PAPER IS VARNISHED HERE. PAINT WILL NOT TAKE.', '#c8892f');
+        } else if (event.type === 'paint-refused' && event.reason === 'nothing-to-hold-it') {
+          this.flashMessage('PAINT NEEDS SOMETHING TO HOLD IT.', '#c8892f');
+        }
+      });
+      events = this.car.drainEvents();
+    }
   }
 
   update(time, delta) {
@@ -1010,37 +1359,36 @@ export class PaintedCountryScene extends Phaser.Scene {
       this.scene.restart();
       return;
     }
+    if (Phaser.Input.Keyboard.JustDown(this.keys.read)) this.toggleViewer();
+
+    // Dying takes the car away from the player for a moment, then starts over.
+    if (this.stepDeath(time)) {
+      this.drawFigure();
+      return;
+    }
+
+    // With a plate in hand the car holds still.
+    if (this.viewer && this.viewer.open) {
+      this.walker.body.setVelocityX(0);
+      this.stepViewerBoard();
+      this.drawViewerBoard();
+      this.processCarEvents();
+      this.updateNotebook();
+      this.updateViewerArchive();
+      return;
+    }
 
     this.stepBrush();
     this.stepPlayer();
-    this.car.look(this.walker.x, this.walker.y);
 
     if (this.paintDirty) {
       this.redrawPaint();
       this.paintDirty = false;
     }
     this.drawFigure();
-    this.drawCords();
     this.drawCursor();
     this.drawDoorSigns();
-
-    this.car.drainEvents().forEach((event) => {
-      if (event.type === 'picture-read') this.flashMessage('YOU CAN READ IT FROM HERE.', '#6f9c8b');
-      else if (event.type === 'cord-joined') this.flashMessage('THAT PAIR IS THREADED.', '#6f9c8b');
-      else if (event.type === 'board-solved') this.flashMessage('THE BOARD IS THREADED. THE SIGNS LIGHT UP.', '#6f9c8b');
-      else if (event.type === 'cord-blocked') this.flashMessage('ANOTHER CORD IS ALREADY IN THAT HOLE.', '#c8892f');
-      else if (event.type === 'door-dark') {
-        this.flashMessage('THE SIGNS ARE DARK — THREAD THE BOARD FIRST.', '#c8892f');
-      } else if (event.type === 'door-silent') {
-        this.flashMessage(`THE DOOR STAYS SHUT — ${event.seen} OF ${event.of} PICTURES READ.`, '#c8892f');
-      } else if (event.type === 'door-refused') this.flashMessage('NOT THAT ONE. LOOK AGAIN.', '#b4453a');
-      else if (event.type === 'door-opened') this.flashMessage('THE MOON. THE DOOR OPENS.', '#6f9c8b');
-      else if (event.type === 'paint-refused' && event.reason === 'varnished') {
-        this.flashMessage('THE PAPER IS VARNISHED HERE. PAINT WILL NOT TAKE.', '#c8892f');
-      } else if (event.type === 'paint-refused' && event.reason === 'nothing-to-hold-it') {
-        this.flashMessage('PAINT NEEDS SOMETHING TO HOLD IT.', '#c8892f');
-      }
-    });
+    this.processCarEvents();
 
     this.objective.setText(this.objectiveText());
     this.bayLabel.setText(`BAY ${this.bayId()}`);
@@ -1066,7 +1414,7 @@ export class PaintedCountryScene extends Phaser.Scene {
     const opened = this.car.state.door.solved;
     // Until the board is threaded the signs are unlit — visible as shapes, but
     // plainly not yet askable.
-    const lit = this.car.boardSolved();
+    const lit = this.car.boardsSolved();
 
     DOOR.panels.forEach((panel) => {
       const chosen = this.car.state.door.chosen === panel.sign;
@@ -1075,15 +1423,8 @@ export class PaintedCountryScene extends Phaser.Scene {
       g.fillRect(panel.x, panel.y, panel.w, panel.h);
       g.lineStyle(right ? 2.6 : 1.6, right ? PAPER.verdigris : PAPER.graphite, lit ? 0.9 : 0.4);
       g.strokeRect(panel.x, panel.y, panel.w, panel.h);
-      this.drawSign(
-        g,
-        panel.sign,
-        panel.x + panel.w / 2,
-        panel.y + panel.h / 2,
-        30,
-        PAPER.graphite,
-        lit ? 0.95 : 0.34,
-      );
+      const art = this.panelArt && this.panelArt[panel.sign];
+      if (art) art.setAlpha(lit ? 1 : 0.3);
       if (chosen && !right) {
         g.lineStyle(2.4, PAPER.fault, 0.85);
         g.lineBetween(panel.x + 10, panel.y + 10, panel.x + panel.w - 10, panel.y + panel.h - 10);
@@ -1100,6 +1441,12 @@ export class PaintedCountryScene extends Phaser.Scene {
       scene: 'PaintedCountry',
       bay: this.bayId(),
       objective: this.objectiveText(),
+      viewer: {
+        open: Boolean(this.viewer?.open),
+        picture: this.viewer?.picture?.id ?? null,
+        imageVisible: Boolean(this.viewer?.picture && this.car.boardSolved(this.viewer.picture.id)),
+        board: this.viewer?.picture ? this.car.snapshot().boards[this.viewer.picture.id] : null,
+      },
       ...this.car.snapshot(),
       player: {
         x: Math.round(this.walker.x),
