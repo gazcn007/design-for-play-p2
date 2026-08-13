@@ -16,7 +16,8 @@ test('every delivered film is preserved as a production runtime asset', () => {
 test('the completed chapter route owns all four film handoffs', () => {
   assert.match(source('src/scenes/GameScene.js'), /CINEMATICS\.chapter1To2/);
   assert.match(source('src/cars/cyberpunkParkour/CyberpunkParkourScene.js'), /CINEMATICS\.chapter2To3/);
-  assert.match(source('src/cars/presentCity3d/Chapter3OpeningRuntime.js'), /CINEMATICS\.chapter3To4/);
+  assert.match(source('src/cars/presentCity3d/Chapter3OpeningRuntime.js'), /nightfall:chapter3-complete/);
+  assert.match(source('src/car03-3d-main.js'), /CINEMATICS\.chapter3To4/);
   assert.match(source('src/chapters/paintedCountry/PigmentTrainScene.js'), /CINEMATICS\.chapter4To5/);
 });
 
@@ -25,7 +26,7 @@ test('every transition preloads its next chapter while the film is playing', () 
   const title = source('src/shell/titleMenu.js');
   const chapter1 = source('src/scenes/GameScene.js');
   const chapter2 = source('src/cars/cyberpunkParkour/CyberpunkParkourScene.js');
-  const chapter3 = source('src/cars/presentCity3d/Chapter3OpeningRuntime.js');
+  const chapter3 = source('src/car03-3d-main.js');
   const chapter4 = source('src/chapters/paintedCountry/PigmentTrainScene.js');
   assert.match(flow, /video\.addEventListener\('playing', beginPreload/);
   for (const [file, chapter] of [[title, 1], [chapter1, 2], [chapter2, 3], [chapter3, 4], [chapter4, 5]]) {

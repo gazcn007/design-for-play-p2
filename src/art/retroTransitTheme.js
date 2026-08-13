@@ -23,6 +23,5 @@ export const RETRO_TRANSIT_CSS = Object.freeze({
   charcoalDeep: '#17232b',
   black: '#0a1015',
   silver: '#9fb7c0',
-  silverDark: '#5b6472',
   cyan: '#75d4cd',
 });

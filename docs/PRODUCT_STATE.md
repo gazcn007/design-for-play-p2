@@ -338,6 +338,17 @@ machinery or not at all.
 
 **Sections I, II, IV, V, and VI are not modified.**
 
+## Accepted 2026-08-12: Chapter 4 becomes an archive gallery with a moon test
+
+The 2026-08-11 ink-displacement puzzle remains the way the player crosses the
+paper car. It now carries three required discoveries: a washable archive in each
+bay reveals one supplied image, and `E` expands it into a brief horror fragment
+about people who built, worshipped, and researched the same impossible presence.
+At the final coupling handle, only after viewing all three, the player selects
+one of five supplied marks. The Moon is correct and completes the car; any other
+mark kills the player and restarts this standalone slice. This is an explicit
+exception to Chapter 4's prior no-punishment rule.
+
 ## Accepted 2026-08-11 (second decision): Chapter 4 is an ink-displacement puzzle
 
 George played the plain wash → paint → cross loop below and rejected it as having

@@ -27,6 +27,7 @@ import TutorialCarArt from '../art/tutorialCarArt.js';
 import TutorialTrainRoomsArt from '../art/tutorialTrainRoomsArt.js';
 import { RETRO_TRANSIT_CSS } from '../art/retroTransitTheme.js';
 import TimetablePuzzle from '../tutorial/TimetablePuzzle.js';
+import PrologueNarrativeProps from '../prologueNarrativeProps.js';
 import {
   createPersistentUnderfloorState,
   createUnderfloorHintState,
@@ -184,6 +185,9 @@ export default class GameScene extends Phaser.Scene {
     this.buildMarkers();
     this.buildOverlays();
     this.buildUnderfloorHint();
+    this.buildHintBar();
+    this.narrativeProps = new PrologueNarrativeProps(this);
+    this.narrativeProps.build();
 
     this.solids.refresh();
 
@@ -264,6 +268,7 @@ export default class GameScene extends Phaser.Scene {
       this.tutorialCarArt?.destroy();
       this.tutorialTrainRoomsArt?.destroy();
       this.timetablePuzzle?.destroy();
+      this.narrativeProps?.destroy();
     });
   }
 
@@ -973,6 +978,8 @@ export default class GameScene extends Phaser.Scene {
     if (LEVEL.tutorialPuzzle.mode === 'timetable') {
       this.tutorialWorldVisible = visible;
       this.timetablePuzzle?.setVisible(visible);
+      this.narrativeProps?.setVisible(visible);
+      this.hintBar?.setVisible(visible);
       return;
     }
     this.tutorialWorldVisible = visible;
@@ -1285,6 +1292,32 @@ export default class GameScene extends Phaser.Scene {
       .setVisible(false);
     this.underfloorHintState = createUnderfloorHintState();
     this._underfloorHintShown = { visible: false, style: null };
+  }
+
+  buildHintBar() {
+    // Black bottom-bar hint for world interactables. Replaces floating [E] text.
+    this.hintBar = this.add
+      .text(GAME_W / 2, GAME_H - 28, '', {
+        fontFamily: '"American Typewriter", "Courier New", monospace',
+        fontSize: '12px',
+        color: '#e5cf9b',
+        backgroundColor: '#07090d',
+        padding: { x: 14, y: 5 },
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(97)
+      .setVisible(false);
+  }
+
+  _updateHintBar(text) {
+    if (!this.hintBar) return;
+    if (text) {
+      this.hintBar.setText(text);
+      this.hintBar.setVisible(true);
+    } else {
+      this.hintBar.setVisible(false);
+    }
   }
 
   // Visible safe area: a fixed margin above the REAL viewport bottom. The
@@ -1822,16 +1855,23 @@ export default class GameScene extends Phaser.Scene {
 
   updateInteractables(input) {
     if (this.dialogueState) {
-      this.prompt.setVisible(false);
+      this._updateHintBar(null);
       return;
     }
 
-    // While the relay cabinet close-up owns the screen, no world device may
+    // While a relay cabinet close-up owns the screen, no world device may
     // be picked or fired: the pointer drives the cabinet, E/ESC closes it.
     if (this.relayCloseupActive) {
       this.activeInteractable = null;
       this.activeNPC = null;
-      this.prompt.setVisible(false);
+      this._updateHintBar(null);
+      return;
+    }
+
+    // While a Butch narrative line owns the upper card, world prompts stay
+    // hidden and E belongs to the line's dismiss path only.
+    if (this.narrativeProps?.dialogueActive) {
+      this._updateHintBar(null);
       return;
     }
 
@@ -1887,6 +1927,17 @@ export default class GameScene extends Phaser.Scene {
       }
     });
 
+    // A suitcase carries both puzzle weight and story evidence. On its first
+    // encounter, let the player inspect every item before E returns to the
+    // normal carry/service verb. Other optional props still yield to nearby
+    // puzzle machinery.
+    const narrativeProp = this.narrativeProps?.findInteractable(p.x, p.y, p.lane);
+    const narrativePreemptsPuzzle = this.narrativeProps?.shouldPreemptPuzzle(narrativeProp);
+    if (narrativeProp && (!best || narrativePreemptsPuzzle)) {
+      best = { type: 'narrative-prop', item: narrativeProp, x: narrativeProp.x, y: narrativeProp.y };
+      bestDist = Math.abs(narrativeProp.x - p.x);
+    }
+
     this.npcs.forEach((npc) => {
       if (npc.def.lane !== p.lane) return;
       const dx = Math.abs(npc.sprite.x - p.x);
@@ -1904,9 +1955,13 @@ export default class GameScene extends Phaser.Scene {
 
     if (best) {
       const promptText =
-        best.type === 'npc'
-          ? '[E] SPEAK'
-          : LEVEL.tutorialPuzzle.mode === 'timetable' &&
+        best.type === 'narrative-prop'
+          ? best.item.kind === 'suitcase-inspector'
+            ? '[E] INSPECT CASE'
+            : best.item.state.open ? '[E] READ' : '[E] OPEN'
+          : best.type === 'npc'
+            ? '[E] SPEAK'
+            : LEVEL.tutorialPuzzle.mode === 'timetable' &&
               this.timetablePuzzle?.isTimetableKind(best.item.def.kind)
             ? this.timetablePuzzle.promptFor(best.item)
             : best.item.def.kind === 'recorder'
@@ -1922,19 +1977,9 @@ export default class GameScene extends Phaser.Scene {
                 : '[E]';
       // A null prompt text means the device owns its own in-world prompt (the
       // Phase II interlock latch/contactor); the shared bubble stays hidden.
-      if (promptText == null) {
-        this.prompt.setVisible(false);
-      } else {
-        this.prompt
-          .setVisible(true)
-          .setText(promptText)
-          .setPosition(
-            best.x,
-            best.item.sprite.y - best.item.sprite.displayHeight - (best.type === 'npc' ? 32 : 10),
-          );
-      }
+      this._updateHintBar(promptText);
     } else {
-      this.prompt.setVisible(false);
+      this._updateHintBar(null);
     }
 
     // The punch press is the one interactable that takes more than E: keys 1/2/3
@@ -1952,6 +1997,7 @@ export default class GameScene extends Phaser.Scene {
 
     if (input.interact && best) {
       if (best.type === 'npc') this.openDialogue(best.item);
+      else if (best.type === 'narrative-prop') this.narrativeProps.interact(best.item);
       else this.fireInteractable(best.item);
     }
   }
@@ -1972,7 +2018,7 @@ export default class GameScene extends Phaser.Scene {
     };
     this.player.frozen = true;
     this.player.setVelocity(0, 0);
-    this.prompt.setVisible(false);
+    this._updateHintBar(null);
     this.updateTutorialObjectiveMarker();
     this.showDialogueNode();
   }
@@ -3014,6 +3060,18 @@ export default class GameScene extends Phaser.Scene {
       return;
     }
 
+    // Optional archive conversations use the same forward-moving HUD grammar
+    // as NPC dialogue. They own E/1/2 until the current exchange closes, so a
+    // response cannot also fire a puzzle control or close its suitcase.
+    if (this.narrativeProps?.dialogueActive) {
+      // Keep the small prop reveal animation moving while the player reads.
+      // The old early return left drawers half-open until the conversation
+      // ended, making the evidence and the dialogue disagree on screen.
+      this.narrativeProps.update();
+      this.narrativeProps.updateDialogueInput();
+      return;
+    }
+
     const input = this.readInput();
     if (
       this.prologueArrivalGrace
@@ -3057,6 +3115,16 @@ export default class GameScene extends Phaser.Scene {
     this.updateTutorialObjectiveMarker();
     this.updateWorld();
     this.updateEnemies();
+    // Narrative prop point-and-click modal: E/ESC closes, world input pauses.
+    if (this.narrativeProps?.isModalOpen()) {
+      if (input.interact || Phaser.Input.Keyboard.JustDown(this.keys.esc)) {
+        this.narrativeProps.closeInspectionModal();
+        input.interact = false;
+      }
+      return;
+    }
+
+    this.narrativeProps?.update();
     this.updateInteractables(input);
     this.updateMarkers();
     this.resolveEmbedding();

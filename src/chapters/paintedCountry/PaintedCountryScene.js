@@ -1,28 +1,31 @@
 import Phaser from 'phaser';
 import {
-  ARCH_GAP,
-  ARCH_SEGMENTS,
   BAY_TITLES,
+  BOARD,
   CEILING_Y,
-  DRAWBRIDGE_GAP,
-  FLOOR_RUNS,
+  CELL,
+  DOOR,
+  eyeletAt,
+  FLOOR_ROW,
+  FLOOR_SPANS,
   FLOOR_Y,
-  GAP_A,
+  FOLDS,
+  GLAZE_RECTS,
+  GRID,
   JUMP_VELOCITY,
   MOVE_SPEED,
+  PAINTINGS,
+  RACK_Y,
+  READ_RADIUS,
   REACH,
-  VESTIBULE,
+  SIGN,
   VIEW,
   WAINSCOT_Y,
+  WINDOWS,
   WORLD,
 } from './carLayout.js';
-import {
-  PART_ONE_PIGMENTS,
-  PART_ONE_SOURCES,
-  createPaintedCar,
-} from './paintedCarModel.js';
+import { colOf, createPaintedCar, idx, rowOf } from './paintedCarModel.js';
 import { PAPER } from './paperPalette.js';
-import { drawPigmentHalo, haloPointToward } from './pigmentHalo.js';
 import {
   buildPaperGrain,
   draftLine,
@@ -32,37 +35,35 @@ import {
   paintedFill,
 } from './paperSurface.js';
 
-const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace';
-const DEPTH = Object.freeze({
+// Chapter 4 // THE PAINTED COUNTRY — draw your own way through.
+//
+// The player paints and washes anywhere they can reach. Paint only takes where
+// it touches paper that is already there, so wanting to be higher up means
+// building a staircase and climbing it. Three pictures are hung too high to
+// read from the floor, and the door at the end wants to know which sign was in
+// all of them.
+//
+// This file owns pixels and input only. Every rule lives in paintedCarModel.js.
+
+const DEPTH = {
   SHEET: 0,
-  WINDOW: 4,
-  WALL: 8,
-  FIXTURE: 14,
-  COLOR: 18,
-  PUZZLE: 22,
-  FIGURE: 30,
-  PROMPT: 44,
-  GRAIN: 70,
-});
-
-const SOURCE_LAYOUT = Object.freeze([
-  { id: 'red-phone', x: 210, y: 390, kind: 'phone', scale: 0.72, rect: { x: 164, y: 330, w: 92, h: 66 } },
-  { id: 'blue-teapot', x: 965, y: 377, kind: 'teapot', scale: 0.72, rect: { x: 922, y: 334, w: 86, h: 52 } },
-  { id: 'yellow-lamp', x: 1160, y: 379, kind: 'lamp', scale: 0.68, rect: { x: 1124, y: 310, w: 72, h: 76 } },
-  { id: 'green-chair', x: 1330, y: 414, kind: 'chair', scale: 0.65, rect: { x: 1289, y: 328, w: 82, h: 126 } },
-  { id: 'violet-banner', x: 2145, y: 282, kind: 'banner', scale: 0.64, rect: { x: 2103, y: 210, w: 84, h: 104 } },
-]);
-
-const HOLD_SECONDS = 0.68;
-
-const INTERACTION_ZONES = Object.freeze({
-  'bridge-red': { x: GAP_A.x - 38, y: FLOOR_Y - 18 },
-  arch: { x: ARCH_GAP.x - 42, y: FLOOR_Y - 18 },
-  'counterweight-violet': { x: 2425, y: 382 },
-  exit: { x: VESTIBULE.couplingX - 8, y: FLOOR_Y - 38 },
-});
-
-const colorCss = (value) => `#${value.toString(16).padStart(6, '0')}`;
+  COUNTRY: 5,
+  WALL: 10,
+  GLAZE: 14,
+  FIXTURE: 18,
+  DRAWING: 22,
+  PAINT: 30,
+  BLOCK: 32,
+  PICTURE: 36,
+  BOARD: 37,
+  CORD: 39,
+  DOOR: 40,
+  FIGURE: 44,
+  CURSOR: 48,
+  GRAIN: 60,
+  AIR: 70,
+  HUD: 90,
+};
 
 export class PaintedCountryScene extends Phaser.Scene {
   constructor() {
@@ -76,1002 +77,1064 @@ export class PaintedCountryScene extends Phaser.Scene {
   }
 
   create() {
+    this.music = this.sound.add('chapter4-drawing-music', { loop: true, volume: 0.28 });
+    const playMusic = () => { if (!this.music?.isPlaying) this.music?.play(); };
+    if (this.sound.locked) this.sound.once('unlocked', playMusic);
+    else playMusic();
+    this.input.once('pointerdown', playMusic);
+    this.input.keyboard.once('keydown', playMusic);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.music?.stop());
+    this.advancingToStudio = false;
     this.rnd = makeRandom(0x9a17);
+    this.motes = [];
+    this.boilTargets = [];
     this.car = createPaintedCar();
-    this.drawbridgeProgress = 0;
-    this.transitioning = false;
-    this.playerMovementDirection = 'still';
-    this.figurePose = 'idle';
-    this.figureDrawnPose = null;
-    this.playerAnimation = 'idle';
-    this.currentInteraction = null;
-    this.hoverSourceId = null;
-    this.hoverTargetId = null;
-    this.hold = { key: null, progress: 0 };
-    this.tutorialSeen = { extract: false, fill: false, counterweight: false, exit: false };
+    this.cellBodies = new Map();
+    this.paintDirty = true;
+    this.lastBrushCell = null;
+    this.wasLeftDown = false;
 
     this.cameras.main.setBackgroundColor(PAPER.sheet);
     this.cameras.main.setBounds(0, 0, WORLD.w, WORLD.h);
-    this.physics.world.setBounds(0, -250, WORLD.w, WORLD.h + 500);
+    this.physics.world.setBounds(0, -400, WORLD.w, WORLD.h + 900);
 
-    this.buildWorld();
-    this.buildRoomObjects();
-    this.buildVestibule();
+    this.buildSheet();
+    this.buildCountry();
+    this.buildCarriage();
+    this.buildGrid();
+    this.buildGlaze();
+    this.buildGallery();
+    this.buildBoard();
+    this.buildDoor();
     this.buildSolids();
     this.buildPlayer();
-    this.buildDynamicLayers();
-    this.buildPrompt();
-    this.buildGrain();
-    this.bindInput();
-    this.startMusic();
-    this.applyQaStart();
-    this.redrawPuzzles();
-  }
 
-  startMusic() {
-    this.music = this.sound.add('chapter4-drawing-music', { loop: true, volume: 0.28 });
-    const play = () => { if (!this.music?.isPlaying) this.music?.play(); };
-    if (this.sound.locked) this.sound.once('unlocked', play);
-    else play();
-    this.input.once('pointerdown', play);
-    this.input.keyboard.once('keydown', play);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.music?.stop());
+    this.paintLayer = this.graphics(DEPTH.PAINT);
+    this.blockLayer = this.graphics(DEPTH.BLOCK);
+    this.cordLayer = this.graphics(DEPTH.CORD);
+    this.brushCursor = this.graphics(DEPTH.CURSOR);
+    this.doorLayer = this.graphics(DEPTH.DOOR);
+
+    this.buildGrain();
+    this.buildAir();
+    this.buildHud();
+
+    this.car.state.blocks.forEach((key) => this.addCellBody(key % GRID.w, Math.floor(key / GRID.w)));
+    this.input.mouse?.disableContextMenu();
+
+    this.time.addEvent({
+      delay: 1000 / 12,
+      loop: true,
+      callback: () => this.boilTargets.forEach((redraw) => redraw()),
+    });
   }
 
   graphics(depth) {
     return this.add.graphics().setDepth(depth);
   }
 
-  buildWorld() {
+  // =========================================================== the sheet
+
+  buildSheet() {
     const g = this.graphics(DEPTH.SHEET);
-    g.fillStyle(PAPER.sheet, 1).fillRect(0, 0, WORLD.w, WORLD.h);
-    g.fillStyle(PAPER.sheetLow, 0.95).fillRect(0, 0, WORLD.w, CEILING_Y);
-    g.fillStyle(PAPER.sheetMid, 0.72).fillRect(0, WAINSCOT_Y, WORLD.w, FLOOR_Y - WAINSCOT_Y);
-    FLOOR_RUNS.forEach((run) => {
-      g.fillStyle(PAPER.sheetLow, 1).fillRect(run.x, FLOOR_Y, run.w, WORLD.h - FLOOR_Y);
-      hatchRect(g, this.rnd, run.x, FLOOR_Y + 3, run.w, 64, { spacing: 17, alpha: 0.19, flip: true });
+    g.fillStyle(PAPER.sheet, 1);
+    g.fillRect(0, 0, WORLD.w, WORLD.h);
+
+    FOLDS.forEach((x, i) => {
+      g.fillStyle(i === 0 ? PAPER.sheetMid : PAPER.sheetLow, 0.4);
+      g.fillRect(x, 0, WORLD.w - x, WORLD.h);
+      g.lineStyle(1, PAPER.fold, 0.9);
+      draftLine(g, this.rnd, x, 0, x, WORLD.h, { overshoot: 0, jitter: 1.8, segments: 16 });
+      g.fillStyle(PAPER.kraft, 0.3);
+      g.fillRect(x - 8, WAINSCOT_Y - 34, 16, 78);
     });
 
-    [GAP_A, ARCH_GAP, DRAWBRIDGE_GAP].forEach((gap) => {
-      g.fillStyle(PAPER.sheetHigh, 1).fillRect(gap.x, FLOOR_Y, gap.w, WORLD.h - FLOOR_Y);
-      g.lineStyle(1.6, PAPER.deckle, 0.85);
-      draftLine(g, this.rnd, gap.x, FLOOR_Y, gap.x, WORLD.h, { overshoot: 0, jitter: 2.1, segments: 8 });
-      draftLine(g, this.rnd, gap.x + gap.w, FLOOR_Y, gap.x + gap.w, WORLD.h, { overshoot: 0, jitter: 2.1, segments: 8 });
-    });
-
-    const windows = [
-      { x: 42, w: 300 }, { x: 690, w: 280 }, { x: 1000, w: 420 },
-      { x: 1900, w: 380 }, { x: 2810, w: 420 },
-    ];
-    windows.forEach(({ x, w }, index) => {
-      g.fillStyle(PAPER.sheetHigh, 0.96).fillRect(x, 118, w, 196);
-      g.lineStyle(1.5, PAPER.graphiteSoft, 0.74);
-      draftRect(g, this.rnd, x, 118, w, 196, { overshoot: 7, jitter: 0.7 });
-      const hillY = 234 + (index % 2) * 12;
-      g.fillStyle(PAPER.sheetMid, 0.82);
-      g.fillTriangle(x, 314, x + w * 0.42, hillY, x + w * 0.7, 314);
-      g.fillStyle(PAPER.sheetLow, 0.66);
-      g.fillTriangle(x + w * 0.42, hillY, x + w, 282, x + w, 314);
-      g.lineStyle(1.1, PAPER.graphiteFaint, 0.48);
-      draftLine(g, this.rnd, x, 294, x + w, 276, { overshoot: 0, jitter: 1.8, segments: 12 });
-    });
-
-    g.lineStyle(1.8, PAPER.graphite, 0.86);
-    draftLine(g, this.rnd, 0, CEILING_Y, WORLD.w, CEILING_Y, { overshoot: 0, jitter: 0.8, segments: 50 });
-    draftLine(g, this.rnd, 0, WAINSCOT_Y, WORLD.w, WAINSCOT_Y, { overshoot: 0, jitter: 0.8, segments: 50 });
-    FLOOR_RUNS.forEach((run) => {
-      draftLine(g, this.rnd, run.x, FLOOR_Y, run.x + run.w, FLOOR_Y, { overshoot: 0, jitter: 0.9, segments: 18 });
-    });
-
-    BAY_TITLES.forEach(({ x, title }) => {
-      this.add.text(x, 101, title, {
-        fontFamily: MONO,
-        fontSize: '10px',
-        color: '#8d8579',
-        letterSpacing: 1.7,
-      }).setDepth(DEPTH.FIXTURE);
-    });
-
-    this.drawRoomDividers();
   }
 
-  drawRoomDividers() {
-    const g = this.graphics(DEPTH.WALL + 1);
-    [760, 1885, 2900].forEach((x) => {
-      g.fillStyle(PAPER.kraft, 0.22).fillRect(x - 8, CEILING_Y, 16, FLOOR_Y - CEILING_Y);
-      g.lineStyle(1.2, PAPER.graphiteFaint, 0.56);
-      draftLine(g, this.rnd, x, CEILING_Y, x, FLOOR_Y, { overshoot: 0, jitter: 1.6, segments: 18 });
-    });
-  }
-
-  buildRoomObjects() {
-    const fixture = this.graphics(DEPTH.FIXTURE);
-    fixture.lineStyle(1.7, PAPER.graphite, 0.84);
-
-    // Room I: the red telephone belongs on a small hall table, never as a
-    // floating resource node.
-    draftRect(fixture, this.rnd, 100, 405, 245, 18, { overshoot: 5 });
-    [126, 320].forEach((x) => draftLine(fixture, this.rnd, x, 423, x, FLOOR_Y, { overshoot: 4 }));
-    draftRect(fixture, this.rnd, 82, 172, 278, 128, { overshoot: 6 });
-    this.drawFamilySketch(fixture, 98, 190);
-
-    // Room II: a coherent sitting room. Teapot and lamp share a sideboard;
-    // the green cushion stays inside the chair after its color is lifted.
-    draftRect(fixture, this.rnd, 865, 402, 370, 20, { overshoot: 5 });
-    [890, 1210].forEach((x) => draftLine(fixture, this.rnd, x, 422, x, FLOOR_Y, { overshoot: 4 }));
-    draftRect(fixture, this.rnd, 1260, 334, 142, 102, { overshoot: 6 });
-    draftLine(fixture, this.rnd, 1274, 436, 1274, FLOOR_Y, { overshoot: 4 });
-    draftLine(fixture, this.rnd, 1388, 436, 1388, FLOOR_Y, { overshoot: 4 });
-    fixture.lineStyle(1.1, PAPER.graphiteFaint, 0.55);
-    for (let y = 190; y < 310; y += 24) draftLine(fixture, this.rnd, 810, y, 1420, y, { overshoot: 2, jitter: 0.5 });
-
-    // Room III: two towers, a pulley and a hanging banner make the final
-    // problem read like a small paper castle before it starts moving.
-    this.drawCastleTower(fixture, 2490, 218, 76, FLOOR_Y - 218, false);
-    this.drawCastleTower(fixture, 2790, 218, 82, FLOOR_Y - 218, true);
-    fixture.lineStyle(2, PAPER.graphite, 0.85);
-    fixture.strokeCircle(2497, 226, 18);
-    fixture.strokeCircle(2497, 226, 8);
-
-    this.sourceArt = new Map();
-    SOURCE_LAYOUT.forEach((layout) => {
-      const art = this.graphics(DEPTH.COLOR);
-      art.setScale(layout.scale).setPosition(layout.x * (1 - layout.scale), layout.y * (1 - layout.scale));
-      this.sourceArt.set(layout.id, art);
-    });
-    this.redrawSources();
-  }
-
-  drawFamilySketch(g, x, y) {
-    g.lineStyle(1.1, PAPER.graphiteSoft, 0.55);
-    g.strokeCircle(x + 44, y + 36, 14);
-    g.strokeCircle(x + 93, y + 40, 12);
-    g.strokeCircle(x + 145, y + 32, 15);
-    draftLine(g, this.rnd, x + 22, y + 92, x + 166, y + 92, { overshoot: 4, jitter: 0.8 });
-  }
-
-  drawCastleTower(g, x, y, w, h, farSide) {
-    g.fillStyle(PAPER.sheetMid, farSide ? 0.88 : 0.96).fillRect(x, y, w, h);
-    g.lineStyle(1.8, PAPER.graphite, 0.85);
-    draftRect(g, this.rnd, x, y, w, h, { overshoot: 6, jitter: 0.8 });
-    const tooth = w / 5;
-    for (let i = 0; i < 5; i += 2) {
-      g.fillStyle(PAPER.sheet, 1).fillRect(x + i * tooth, y - 22, tooth, 24);
-      draftRect(g, this.rnd, x + i * tooth, y - 22, tooth, 24, { overshoot: 2, jitter: 0.5 });
+  // The squared paper the child ruled before she drew anything. It sits above
+  // the carriage fills so it reads everywhere the player can actually build,
+  // and it is faint enough to be a guide rather than graph paper.
+  buildGrid() {
+    const g = this.graphics(DEPTH.WALL + 2);
+    g.lineStyle(1, PAPER.graphiteFaint, 0.13);
+    const top = CEILING_Y;
+    for (let cx = 0; cx <= GRID.w; cx += 1) g.lineBetween(cx * CELL, top, cx * CELL, FLOOR_Y);
+    for (let cy = Math.ceil(top / CELL); cy <= FLOOR_ROW; cy += 1) {
+      g.lineBetween(0, cy * CELL, WORLD.w, cy * CELL);
     }
-    hatchRect(g, this.rnd, x + 8, y + 20, w - 16, h - 30, { spacing: 13, alpha: 0.16, flip: farSide });
   }
 
-  redrawSources() {
-    SOURCE_LAYOUT.forEach((layout) => {
-      const g = this.sourceArt.get(layout.id);
-      const item = this.car.source(layout.id);
-      const pigment = this.car.pigment(item.pigment);
-      const live = !item.drained;
-      g.clear();
-      const suctionProgress = this.hold.key === `source:${layout.id}`
-        ? Phaser.Math.Clamp(this.hold.progress / HOLD_SECONDS, 0, 1)
-        : 0;
-      g.setAlpha(live ? 1 - suctionProgress * 0.58 : 1);
-      if (layout.kind === 'phone') this.drawPhone(g, layout, pigment, live);
-      else if (layout.kind === 'teapot') this.drawTeapot(g, layout, pigment, live);
-      else if (layout.kind === 'lamp') this.drawLamp(g, layout, pigment, live);
-      else if (layout.kind === 'chair') this.drawChair(g, layout, pigment, live);
-      else this.drawBanner(g, layout, pigment, live);
+  buildCountry() {
+    const container = this.add.container(0, 0).setDepth(DEPTH.COUNTRY);
+    const g = this.add.graphics();
+    container.add(g);
+
+    g.fillStyle(PAPER.sheetHigh, 1);
+    g.fillRect(0, 100, WORLD.w, 230);
+    for (let x = -60; x < WORLD.w; x += 330) this.foldedHill(g, x, 190, 380, 130, PAPER.sheet, PAPER.sheetMid);
+    for (let x = 140; x < WORLD.w; x += 300) this.foldedHill(g, x, 220, 320, 106, PAPER.sheetMid, PAPER.sheetLow);
+
+    g.lineStyle(1.5, PAPER.graphiteFaint, 0.95);
+    for (let x = 0; x < WORLD.w; x += 420) {
+      draftLine(g, this.rnd, x, 300, x + 420, 284, { overshoot: 0, jitter: 2.6, segments: 12 });
+    }
+
+    const mask = this.add.graphics().setVisible(false);
+    mask.fillStyle(0xffffff, 1);
+    WINDOWS.forEach((win) => mask.fillRect(win.x, win.y, win.w, win.h));
+    container.setMask(mask.createGeometryMask());
+  }
+
+  foldedHill(g, x, y, w, h, faceColor, shadeColor) {
+    const peak = x + w * 0.4;
+    g.fillStyle(faceColor, 1);
+    g.beginPath();
+    g.moveTo(x, y + h);
+    g.lineTo(peak, y);
+    g.lineTo(peak + w * 0.14, y + h);
+    g.closePath();
+    g.fillPath();
+    g.fillStyle(shadeColor, 1);
+    g.beginPath();
+    g.moveTo(peak, y);
+    g.lineTo(x + w, y + h * 0.78);
+    g.lineTo(x + w, y + h);
+    g.lineTo(peak + w * 0.14, y + h);
+    g.closePath();
+    g.fillPath();
+    g.lineStyle(1.2, PAPER.graphiteSoft, 0.85);
+    draftLine(g, this.rnd, x, y + h, peak, y, { overshoot: 0, jitter: 0.8 });
+  }
+
+  buildCarriage() {
+    const g = this.graphics(DEPTH.WALL);
+    g.fillStyle(PAPER.sheetLow, 1);
+    g.fillRect(0, 0, WORLD.w, CEILING_Y);
+    g.fillStyle(PAPER.sheetMid, 1);
+    g.fillRect(0, WAINSCOT_Y, WORLD.w, FLOOR_Y - WAINSCOT_Y);
+
+    g.fillStyle(PAPER.sheetLow, 1);
+    FLOOR_SPANS.forEach((span) =>
+      g.fillRect(span.from * CELL, FLOOR_Y, (span.to - span.from) * CELL, WORLD.h - FLOOR_Y),
+    );
+    FLOOR_SPANS.forEach((span) =>
+      hatchRect(g, this.rnd, span.from * CELL, FLOOR_Y, (span.to - span.from) * CELL, 46, {
+        spacing: 17,
+        alpha: 0.2,
+        flip: true,
+      }),
+    );
+
+    // The torn edges of the two holes.
+    const holes = [];
+    for (let i = 0; i < FLOOR_SPANS.length - 1; i += 1) {
+      holes.push({ x: FLOOR_SPANS[i].to * CELL, w: (FLOOR_SPANS[i + 1].from - FLOOR_SPANS[i].to) * CELL });
+    }
+    holes.forEach((hole) => {
+      const h = this.graphics(DEPTH.WALL + 1);
+      h.fillStyle(PAPER.sheetHigh, 1);
+      h.fillRect(hole.x, FLOOR_Y, hole.w, WORLD.h - FLOOR_Y);
+      h.lineStyle(1.6, PAPER.deckle, 0.95);
+      [hole.x, hole.x + hole.w].forEach((x) =>
+        draftLine(h, this.rnd, x, FLOOR_Y, x, WORLD.h, { overshoot: 0, jitter: 2.6, segments: 10 }),
+      );
+    });
+
+    const draw = this.graphics(DEPTH.DRAWING);
+    const boil = () => {
+      const rnd = makeRandom(0x5eed + Math.floor(this.time.now / 83));
+      draw.clear();
+      draw.lineStyle(1.9, PAPER.graphite, 0.94);
+      [CEILING_Y, WAINSCOT_Y].forEach((y) =>
+        draftLine(draw, rnd, 0, y, WORLD.w, y, { overshoot: 0, jitter: 1.1, segments: 40 }),
+      );
+      FLOOR_SPANS.forEach((span) =>
+        draftLine(draw, rnd, span.from * CELL, FLOOR_Y, span.to * CELL, FLOOR_Y, {
+          overshoot: 0,
+          jitter: 1.2,
+          segments: 12,
+        }),
+      );
+      draw.lineStyle(1.6, PAPER.graphite, 0.9);
+      WINDOWS.forEach((win) => draftRect(draw, rnd, win.x, win.y, win.w, win.h, { overshoot: 7, jitter: 0.8 }));
+      draw.lineStyle(1.3, PAPER.graphiteSoft, 0.9);
+      draftLine(draw, rnd, 20, RACK_Y, WORLD.w - 20, RACK_Y, { overshoot: 0, jitter: 0.8, segments: 40 });
+    };
+    boil();
+    this.boilTargets.push(boil);
+  }
+
+  // Varnished paper: visibly glossy, and paint slides off it.
+  buildGlaze() {
+    const g = this.graphics(DEPTH.GLAZE);
+    GLAZE_RECTS.forEach((rect) => {
+      const x = rect.col * CELL;
+      const y = rect.row * CELL;
+      const w = rect.cols * CELL;
+      const h = rect.rows * CELL;
+      g.fillStyle(PAPER.sheetHigh, 0.55);
+      g.fillRect(x, y, w, h);
+      g.lineStyle(1.3, PAPER.deckle, 0.75);
+      draftRect(g, this.rnd, x, y, w, h, { overshoot: 4, jitter: 1.2 });
+      // Diagonal sheen, so it reads as varnish rather than as a wall.
+      g.lineStyle(2, PAPER.sheetHigh, 0.85);
+      for (let i = -h; i < w; i += 26) {
+        g.lineBetween(x + i, y + h, x + i + h, y);
+      }
+      g.lineStyle(1, PAPER.graphiteFaint, 0.3);
+      for (let i = -h; i < w; i += 26) {
+        g.lineBetween(x + i + 2, y + h, x + i + h + 2, y);
+      }
     });
   }
 
-  handPaint(g, x, y, w, h, color, live) {
-    if (!live) return;
-    paintedFill(g, this.rnd, x, y, w, h, color, { alpha: 0.82, inset: 2 });
-    g.lineStyle(1.2, color, 0.42);
-    for (let yy = y + 6; yy < y + h - 3; yy += 7) {
-      draftLine(g, this.rnd, x + 4, yy, x + w - 5, yy + (this.rnd() - 0.5) * 4, {
-        overshoot: 0,
-        jitter: 1.4,
-        segments: 5,
+  // =========================================================== the gallery
+
+  buildGallery() {
+    const g = this.graphics(DEPTH.PICTURE);
+    const mono = 'ui-monospace, SFMono-Regular, Menlo, monospace';
+    this.pictureLabels = {};
+
+    PAINTINGS.forEach((picture) => {
+      // Frame.
+      g.fillStyle(PAPER.sheetHigh, 1);
+      g.fillRect(picture.x, picture.y, picture.w, picture.h);
+      g.lineStyle(2.6, PAPER.graphite, 0.92);
+      draftRect(g, this.rnd, picture.x, picture.y, picture.w, picture.h, { overshoot: 5, jitter: 0.6 });
+      g.lineStyle(1.2, PAPER.graphiteSoft, 0.7);
+      draftRect(g, this.rnd, picture.x + 7, picture.y + 7, picture.w - 14, picture.h - 14, {
+        overshoot: 2,
+        jitter: 0.5,
       });
-    }
-  }
+      // A dark night ground so the signs read.
+      g.fillStyle(PAPER.indigo, 0.14);
+      g.fillRect(picture.x + 9, picture.y + 9, picture.w - 18, picture.h - 18);
 
-  drawPhone(g, { x, y }, pigment, live) {
-    this.handPaint(g, x - 50, y - 43, 100, 43, pigment.color, live);
-    this.handPaint(g, x - 56, y - 72, 112, 24, pigment.color, live);
-    g.lineStyle(2, PAPER.graphite, live ? 0.9 : 0.62);
-    draftRect(g, this.rnd, x - 50, y - 43, 100, 43, { overshoot: 4 });
-    draftLine(g, this.rnd, x - 55, y - 70, x + 55, y - 70, { overshoot: 4 });
-    draftLine(g, this.rnd, x - 55, y - 70, x - 38, y - 49, { overshoot: 2 });
-    draftLine(g, this.rnd, x + 55, y - 70, x + 38, y - 49, { overshoot: 2 });
-    g.strokeCircle(x, y - 23, 15);
-    for (let i = 0; i < 8; i += 1) {
-      const a = (i / 8) * Math.PI * 2;
-      g.strokeCircle(x + Math.cos(a) * 9, y - 23 + Math.sin(a) * 9, 1.6);
-    }
-    draftLine(g, this.rnd, x + 50, y - 29, x + 72, y - 7, { overshoot: 0, jitter: 2, segments: 5 });
-  }
+      // The signs, spaced across the picture.
+      const slots = picture.signs.length;
+      picture.signs.forEach((sign, i) => {
+        const sx = picture.x + (picture.w * (i + 0.5)) / slots;
+        const sy = picture.y + picture.h * 0.5;
+        this.drawSign(g, sign, sx, sy, 20, PAPER.graphite, 0.95);
+      });
 
-  drawTeapot(g, { x, y }, pigment, live) {
-    if (live) {
-      g.fillStyle(pigment.color, 0.78).fillEllipse(x, y - 22, 90, 58);
-      g.lineStyle(1.2, pigment.color, 0.48);
-      for (let yy = y - 42; yy < y - 5; yy += 7) g.lineBetween(x - 34, yy, x + 34, yy + 3);
-    }
-    g.lineStyle(2, PAPER.graphite, live ? 0.88 : 0.6).strokeEllipse(x, y - 22, 90, 58);
-    draftLine(g, this.rnd, x - 42, y - 33, x - 72, y - 48, { overshoot: 2 });
-    draftLine(g, this.rnd, x - 72, y - 48, x - 45, y - 11, { overshoot: 2 });
-    g.strokeCircle(x + 49, y - 23, 27);
-    draftLine(g, this.rnd, x - 18, y - 54, x + 18, y - 54, { overshoot: 4 });
-  }
+      // The hanging wire.
+      g.lineStyle(1.1, PAPER.graphiteSoft, 0.8);
+      g.lineBetween(picture.x + picture.w / 2, picture.y, picture.x + picture.w / 2 - 16, RACK_Y);
+      g.lineBetween(picture.x + picture.w / 2, picture.y, picture.x + picture.w / 2 + 16, RACK_Y);
 
-  drawLamp(g, { x, y }, pigment, live) {
-    this.handPaint(g, x - 45, y - 94, 90, 52, pigment.color, live);
-    g.lineStyle(2, PAPER.graphite, live ? 0.88 : 0.6);
-    draftLine(g, this.rnd, x - 45, y - 42, x + 45, y - 42, { overshoot: 3 });
-    draftLine(g, this.rnd, x - 45, y - 42, x - 28, y - 94, { overshoot: 3 });
-    draftLine(g, this.rnd, x - 28, y - 94, x + 28, y - 94, { overshoot: 3 });
-    draftLine(g, this.rnd, x + 28, y - 94, x + 45, y - 42, { overshoot: 3 });
-    draftLine(g, this.rnd, x, y - 42, x, y - 4, { overshoot: 3 });
-    draftLine(g, this.rnd, x - 34, y, x + 34, y, { overshoot: 4 });
-  }
+      this.add
+        .text(picture.x + picture.w / 2, picture.y + picture.h + 7, picture.title, {
+          fontFamily: mono,
+          fontSize: '10px',
+          color: '#8d8579',
+          letterSpacing: 1.4,
+        })
+        .setOrigin(0.5, 0)
+        .setDepth(DEPTH.PICTURE);
 
-  drawChair(g, { x, y }, pigment, live) {
-    this.handPaint(g, x - 54, y - 55, 108, 48, pigment.color, live);
-    g.lineStyle(2, PAPER.graphite, live ? 0.88 : 0.6);
-    draftRect(g, this.rnd, x - 54, y - 55, 108, 48, { overshoot: 5 });
-    draftLine(g, this.rnd, x - 54, y - 55, x - 54, y - 126, { overshoot: 5 });
-    draftLine(g, this.rnd, x + 54, y - 55, x + 54, y - 126, { overshoot: 5 });
-    draftLine(g, this.rnd, x - 54, y - 126, x + 54, y - 126, { overshoot: 5 });
-    draftLine(g, this.rnd, x - 40, y - 7, x - 40, FLOOR_Y, { overshoot: 3 });
-    draftLine(g, this.rnd, x + 40, y - 7, x + 40, FLOOR_Y, { overshoot: 3 });
-  }
-
-  drawBanner(g, { x, y }, pigment, live) {
-    g.lineStyle(2, PAPER.graphite, live ? 0.88 : 0.6);
-    draftLine(g, this.rnd, x - 65, y - 104, x + 65, y - 104, { overshoot: 6 });
-    this.handPaint(g, x - 52, y - 96, 104, 126, pigment.color, live);
-    draftLine(g, this.rnd, x - 52, y - 96, x - 52, y + 30, { overshoot: 3 });
-    draftLine(g, this.rnd, x + 52, y - 96, x + 52, y + 30, { overshoot: 3 });
-    draftLine(g, this.rnd, x - 52, y + 30, x, y + 5, { overshoot: 2 });
-    draftLine(g, this.rnd, x, y + 5, x + 52, y + 30, { overshoot: 2 });
-    g.strokeCircle(x, y - 48, 25);
-    draftLine(g, this.rnd, x - 17, y - 48, x + 17, y - 48, { overshoot: 1 });
-    draftLine(g, this.rnd, x, y - 65, x, y - 31, { overshoot: 1 });
-  }
-
-  buildVestibule() {
-    const g = this.graphics(DEPTH.FIXTURE);
-    // There is deliberately no second doorway here. The castle landing simply
-    // opens into the vestibule; only the coupling door is drawn.
-    g.fillStyle(PAPER.sheetHigh, 0.54).fillRect(VESTIBULE.x, 132, VESTIBULE.w, FLOOR_Y - 132);
-    hatchRect(g, this.rnd, VESTIBULE.x + 16, 148, VESTIBULE.w - 32, FLOOR_Y - 176, {
-      spacing: 16,
-      alpha: 0.12,
-      flip: true,
-    });
-    g.lineStyle(1.8, PAPER.graphite, 0.86);
-    draftRect(g, this.rnd, VESTIBULE.couplingX - 58, 286, 98, 184, { overshoot: 7, jitter: 0.8 });
-    draftRect(g, this.rnd, VESTIBULE.couplingX - 44, 304, 70, 148, { overshoot: 4, jitter: 0.5 });
-    this.couplingDoor = this.add.rectangle(VESTIBULE.couplingX - 9, 378, 66, 144, PAPER.sheetMid, 0.78)
-      .setDepth(DEPTH.FIXTURE - 0.2);
-    this.add.text(VESTIBULE.x + 82, 196, 'VESTIBULE', {
-      fontFamily: MONO,
-      fontSize: '11px',
-      color: '#8d8579',
-      letterSpacing: 2,
-    }).setDepth(DEPTH.FIXTURE + 1);
-  }
-
-  buildSolids() {
-    const solid = (x, y, w, h) => {
-      const object = this.add.rectangle(x + w / 2, y + h / 2, w, h, 0xffffff, 0);
-      this.physics.add.existing(object, true);
-      return object;
-    };
-    this.floorSolids = FLOOR_RUNS.map((run) => solid(run.x, FLOOR_Y, run.w, 56));
-    this.floorSolids.push(solid(-20, -200, 20, 900), solid(WORLD.w, -200, 20, 900));
-    this.bridgeSolid = solid(GAP_A.x, FLOOR_Y - 25, GAP_A.w, 25);
-    this.archSolids = ARCH_SEGMENTS.map((part) => solid(part.x, part.y, part.w, FLOOR_Y - part.y));
-    this.drawbridgeSolid = solid(DRAWBRIDGE_GAP.x, FLOOR_Y - 24, DRAWBRIDGE_GAP.w, 24);
-    this.bridgeSolid.body.enable = false;
-    this.archSolids.forEach((body) => { body.body.enable = false; });
-    this.drawbridgeSolid.body.enable = false;
-  }
-
-  buildPlayer() {
-    this.walker = this.add.rectangle(56, 400, 18, 62, 0xffffff, 0);
-    this.physics.add.existing(this.walker);
-    this.walker.body.setCollideWorldBounds(false);
-    [...this.floorSolids, this.bridgeSolid, ...this.archSolids, this.drawbridgeSolid]
-      .forEach((object) => this.physics.add.collider(this.walker, object));
-    this.figure = this.graphics(DEPTH.FIGURE).setPosition(this.walker.x, FLOOR_Y);
-    this.drawFigure();
-    this.cameras.main.startFollow(this.walker, true, 0.1, 0.12);
-    this.cameras.main.setDeadzone(280, 190);
-  }
-
-  buildDynamicLayers() {
-    this.puzzleArt = this.graphics(DEPTH.PUZZLE);
-    this.carriedArt = this.graphics(DEPTH.FIGURE + 1);
-    this.pointerArt = this.graphics(DEPTH.PROMPT - 2);
-  }
-
-  buildPrompt() {
-    this.promptFrame = this.graphics(DEPTH.PROMPT);
-    this.promptText = this.add.text(0, 0, '', {
-      fontFamily: MONO,
-      fontSize: '10px',
-      color: '#4a4640',
-      align: 'center',
-      lineSpacing: 4,
-      letterSpacing: 1.15,
-      padding: { x: 9, y: 7 },
-    }).setOrigin(0.5, 1).setDepth(DEPTH.PROMPT + 1).setVisible(false);
-  }
-
-  buildGrain() {
-    const key = buildPaperGrain(this, 'paper-grain-painted-country-v3');
-    this.grain = this.add.tileSprite(0, 0, VIEW.w, VIEW.h, key)
-      .setOrigin(0)
-      .setScrollFactor(0)
-      .setDepth(DEPTH.GRAIN)
-      .setAlpha(0.7);
-  }
-
-  bindInput() {
-    this.keys = this.input.keyboard.addKeys({
-      left: 'LEFT', right: 'RIGHT', up: 'UP', a: 'A', d: 'D', w: 'W', space: 'SPACE',
-    });
-    this.input.keyboard.addCapture(['LEFT', 'RIGHT', 'UP', 'SPACE']);
-    this.input.mouse?.disableContextMenu();
-    this.input.keyboard.on('keydown-R', () => this.scene.restart());
-    this.input.keyboard.on('keydown-F', () => {
-      if (this.scale.isFullscreen) this.scale.stopFullscreen();
-      else this.scale.startFullscreen();
+      // "TOO FAR TO SEE" until the player gets up to it.
+      const hint = this.add
+        .text(picture.x + picture.w / 2, picture.y - 20, '', {
+          fontFamily: mono,
+          fontSize: '10px',
+          color: '#2f8c9e',
+          letterSpacing: 1.4,
+        })
+        .setOrigin(0.5, 1)
+        .setDepth(DEPTH.PICTURE);
+      this.pictureLabels[picture.id] = hint;
     });
   }
 
-  applyQaStart() {
-    if (!import.meta.env.DEV) return;
-    const qa = new URLSearchParams(window.location.search).get('qa');
-    const figurePose = qa?.startsWith('figure-') ? qa.slice('figure-'.length) : null;
-    if (['idle', 'walk', 'paint', 'wash'].includes(figurePose)) {
-      this.qaFigurePose = figurePose;
+  // The four signs, drawn rather than typed so they read at a glance and match
+  // the rest of the car's hand.
+  drawSign(g, sign, cx, cy, size, color, alpha = 1) {
+    const r = size / 2;
+    if (sign === SIGN.MOON) {
+      // A crescent: an ink disc with a paper disc bitten out of it.
+      g.fillStyle(color, alpha);
+      g.fillCircle(cx, cy, r);
+      g.fillStyle(PAPER.sheetHigh, 1);
+      g.fillCircle(cx + r * 0.52, cy - r * 0.24, r * 0.92);
       return;
     }
-    if (!['arch', 'drawbridge', 'vestibule'].includes(qa)) return;
-
-    const solve = (source, target) => {
-      this.car.extract(source);
-      this.car.fill(target);
-    };
-    solve('red-phone', 'bridge-red');
-    if (qa === 'arch') {
-      this.walker.setPosition(1400, 400);
-    } else {
-      solve('blue-teapot', 'arch-blue');
-      solve('yellow-lamp', 'arch-yellow');
-      solve('green-chair', 'arch-green');
-      if (qa === 'drawbridge') {
-        this.car.extract('violet-banner');
-        this.walker.setPosition(2380, 400);
-      } else {
-        solve('violet-banner', 'counterweight-violet');
-        this.drawbridgeProgress = 1;
-        this.walker.setPosition(VESTIBULE.couplingX - 90, 400);
-      }
-    }
-    this.car.drainEvents();
-    this.redrawSources();
-  }
-
-  sourceAt(x, y) {
-    return SOURCE_LAYOUT.find((layout) => !this.car.isDrained(layout.id) && Phaser.Geom.Rectangle.Contains(
-      new Phaser.Geom.Rectangle(layout.rect.x, layout.rect.y, layout.rect.w, layout.rect.h),
-      x,
-      y,
-    )) ?? null;
-  }
-
-  targetInteractionAt(x, y) {
-    if (!this.car.isFilled('bridge-red') && Phaser.Geom.Rectangle.Contains(
-      new Phaser.Geom.Rectangle(GAP_A.x - 8, FLOOR_Y - 58, GAP_A.w + 16, 70), x, y,
-    )) return { id: 'bridge-red', rect: { x: GAP_A.x - 8, y: FLOOR_Y - 58, w: GAP_A.w + 16, h: 70 } };
-
-    const arch = ARCH_SEGMENTS.find((part) => !this.car.isFilled(part.id) && Phaser.Geom.Rectangle.Contains(
-      new Phaser.Geom.Rectangle(part.x - 5, part.y - 8, part.w + 10, FLOOR_Y - part.y + 16), x, y,
-    ));
-    if (arch) return { id: arch.id, rect: { x: arch.x - 5, y: arch.y - 8, w: arch.w + 10, h: FLOOR_Y - arch.y + 16 } };
-
-    const weightTop = 278 + this.drawbridgeProgress * 102;
-    if (!this.car.drawbridgeOpen() && Phaser.Geom.Rectangle.Contains(
-      new Phaser.Geom.Rectangle(2382, weightTop - 8, 88, 82), x, y,
-    )) return { id: 'counterweight-violet', rect: { x: 2382, y: weightTop - 8, w: 88, h: 82 } };
-    return null;
-  }
-
-  pointerWorld(pointer = this.input.activePointer) {
-    return this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-  }
-
-  exitInteractionAt(x, y) {
-    if (!this.car.allTargetsFilled()) return null;
-    const rect = { x: VESTIBULE.couplingX - 58, y: 282, w: 104, h: 190 };
-    if (!Phaser.Geom.Rectangle.Contains(new Phaser.Geom.Rectangle(rect.x, rect.y, rect.w, rect.h), x, y)) return null;
-    if (Math.abs(this.walker.x - INTERACTION_ZONES.exit.x) > REACH + 55) return null;
-    return { id: 'exit', rect };
-  }
-
-  pointedInteraction() {
-    const pointer = this.input.activePointer;
-    const world = this.pointerWorld(pointer);
-    const source = this.sourceAt(world.x, world.y);
-    if (source) return { type: 'source', id: source.id, x: source.x, y: source.y, source: this.car.source(source.id) };
-    const target = this.targetInteractionAt(world.x, world.y);
-    if (target) return { type: 'target', id: target.id, ...INTERACTION_ZONES[target.id.startsWith('arch-') ? 'arch' : target.id] };
-    const exit = this.exitInteractionAt(world.x, world.y);
-    return exit ? { type: 'exit', id: 'exit', ...INTERACTION_ZONES.exit } : null;
-  }
-
-  setHold(key, dt) {
-    if (this.hold.key !== key) this.hold = { key, progress: 0 };
-    this.hold.progress += dt;
-    return this.hold.progress >= HOLD_SECONDS;
-  }
-
-  resetHold() {
-    if (this.hold.key?.startsWith('source:')) {
-      this.hold = { key: null, progress: 0 };
-      this.redrawSources();
-      return;
-    }
-    this.hold = { key: null, progress: 0 };
-  }
-
-  stepPointerInteraction(dt) {
-    if (this.transitioning) return this.resetHold();
-    const pointer = this.input.activePointer;
-    const world = this.pointerWorld(pointer);
-    const source = this.sourceAt(world.x, world.y);
-    const target = this.targetInteractionAt(world.x, world.y);
-    const exit = this.exitInteractionAt(world.x, world.y);
-    this.hoverSourceId = source?.id ?? null;
-    this.hoverTargetId = target?.id ?? null;
-
-    if (source && pointer.rightButtonDown()) {
-      if (this.setHold(`source:${source.id}`, dt)) {
-        const item = this.car.source(source.id);
-        if (this.car.extract(source.id)) {
-          this.tutorialSeen.extract = true;
-          this.colorLiftBurst(source.x, source.y - 28, this.car.pigment(item.pigment).color);
+    if (sign === SIGN.RIVER) {
+      g.lineStyle(2.2, color, alpha);
+      for (let row = -1; row <= 1; row += 1) {
+        const y = cy + row * r * 0.55;
+        g.beginPath();
+        g.moveTo(cx - r, y);
+        for (let s = 0; s <= 8; s += 1) {
+          const t = s / 8;
+          g.lineTo(cx - r + t * size, y + Math.sin(t * Math.PI * 2) * r * 0.24);
         }
-        this.hold = { key: null, progress: 0 };
-        this.redrawSources();
-        this.handleEvents();
-      } else {
-        this.redrawSources();
+        g.strokePath();
       }
       return;
     }
-
-    if (target && pointer.leftButtonDown()) {
-      if (this.setHold(`target:${target.id}`, dt)) {
-        if (this.car.fill(target.id)) {
-          if (target.id === 'counterweight-violet') this.tutorialSeen.counterweight = true;
-          else this.tutorialSeen.fill = true;
-        }
-        this.hold = { key: null, progress: 0 };
-        this.handleEvents();
+    if (sign === SIGN.STAR) {
+      g.fillStyle(color, alpha);
+      g.beginPath();
+      for (let p = 0; p < 10; p += 1) {
+        const rad = p % 2 === 0 ? r : r * 0.42;
+        const a = -Math.PI / 2 + (p * Math.PI) / 5;
+        const px = cx + Math.cos(a) * rad;
+        const py = cy + Math.sin(a) * rad;
+        if (p === 0) g.moveTo(px, py);
+        else g.lineTo(px, py);
       }
+      g.closePath();
+      g.fillPath();
       return;
     }
-    if (exit && pointer.leftButtonDown()) {
-      if (this.setHold('exit', dt)) {
-        if (this.car.enterExit()) this.tutorialSeen.exit = true;
-        this.hold = { key: null, progress: 0 };
-        this.handleEvents();
-      }
-      return;
-    }
-    this.resetHold();
+    // HOUSE
+    g.fillStyle(color, alpha);
+    g.beginPath();
+    g.moveTo(cx - r, cy - r * 0.05);
+    g.lineTo(cx, cy - r);
+    g.lineTo(cx + r, cy - r * 0.05);
+    g.closePath();
+    g.fillPath();
+    g.fillRect(cx - r * 0.68, cy - r * 0.05, r * 1.36, r * 1.05);
   }
 
-  drawPointerFeedback() {
-    const g = this.pointerArt;
+  // ======================================================= the thread board
+
+  cordColor(pairId) {
+    if (pairId === 'amber') return PAPER.amber;
+    if (pairId === 'cyan') return PAPER.cyan;
+    return PAPER.fault;
+  }
+
+  buildBoard() {
+    const g = this.graphics(DEPTH.BOARD);
+    const mono = 'ui-monospace, SFMono-Regular, Menlo, monospace';
+
+    // The card it is all punched into.
+    g.fillStyle(PAPER.manilla, 0.96);
+    g.fillRect(BOARD.x, BOARD.y, BOARD.w, BOARD.h);
+    g.lineStyle(2.4, PAPER.graphite, 0.92);
+    draftRect(g, this.rnd, BOARD.x, BOARD.y, BOARD.w, BOARD.h, { overshoot: 5, jitter: 0.7 });
+    g.lineStyle(1, PAPER.graphiteFaint, 0.5);
+    draftRect(g, this.rnd, BOARD.x + 9, BOARD.y + 9, BOARD.w - 18, BOARD.h - 18, {
+      overshoot: 2,
+      jitter: 0.5,
+    });
+
+    // Every hole in the card, then the torn ones, then the coloured ends.
+    for (let c = 0; c < BOARD.cols; c += 1) {
+      for (let r = 0; r < BOARD.rows; r += 1) {
+        const at = eyeletAt(c, r);
+        if (this.car.isTorn(c, r)) {
+          // A hole ripped right through the card — no cord can pass.
+          g.fillStyle(PAPER.sheetHigh, 1);
+          g.fillCircle(at.x, at.y, 9);
+          g.lineStyle(1.6, PAPER.deckle, 0.95);
+          for (let i = 0; i < 9; i += 1) {
+            const a0 = (i / 9) * Math.PI * 2;
+            const a1 = ((i + 1) / 9) * Math.PI * 2;
+            const r0 = 8 + this.rnd() * 3;
+            const r1 = 8 + this.rnd() * 3;
+            g.lineBetween(
+              at.x + Math.cos(a0) * r0,
+              at.y + Math.sin(a0) * r0,
+              at.x + Math.cos(a1) * r1,
+              at.y + Math.sin(a1) * r1,
+            );
+          }
+          continue;
+        }
+        g.lineStyle(1.4, PAPER.graphiteSoft, 0.8);
+        g.strokeCircle(at.x, at.y, 5.5);
+      }
+    }
+
+    BOARD.pairs.forEach((pair) => {
+      [pair.a, pair.b].forEach(([c, r]) => {
+        const at = eyeletAt(c, r);
+        g.fillStyle(this.cordColor(pair.id), 0.95);
+        g.fillCircle(at.x, at.y, 9);
+        g.lineStyle(1.4, PAPER.graphite, 0.85);
+        g.strokeCircle(at.x, at.y, 9);
+        g.fillStyle(PAPER.manilla, 1);
+        g.fillCircle(at.x, at.y, 2.6);
+      });
+    });
+
+    this.add
+      .text(BOARD.x + BOARD.w / 2, BOARD.y - 30, 'THREAD EACH PAIR.\nNO TWO CORDS THROUGH ONE HOLE.', {
+        fontFamily: mono,
+        fontSize: '10px',
+        color: '#5c574f',
+        align: 'center',
+        lineSpacing: 3,
+        letterSpacing: 1.2,
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(DEPTH.BOARD);
+  }
+
+  boardCellAt(wx, wy) {
+    if (wx < BOARD.x || wx > BOARD.x + BOARD.w || wy < BOARD.y || wy > BOARD.y + BOARD.h) return null;
+    const c = Math.round((wx - BOARD.x - BOARD.pad) / BOARD.pitch);
+    const r = Math.round((wy - BOARD.y - BOARD.pad) / BOARD.pitch);
+    if (!this.car.inBoard(c, r)) return null;
+    const at = eyeletAt(c, r);
+    // Only count as "on a hole" if the pointer is genuinely near one, so a
+    // drag across the card cannot skip diagonally between holes.
+    if (Phaser.Math.Distance.Between(wx, wy, at.x, at.y) > BOARD.pitch * 0.62) return null;
+    return { c, r };
+  }
+
+  drawCords() {
+    const g = this.cordLayer;
     g.clear();
-    const source = SOURCE_LAYOUT.find(({ id }) => id === this.hoverSourceId);
-    const world = this.pointerWorld();
-    const target = this.targetInteractionAt(world.x, world.y);
-    const exit = this.exitInteractionAt(world.x, world.y);
-    let color = PAPER.cyan;
-    let rect = null;
-    if (source) {
-      color = this.car.pigment(this.car.source(source.id).pigment).color;
-      rect = source.rect;
-    } else if (target) {
-      color = this.car.pigment(this.car.target(target.id).pigment).color;
-      rect = target.rect;
-    } else if (exit) {
-      color = PAPER.cyan;
-      rect = exit.rect;
-    }
-    if (rect) {
-      g.lineStyle(2.2, color, 0.94);
-      draftRect(g, makeRandom(0x7440 + Math.floor(rect.x)), rect.x - 4, rect.y - 4, rect.w + 8, rect.h + 8, {
-        overshoot: 4,
+    const solved = this.car.boardSolved();
+
+    BOARD.pairs.forEach((pair) => {
+      const cord = this.car.state.board.cords[pair.id];
+      if (!cord || cord.length < 2) return;
+      const color = this.cordColor(pair.id);
+      const done = this.car.cordComplete(pair.id);
+
+      // A soft shadow under the cord so it reads as thread lying on the card.
+      g.lineStyle(7, PAPER.graphite, 0.14);
+      g.beginPath();
+      cord.forEach(([c, r], i) => {
+        const at = eyeletAt(c, r);
+        if (i === 0) g.moveTo(at.x, at.y + 2);
+        else g.lineTo(at.x, at.y + 2);
+      });
+      g.strokePath();
+
+      g.lineStyle(done ? 5.5 : 4, color, done ? 0.95 : 0.7);
+      g.beginPath();
+      cord.forEach(([c, r], i) => {
+        const at = eyeletAt(c, r);
+        if (i === 0) g.moveTo(at.x, at.y);
+        else g.lineTo(at.x, at.y);
+      });
+      g.strokePath();
+    });
+
+    if (solved) {
+      g.lineStyle(2, PAPER.verdigris, 0.85);
+      draftRect(g, makeRandom(0x77aa), BOARD.x + 4, BOARD.y + 4, BOARD.w - 8, BOARD.h - 8, {
+        overshoot: 3,
         jitter: 0.8,
       });
     }
-    if (!this.hold.key) return;
-    const progress = Phaser.Math.Clamp(this.hold.progress / HOLD_SECONDS, 0, 1);
-    const head = { x: this.walker.x, y: this.walker.y - 50 };
-    const centre = rect ? { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 } : head;
-    const haloEdge = haloPointToward(head.x, head.y, centre.x, centre.y, 36);
-    const from = this.hold.key.startsWith('source:') ? centre : haloEdge;
-    const destination = this.hold.key.startsWith('source:') ? haloEdge : centre;
-    const end = {
-      x: Phaser.Math.Linear(from.x, destination.x, progress),
-      y: Phaser.Math.Linear(from.y, destination.y, progress),
+  }
+
+  // ============================================================== the door
+
+  buildDoor() {
+    const g = this.graphics(DEPTH.DOOR - 1);
+    g.fillStyle(PAPER.sheetMid, 1);
+    g.fillRect(DOOR.x, DOOR.y, DOOR.w, DOOR.h);
+    g.lineStyle(2.6, PAPER.graphite, 0.94);
+    draftRect(g, this.rnd, DOOR.x, DOOR.y, DOOR.w, DOOR.h, { overshoot: 6, jitter: 0.7 });
+    hatchRect(g, this.rnd, DOOR.x + 8, DOOR.y + 8, DOOR.w - 16, DOOR.h - 16, {
+      spacing: 15,
+      alpha: 0.12,
+    });
+
+    const mono = 'ui-monospace, SFMono-Regular, Menlo, monospace';
+    this.add
+      .text(DOOR.x + DOOR.w / 2, DOOR.y - 34, 'WHICH SIGN WAS IN\nEVERY PICTURE?', {
+        fontFamily: mono,
+        fontSize: '11px',
+        color: '#5c574f',
+        align: 'center',
+        lineSpacing: 3,
+        letterSpacing: 1.4,
+      })
+      .setOrigin(0.5, 0)
+      .setDepth(DEPTH.DOOR);
+  }
+
+  // ============================================================== physics
+
+  buildSolids() {
+    this.solids = this.add.group();
+
+    const solid = (x, y, w, h) => {
+      const object = this.add.rectangle(x + w / 2, y + h / 2, w, h, 0xffffff, 0);
+      this.physics.add.existing(object, true);
+      this.solids.add(object);
+      return object;
     };
-    g.lineStyle(2.5, color, 0.72);
-    [-2.5, 2.5].forEach((offset) => draftLine(g, makeRandom(0x7580 + offset), from.x, from.y + offset, end.x, end.y + offset * 0.25, {
-      overshoot: 0,
-      jitter: 1.2,
-      segments: 9,
-    }));
+
+    FLOOR_SPANS.forEach((span) =>
+      solid(span.from * CELL, FLOOR_Y, (span.to - span.from) * CELL, WORLD.h - FLOOR_Y),
+    );
+    // The ends of the sheet are walls, not cliffs.
+    solid(-24, -400, 24, WORLD.h + 500);
+    solid(WORLD.w, -400, 24, WORLD.h + 500);
   }
 
-  nearestInteraction() {
-    const wx = this.walker.x;
-    const candidates = [];
-    SOURCE_LAYOUT.forEach((layout) => {
-      if (this.car.isDrained(layout.id)) return;
-      const source = this.car.source(layout.id);
-      candidates.push({ type: 'source', id: layout.id, x: layout.x, y: layout.y, distance: Math.abs(wx - layout.x), source });
+  addCellBody(cx, cy) {
+    const key = idx(cx, cy);
+    if (this.cellBodies.has(key)) return;
+    const object = this.add.rectangle(cx * CELL + CELL / 2, cy * CELL + CELL / 2, CELL, CELL, 0xffffff, 0);
+    this.physics.add.existing(object, true);
+    this.solids.add(object);
+    this.cellBodies.set(key, object);
+  }
+
+  removeCellBody(cx, cy) {
+    const key = idx(cx, cy);
+    const object = this.cellBodies.get(key);
+    if (!object) return;
+    this.solids.remove(object, true, true);
+    this.cellBodies.delete(key);
+  }
+
+  buildPlayer() {
+    this.walker = this.add.rectangle(200, 360, 16, 58, 0xffffff, 0);
+    this.physics.add.existing(this.walker);
+    this.walker.body.setCollideWorldBounds(false);
+    this.physics.add.collider(this.walker, this.solids);
+
+    this.figure = this.graphics(DEPTH.FIGURE);
+    this.cameras.main.startFollow(this.walker, true, 0.1, 0.12);
+    this.cameras.main.setDeadzone(240, 160);
+
+    this.keys = this.input.keyboard.addKeys({
+      left: 'LEFT',
+      right: 'RIGHT',
+      a: 'A',
+      d: 'D',
+      up: 'UP',
+      w: 'W',
+      space: 'SPACE',
+      restart: 'R',
     });
-    if (!this.car.isFilled('bridge-red')) {
-      candidates.push({ type: 'target', id: 'bridge-red', ...INTERACTION_ZONES['bridge-red'], distance: Math.abs(wx - INTERACTION_ZONES['bridge-red'].x) });
-    }
-    if (!this.car.archComplete()) {
-      const next = ['arch-blue', 'arch-yellow', 'arch-green'].find((id) => !this.car.isFilled(id));
-      candidates.push({ type: 'target', id: next, ...INTERACTION_ZONES.arch, distance: Math.abs(wx - INTERACTION_ZONES.arch.x) });
-    }
-    if (!this.car.drawbridgeOpen()) {
-      candidates.push({ type: 'target', id: 'counterweight-violet', ...INTERACTION_ZONES['counterweight-violet'], distance: Math.abs(wx - INTERACTION_ZONES['counterweight-violet'].x) });
-    }
-    if (wx >= VESTIBULE.x) {
-      candidates.push({ type: 'exit', id: 'exit', ...INTERACTION_ZONES.exit, distance: Math.abs(wx - INTERACTION_ZONES.exit.x) });
-    }
-    return candidates.filter((item) => item.distance <= REACH).sort((a, b) => a.distance - b.distance)[0] ?? null;
+    this.input.keyboard.addCapture(['LEFT', 'RIGHT', 'UP', 'DOWN', 'SPACE']);
   }
 
-  promptFor(interaction) {
-    if (!interaction) return null;
-    if (interaction.type === 'source') {
-      const item = this.car.source(interaction.id);
-      const pigment = this.car.pigment(item.pigment);
-      return {
-        text: this.tutorialSeen.extract ? `RIGHT-HOLD TO LIFT\n${pigment.name}` : 'POINT AT THE COLORED OBJECT\nRIGHT-HOLD TO DRAW OUT PIGMENT',
-        color: pigment.color,
-        x: interaction.x,
-        y: interaction.y - 96,
-      };
-    }
-    if (interaction.id === 'bridge-red') {
-      return {
-        text: this.tutorialSeen.fill ? 'LEFT-HOLD TO PAINT\nTHE DRAWN BRIDGE' : 'POINT AT THE BRIDGE\nLEFT-HOLD TO PAINT',
-        color: this.car.pigment('red').color,
-        x: GAP_A.x + 36,
-        y: FLOOR_Y - 58,
-      };
-    }
-    if (interaction.id.startsWith('arch-')) {
-      const pigmentId = this.car.target(interaction.id).pigment;
-      const pigment = this.car.pigment(pigmentId);
-      return {
-        text: `LEFT-HOLD THIS THIRD\nFOR ${pigment.name}`,
-        color: pigment.color,
-        x: ARCH_GAP.x + 58,
-        y: 354,
-      };
-    }
-    if (interaction.id === 'counterweight-violet') {
-      return {
-        text: this.tutorialSeen.counterweight ? 'LEFT-HOLD THE WEIGHT\nTO LOAD MULBERRY' : 'POINT AT THE HANGING WEIGHT\nLEFT-HOLD TO PAINT',
-        color: this.car.pigment('violet').color,
-        x: 2425,
-        y: 316,
-      };
-    }
-    return {
-      text: this.tutorialSeen.exit ? 'THE OPEN SHEET OPENS' : 'POINT AT THE ONLY DOOR\nLEFT-HOLD TO ENTER',
-      color: PAPER.cyan,
-      x: VESTIBULE.couplingX - 8,
-      y: 278,
-    };
+  // ============================================================== surface
+
+  buildGrain() {
+    const key = buildPaperGrain(this);
+    this.grain = this.add
+      .tileSprite(0, 0, VIEW.w, VIEW.h, key)
+      .setOrigin(0)
+      .setScrollFactor(0)
+      .setDepth(DEPTH.GRAIN)
+      .setAlpha(0.9);
   }
 
-  showPrompt(spec) {
-    this.promptFrame.clear();
-    if (!spec) {
-      this.promptText.setVisible(false);
-      return;
-    }
-    this.promptText.setText(spec.text).setPosition(spec.x, spec.y).setColor(colorCss(spec.color)).setVisible(true);
-    const bounds = this.promptText.getBounds();
-    this.promptFrame.fillStyle(PAPER.sheetHigh, 0.94).fillRoundedRect(bounds.x - 5, bounds.y - 4, bounds.width + 10, bounds.height + 8, 3);
-    this.promptFrame.lineStyle(1.6, PAPER.graphiteSoft, 0.82);
-    draftRect(this.promptFrame, makeRandom(Math.floor(spec.x * 17 + spec.y)), bounds.x - 5, bounds.y - 4, bounds.width + 10, bounds.height + 8, {
-      overshoot: 3,
-      jitter: 0.7,
-    });
-    this.promptFrame.lineStyle(2.4, spec.color, 0.84);
-    draftLine(this.promptFrame, makeRandom(Math.floor(spec.x * 23)), bounds.x + 8, bounds.y + bounds.height + 1, bounds.x + bounds.width - 8, bounds.y + bounds.height + 1, {
-      overshoot: 0,
-      jitter: 1,
-      segments: 5,
-    });
-  }
-
-  handleEvents() {
-    this.car.drainEvents().forEach((event) => {
-      if (event.type === 'missing-color') {
-        const pigment = this.car.pigment(event.pigment);
-        this.localFeedback(`${pigment.name} IS STILL\nINSIDE A ROOM OBJECT`, pigment.color);
-      } else if (event.type === 'target-filled') {
-        const pigment = this.car.pigment(event.pigment);
-        this.localFeedback(`${pigment.name} STAYS\nIN THE PAPER`, pigment.color);
-      } else if (event.type === 'drawbridge-opened') {
-        this.tweens.add({ targets: this, drawbridgeProgress: 1, duration: 1450, ease: 'Sine.easeInOut' });
-      } else if (event.type === 'car-complete') {
-        this.playCompletion();
-      }
-    });
-  }
-
-  localFeedback(text, color) {
-    const note = this.add.text(this.walker.x, this.walker.y - 86, text, {
-      fontFamily: MONO,
-      fontSize: '10px',
-      color: colorCss(color),
-      align: 'center',
-      lineSpacing: 3,
-      backgroundColor: '#fdfcf8ee',
-      padding: { x: 10, y: 7 },
-    }).setOrigin(0.5, 1).setDepth(DEPTH.PROMPT + 3);
-    this.tweens.add({ targets: note, y: note.y - 14, alpha: 0, delay: 700, duration: 700, onComplete: () => note.destroy() });
-  }
-
-  colorLiftBurst(x, y, color) {
-    for (let i = 0; i < 7; i += 1) {
-      const dot = this.add.rectangle(x + (this.rnd() - 0.5) * 50, y + (this.rnd() - 0.5) * 30, 3 + this.rnd() * 5, 1.5, color, 0.72)
-        .setRotation((this.rnd() - 0.5) * 0.8)
-        .setDepth(DEPTH.PROMPT - 1);
-      this.tweens.add({
-        targets: dot,
-        x: this.walker.x,
-        y: this.walker.y - 24,
-        alpha: 0,
-        duration: 420 + i * 45,
-        ease: 'Sine.easeIn',
-        onComplete: () => dot.destroy(),
-      });
+  buildAir() {
+    for (let i = 0; i < 26; i += 1) {
+      const mote = this.add
+        .circle(this.rnd() * WORLD.w, this.rnd() * VIEW.h, this.rnd() > 0.75 ? 1.7 : 1.1, PAPER.graphiteSoft, 0.5)
+        .setDepth(DEPTH.AIR);
+      this.motes.push({ obj: mote, vx: 4 + this.rnd() * 9, vy: -2 + this.rnd() * 4, phase: this.rnd() * 6.28 });
     }
   }
 
-  redrawPuzzles() {
-    const g = this.puzzleArt;
+  buildHud() {
+    const mono = 'ui-monospace, SFMono-Regular, Menlo, monospace';
+    const fixed = (x, y, text, color, size = 11, originX = 0, originY = 0) =>
+      this.add
+        .text(x, y, text, { fontFamily: mono, fontSize: `${size}px`, color, letterSpacing: 2 })
+        .setOrigin(originX, originY)
+        .setScrollFactor(0)
+        .setDepth(DEPTH.HUD);
+
+    // A torn strip of paper laid over the top of the drawing. Without it the
+    // controls sat directly on the carriage's hatching and every line of text
+    // fought with a drafted one behind it.
+    const band = this.add
+      .graphics()
+      .setScrollFactor(0)
+      .setDepth(DEPTH.HUD - 2);
+    band.fillStyle(0xf3efe4, 0.94);
+    band.fillRect(0, 0, VIEW.w, 74);
+    band.lineStyle(1.4, 0xd8cfb9, 0.9);
+    band.lineBetween(0, 74, VIEW.w, 74);
+
+    fixed(24, 14, 'A / D  ←→  walk     SPACE  jump     R  restart', '#a49c8d');
+    fixed(24, 30, 'HOLD LEFT  draw paper (∞)      HOLD RIGHT  wash it away', '#a49c8d');
+    this.objective = fixed(24, 50, '', '#4a4640', 12);
+    this.bayLabel = fixed(VIEW.w - 24, 14, '', '#a49c8d', 11, 1);
+
+    this.flash = fixed(24, 86, '', '#b4453a', 12);
+    this.flash.setPadding(8, 5, 8, 5).setBackgroundColor('#f7f4ec').setAlpha(0);
+
+    // The notebook. What the player has actually seen, never the answer. It
+    // lives bottom-right so it never lands on the bay name or the objective.
+    this.notebook = fixed(VIEW.w - 20, VIEW.h - 18, '', '#4a4640', 11, 1, 1);
+    this.notebook.setPadding(11, 9, 11, 9).setBackgroundColor('#ece5d5').setLineSpacing(4).setAlpha(0);
+
+    // Bay names belong to the world, painted under the floor line where there
+    // is nothing else to collide with.
+    BAY_TITLES.forEach(({ x, title }) =>
+      this.add
+        .text(x + 28, FLOOR_Y + 22, title, {
+          fontFamily: mono,
+          fontSize: '11px',
+          color: '#a49c8d',
+          letterSpacing: 2,
+        })
+        .setDepth(DEPTH.WALL + 2),
+    );
+  }
+
+  flashMessage(text, color = '#b4453a') {
+    if (!this.flash) return;
+    this.tweens.killTweensOf(this.flash);
+    this.flash.setText(text).setColor(color).setAlpha(1);
+    this.tweens.add({ targets: this.flash, alpha: 0, delay: 1700, duration: 800 });
+  }
+
+  // ================================================================= draw
+
+  redrawPaint() {
+    const g = this.paintLayer;
+    const b = this.blockLayer;
     g.clear();
-    const rnd = makeRandom(0x4149);
-    this.drawShortBridge(g, rnd);
-    this.drawArch(g, rnd);
-    this.drawDrawbridge(g, rnd);
+    b.clear();
+    const rnd = makeRandom(0x31a9);
 
-    this.bridgeSolid.body.enable = this.car.isFilled('bridge-red');
-    const archReady = this.car.archComplete();
-    this.archSolids.forEach((body) => { body.body.enable = archReady; });
-    this.drawbridgeSolid.body.enable = this.car.drawbridgeOpen() && this.drawbridgeProgress > 0.92;
-  }
-
-  drawShortBridge(g, rnd) {
-    g.fillStyle(PAPER.sheetHigh, 0.72).fillRect(GAP_A.x, FLOOR_Y - 25, GAP_A.w, 25);
-    g.lineStyle(2, this.car.isFilled('bridge-red') ? this.car.pigment('red').color : PAPER.cyan, 0.82);
-    draftRect(g, rnd, GAP_A.x, FLOOR_Y - 25, GAP_A.w, 25, { overshoot: 5, jitter: 0.7 });
-    if (this.car.isFilled('bridge-red')) {
-      paintedFill(g, rnd, GAP_A.x, FLOOR_Y - 25, GAP_A.w, 25, this.car.pigment('red').color, { alpha: 0.82 });
-      g.lineStyle(1.1, this.car.pigment('red').color, 0.54);
-      for (let x = GAP_A.x + 8; x < GAP_A.x + GAP_A.w; x += 18) {
-        draftLine(g, rnd, x, FLOOR_Y - 20, x + 12, FLOOR_Y - 7, { overshoot: 0, jitter: 1.2, segments: 3 });
+    this.car.state.painted.forEach((key) => {
+      const cx = (key % GRID.w) * CELL;
+      const cy = Math.floor(key / GRID.w) * CELL;
+      paintedFill(g, rnd, cx, cy, CELL, CELL, PAPER.indigo, { alpha: 0.92 });
+    });
+    // One pass of edge ink so a drawn shape reads as a made thing, not a blob.
+    g.lineStyle(1.4, PAPER.boneBlack, 0.4);
+    this.car.state.painted.forEach((key) => {
+      const cx = (key % GRID.w);
+      const cy = Math.floor(key / GRID.w);
+      if (!this.car.isPainted(cx, cy - 1)) g.lineBetween(cx * CELL, cy * CELL, cx * CELL + CELL, cy * CELL);
+      if (!this.car.isPainted(cx, cy + 1)) {
+        g.lineBetween(cx * CELL, cy * CELL + CELL, cx * CELL + CELL, cy * CELL + CELL);
       }
-    }
-  }
-
-  drawArch(g, rnd) {
-    ARCH_SEGMENTS.forEach((part) => {
-      const pigmentId = this.car.target(part.id).pigment;
-      const pigment = this.car.pigment(pigmentId);
-      const filled = this.car.isFilled(part.id);
-      g.fillStyle(filled ? pigment.color : PAPER.sheetHigh, filled ? 0.8 : 0.68).fillRect(part.x, part.y, part.w, FLOOR_Y - part.y);
-      if (filled) {
-        g.lineStyle(1.1, pigment.color, 0.48);
-        for (let yy = part.y + 7; yy < FLOOR_Y; yy += 8) {
-          draftLine(g, rnd, part.x + 4, yy, part.x + part.w - 4, yy + 3, { overshoot: 0, jitter: 1.4, segments: 5 });
-        }
+      if (!this.car.isPainted(cx - 1, cy)) g.lineBetween(cx * CELL, cy * CELL, cx * CELL, cy * CELL + CELL);
+      if (!this.car.isPainted(cx + 1, cy)) {
+        g.lineBetween(cx * CELL + CELL, cy * CELL, cx * CELL + CELL, cy * CELL + CELL);
       }
-      g.lineStyle(2, filled ? pigment.color : PAPER.cyan, filled ? 0.86 : 0.62);
-      draftRect(g, rnd, part.x, part.y, part.w, FLOOR_Y - part.y, { overshoot: 4, jitter: 0.8 });
     });
 
-    // Cut an arch opening out of the three blocks, so it reads as one bridge
-    // with three colored thirds rather than three ordinary platforms.
-    g.fillStyle(PAPER.sheetHigh, 1).fillEllipse(ARCH_GAP.x + ARCH_GAP.w / 2, FLOOR_Y + 8, 238, 154);
-    g.lineStyle(2, PAPER.graphite, 0.78);
-    g.beginPath();
-    g.arc(ARCH_GAP.x + ARCH_GAP.w / 2, FLOOR_Y + 8, 119, Math.PI, Math.PI * 2);
-    g.strokePath();
-    g.lineStyle(1.1, PAPER.graphiteFaint, 0.56);
-    draftLine(g, rnd, ARCH_GAP.x + 110, 390, ARCH_GAP.x + 110, FLOOR_Y - 10, { overshoot: 2 });
-    draftLine(g, rnd, ARCH_GAP.x + 220, 390, ARCH_GAP.x + 220, FLOOR_Y - 10, { overshoot: 2 });
-  }
-
-  drawDrawbridge(g, rnd) {
-    const p = Phaser.Math.Clamp(this.drawbridgeProgress, 0, 1);
-    const hinge = { x: DRAWBRIDGE_GAP.x, y: FLOOR_Y - 10 };
-    const angle = -Math.PI / 2 + (Math.PI / 2) * p;
-    const length = DRAWBRIDGE_GAP.w;
-    const thickness = 22;
-    const ux = Math.cos(angle);
-    const uy = Math.sin(angle);
-    const nx = -uy;
-    const ny = ux;
-    const end = { x: hinge.x + ux * length, y: hinge.y + uy * length };
-    const points = [
-      new Phaser.Geom.Point(hinge.x + nx * thickness / 2, hinge.y + ny * thickness / 2),
-      new Phaser.Geom.Point(end.x + nx * thickness / 2, end.y + ny * thickness / 2),
-      new Phaser.Geom.Point(end.x - nx * thickness / 2, end.y - ny * thickness / 2),
-      new Phaser.Geom.Point(hinge.x - nx * thickness / 2, hinge.y - ny * thickness / 2),
-    ];
-    g.fillStyle(PAPER.kraft, 0.76).fillPoints(points, true);
-    g.lineStyle(2, PAPER.graphite, 0.88);
-    for (let i = 0; i < points.length; i += 1) {
-      const a = points[i];
-      const b = points[(i + 1) % points.length];
-      draftLine(g, rnd, a.x, a.y, b.x, b.y, { overshoot: 2, jitter: 0.7, segments: 6 });
-    }
-    for (let i = 1; i < 7; i += 1) {
-      const bx = hinge.x + ux * (length * i / 7);
-      const by = hinge.y + uy * (length * i / 7);
-      draftLine(g, rnd, bx + nx * 9, by + ny * 9, bx - nx * 9, by - ny * 9, { overshoot: 1, jitter: 0.6 });
-    }
-
-    const weightTop = 278 + p * 102;
-    const weightColor = this.car.drawbridgeOpen() ? this.car.pigment('violet').color : PAPER.sheetHigh;
-    g.fillStyle(weightColor, this.car.drawbridgeOpen() ? 0.84 : 0.9).fillRoundedRect(2390, weightTop, 72, 66, 4);
-    g.lineStyle(2, this.car.drawbridgeOpen() ? this.car.pigment('violet').color : PAPER.cyan, 0.84);
-    draftRect(g, rnd, 2390, weightTop, 72, 66, { overshoot: 5, jitter: 0.8 });
-    if (this.car.drawbridgeOpen()) {
-      g.lineStyle(1.1, this.car.pigment('violet').color, 0.5);
-      for (let yy = weightTop + 8; yy < weightTop + 60; yy += 8) {
-        draftLine(g, rnd, 2396, yy, 2456, yy + 2, { overshoot: 0, jitter: 1.2, segments: 4 });
-      }
-    }
-    g.lineStyle(1.8, PAPER.graphite, 0.76);
-    draftLine(g, rnd, 2426, weightTop, 2497, 226, { overshoot: 0, jitter: 0.8, segments: 8 });
-    draftLine(g, rnd, 2497, 226, end.x, end.y, { overshoot: 0, jitter: 0.8, segments: 10 });
-  }
-
-  drawCarriedPigments(time) {
-    const g = this.carriedArt;
-    g.clear();
-    const inventory = this.car.snapshot().inventory;
-    const sourceId = this.hold.key?.startsWith('source:') ? this.hold.key.slice('source:'.length) : null;
-    const progressId = sourceId ? this.car.source(sourceId)?.pigment : null;
-    if (!inventory.length && !progressId) return;
-    drawPigmentHalo(g, {
-      x: this.walker.x,
-      y: this.walker.y - 50,
-      pigments: PART_ONE_PIGMENTS,
-      activeIds: inventory,
-      selectedId: inventory[0] ?? null,
-      progressId,
-      progress: this.hold.progress / HOLD_SECONDS,
-      time,
+    this.car.state.blocks.forEach((key) => {
+      const cx = (key % GRID.w) * CELL;
+      const cy = Math.floor(key / GRID.w) * CELL;
+      paintedFill(b, rnd, cx, cy, CELL, CELL, PAPER.boneBlack, { alpha: 0.88 });
+      b.lineStyle(1, PAPER.graphite, 0.5);
+      b.strokeRect(cx, cy, CELL, CELL);
     });
-  }
-
-  stepPlayer() {
-    if (this.transitioning) {
-      this.walker.body.setVelocityX(0);
-      return;
-    }
-    const left = this.keys.left.isDown || this.keys.a.isDown;
-    const right = this.keys.right.isDown || this.keys.d.isDown;
-    const jump = this.keys.up.isDown || this.keys.w.isDown || this.keys.space.isDown;
-    this.walker.body.setVelocityX(left && !right ? -MOVE_SPEED : right && !left ? MOVE_SPEED : 0);
-    if (jump && this.walker.body.blocked.down) this.walker.body.setVelocityY(JUMP_VELOCITY);
-
-    if (this.walker.y > VIEW.h + 90) {
-      const respawnX = this.walker.x < 720 ? 80 : this.walker.x < 1880 ? 820 : 1930;
-      this.walker.setPosition(respawnX, 400);
-      this.walker.body.setVelocity(0, 0);
-    }
   }
 
   drawFigure() {
     const g = this.figure;
-    const pose = this.figurePose;
-    const rnd = makeRandom(0xb07c4 + (pose === 'paint' ? 11 : pose === 'wash' ? 23 : 0));
-    const raised = pose === 'paint' || pose === 'wash';
-    const accent = pose === 'paint' ? PAPER.bookCloth : PAPER.indigo;
-    const traceLimb = (points, width = 10) => {
-      g.lineStyle(width + 3, PAPER.graphite, 0.9);
-      g.beginPath();
-      g.moveTo(points[0].x, points[0].y);
-      points.slice(1).forEach((point) => g.lineTo(point.x, point.y));
-      g.strokePath();
-      g.lineStyle(width, PAPER.sheetMid, 1);
-      g.beginPath();
-      g.moveTo(points[0].x, points[0].y);
-      points.slice(1).forEach((point) => g.lineTo(point.x, point.y));
-      g.strokePath();
-    };
-
+    const x = Math.round(this.walker.x);
     g.clear();
+    const feetY = Math.round(this.walker.y + 29);
+    const at = (dy) => feetY - dy;
+    g.fillStyle(PAPER.figure, 1);
+    g.fillRect(x - 6, feetY - 18, 5, 18);
+    g.fillRect(x + 1, feetY - 18, 5, 18);
+    g.fillRect(x - 8, feetY - 46, 16, 28);
+    g.fillCircle(x, at(54), 8);
 
-    // Short, planted legs. Walking never cycles through foot frames; the whole
-    // drawing rocks from its feet in updateFigurePose().
-    traceLimb([{ x: -8, y: -28 }, { x: -10, y: -2 }], 9);
-    traceLimb([{ x: 8, y: -28 }, { x: 10, y: -2 }], 9);
-    g.fillStyle(PAPER.figureSoft, 0.96);
-    g.fillRoundedRect(-19, -7, 18, 9, 4);
-    g.fillRoundedRect(1, -7, 18, 9, 4);
-
-    // A very simple front-facing jacket: broad paper planes and just enough
-    // graphite construction to belong to the carriage drawing.
-    g.fillStyle(PAPER.sheetMid, 1);
-    g.fillPoints([
-      new Phaser.Geom.Point(-18, -58),
-      new Phaser.Geom.Point(18, -58),
-      new Phaser.Geom.Point(16, -25),
-      new Phaser.Geom.Point(-16, -25),
-    ], true);
-    g.lineStyle(2, PAPER.graphite, 0.92);
-    draftLine(g, rnd, -18, -58, 18, -58, { overshoot: 2, jitter: 0.45, segments: 5 });
-    draftLine(g, rnd, 18, -58, 16, -25, { overshoot: 2, jitter: 0.45, segments: 5 });
-    draftLine(g, rnd, 16, -25, -16, -25, { overshoot: 2, jitter: 0.45, segments: 5 });
-    draftLine(g, rnd, -16, -25, -18, -58, { overshoot: 2, jitter: 0.45, segments: 5 });
-
-    const leftArm = [{ x: -16, y: -53 }, { x: -23, y: -35 }, { x: -22, y: -18 }];
-    const rightArm = raised
-      ? [{ x: 16, y: -53 }, { x: 29, y: -69 }, { x: 26, y: -87 }]
-      : [{ x: 16, y: -53 }, { x: 23, y: -35 }, { x: 22, y: -18 }];
-    traceLimb(leftArm, 7);
-    traceLimb(rightArm, 7);
-    [leftArm.at(-1), rightArm.at(-1)].forEach((hand) => {
-      g.fillStyle(PAPER.sheetHigh, 1).fillCircle(hand.x, hand.y, 5);
-      g.lineStyle(1.5, PAPER.graphite, 0.9).strokeCircle(hand.x, hand.y, 5);
-    });
-
-    if (raised) {
-      g.lineStyle(3, PAPER.graphite, 0.92);
-      draftLine(g, rnd, 30, -89, 38, -105, { overshoot: 1, jitter: 0.35, segments: 4 });
-      g.lineStyle(4, accent, 0.9);
-      draftLine(g, rnd, 38, -105, 41, -112, { overshoot: 0, jitter: 0.5, segments: 3 });
-      if (pose === 'wash') {
-        g.fillStyle(PAPER.indigo, 0.72).fillCircle(43, -108, 2.5);
-        g.fillCircle(45, -103, 1.8);
-      }
-    }
-
-    g.lineStyle(1.7, PAPER.graphite, 0.82);
-    draftLine(g, rnd, -13, -56, -2, -41, { overshoot: 1, jitter: 0.35, segments: 4 });
-    draftLine(g, rnd, 13, -56, 2, -41, { overshoot: 1, jitter: 0.35, segments: 4 });
-    draftLine(g, rnd, 0, -42, 0, -27, { overshoot: 1, jitter: 0.35, segments: 4 });
-    g.fillStyle(PAPER.figure, 0.9).fillCircle(0, -35, 1.7);
-
-    // Oversized round head, symmetrical hair and eyes: Butch always looks out
-    // toward the player, regardless of which way the physics body travels.
-    g.fillStyle(PAPER.sheetHigh, 1).fillCircle(0, -81, 22);
-    g.lineStyle(2.1, PAPER.graphite, 0.94).strokeCircle(0, -81, 22);
-    g.fillStyle(PAPER.graphiteSoft, 0.92);
-    g.fillPoints([
-      new Phaser.Geom.Point(-20, -85), new Phaser.Geom.Point(-23, -95),
-      new Phaser.Geom.Point(-16, -93), new Phaser.Geom.Point(-15, -105),
-      new Phaser.Geom.Point(-8, -101), new Phaser.Geom.Point(-2, -110),
-      new Phaser.Geom.Point(4, -102), new Phaser.Geom.Point(12, -108),
-      new Phaser.Geom.Point(13, -98), new Phaser.Geom.Point(22, -99),
-      new Phaser.Geom.Point(19, -84), new Phaser.Geom.Point(11, -94),
-      new Phaser.Geom.Point(5, -91), new Phaser.Geom.Point(-4, -96),
-      new Phaser.Geom.Point(-13, -91),
-    ], true);
-    g.fillStyle(PAPER.figure, 1).fillCircle(-7, -79, 2.1).fillCircle(7, -79, 2.1);
-    g.lineStyle(1.3, PAPER.graphiteSoft, 0.78);
-    draftLine(g, rnd, -4, -68, 4, -68, { overshoot: 0, jitter: 0.25, segments: 3 });
-
-    this.figureDrawnPose = pose;
+    const pointer = this.input.activePointer;
+    const shoulderY = at(38);
+    const angle = Math.atan2(pointer.worldY - shoulderY, pointer.worldX - x);
+    const tipX = x + Math.cos(angle) * 30;
+    const tipY = shoulderY + Math.sin(angle) * 30;
+    g.lineStyle(3.2, PAPER.bookCloth, 1);
+    g.beginPath();
+    g.moveTo(x + Math.cos(angle) * 8, shoulderY + Math.sin(angle) * 8);
+    g.lineTo(tipX, tipY);
+    g.strokePath();
+    g.fillStyle(PAPER.indigo, 0.95);
+    g.fillCircle(tipX, tipY, 4.6);
   }
 
-  updateFigurePose(time) {
-    const moving = Math.abs(this.walker.body.velocity.x) > 8;
-    const airborne = !this.walker.body.blocked.down;
+  // The cursor is the whole tutorial: it shows the cell you would fill, and
+  // whether the car will let you.
+  drawCursor() {
+    const g = this.brushCursor;
+    g.clear();
     const pointer = this.input.activePointer;
-    const paintHeld = pointer?.leftButtonDown?.() ?? false;
-    const washHeld = pointer?.rightButtonDown?.() ?? false;
+    const cx = colOf(pointer.worldX);
+    const cy = rowOf(pointer.worldY);
+    if (!this.car.inBounds(cx, cy)) return;
 
-    if (this.walker.body.velocity.x < -8) this.playerMovementDirection = 'left';
-    else if (this.walker.body.velocity.x > 8) this.playerMovementDirection = 'right';
-    else this.playerMovementDirection = 'still';
+    const inReach = this.pointerInReach();
+    const panel = this.panelAt(pointer.worldX, pointer.worldY);
 
-    this.figurePose = this.qaFigurePose
-      ?? (paintHeld ? 'paint' : washHeld ? 'wash' : moving && !airborne ? 'walk' : airborne ? 'airborne' : 'idle');
-    this.playerAnimation = this.figurePose;
-    if (this.figureDrawnPose !== this.figurePose) this.drawFigure();
-    this.figure.setPosition(Math.round(this.walker.x), Math.round(this.walker.y + 31));
-    this.figure.setRotation(this.figurePose === 'walk' ? Math.sin(time / 105) * 0.065 : 0);
+    // Always show the arm's limit, so "too far" is never a mystery.
+    g.lineStyle(1, PAPER.graphiteFaint, inReach ? 0.18 : 0.4);
+    g.strokeCircle(this.walker.x, this.walker.y, REACH);
+
+    if (this.overBoard(pointer.worldX, pointer.worldY)) {
+      const hole = this.boardCellAt(pointer.worldX, pointer.worldY);
+      if (!hole) return;
+      const at = eyeletAt(hole.c, hole.r);
+      const torn = this.car.isTorn(hole.c, hole.r);
+      const color = torn ? PAPER.fault : inReach ? PAPER.cyan : PAPER.graphiteFaint;
+      g.lineStyle(2.4, color, inReach ? 0.95 : 0.4);
+      g.strokeCircle(at.x, at.y, 13);
+      return;
+    }
+
+    if (panel) {
+      g.lineStyle(2.4, inReach ? PAPER.cyan : PAPER.graphiteFaint, inReach ? 0.95 : 0.4);
+      g.strokeRect(panel.x - 4, panel.y - 4, panel.w + 8, panel.h + 8);
+      return;
+    }
+
+    const canPaint = this.car.canPaint(cx, cy);
+    const canWash = this.car.canWash(cx, cy);
+    const refusal = this.car.paintRefusal(cx, cy);
+
+    let color = PAPER.graphiteFaint;
+    let alpha = 0.35;
+    if (!inReach) {
+      color = PAPER.graphiteFaint;
+      alpha = 0.3;
+    } else if (canWash) {
+      color = PAPER.bookCloth;
+      alpha = 0.85;
+    } else if (canPaint) {
+      color = PAPER.cyan;
+      alpha = 0.95;
+    } else if (refusal === 'varnished') {
+      color = PAPER.fault;
+      alpha = 0.7;
+    }
+
+    g.lineStyle(2.2, color, alpha);
+    g.strokeRect(cx * CELL, cy * CELL, CELL, CELL);
+    if (inReach && canPaint) {
+      g.fillStyle(PAPER.cyan, 0.16);
+      g.fillRect(cx * CELL, cy * CELL, CELL, CELL);
+    }
+  }
+
+  // ================================================================ input
+
+  pointerInReach() {
+    const pointer = this.input.activePointer;
+    return (
+      Phaser.Math.Distance.Between(this.walker.x, this.walker.y, pointer.worldX, pointer.worldY) <= REACH
+    );
+  }
+
+  panelAt(wx, wy) {
+    return DOOR.panels.find(
+      (panel) => wx >= panel.x && wx <= panel.x + panel.w && wy >= panel.y && wy <= panel.y + panel.h,
+    );
+  }
+
+  // Painting a cell the player is standing inside would shove them out of it,
+  // so the brush politely refuses to draw on top of its own painter.
+  overlapsPlayer(cx, cy) {
+    const body = this.walker.body;
+    return !(
+      cx * CELL >= body.right ||
+      cx * CELL + CELL <= body.x ||
+      cy * CELL >= body.bottom ||
+      cy * CELL + CELL <= body.y
+    );
+  }
+
+  applyBrush(cx, cy, wash) {
+    if (!this.car.inBounds(cx, cy)) return;
+    if (wash) {
+      if (this.car.wash(cx, cy)) {
+        this.removeCellBody(cx, cy);
+        this.paintDirty = true;
+      }
+      return;
+    }
+    if (this.overlapsPlayer(cx, cy)) return;
+    if (this.car.paint(cx, cy)) {
+      this.addCellBody(cx, cy);
+      this.paintDirty = true;
+    }
+  }
+
+  overBoard(wx, wy) {
+    return wx >= BOARD.x && wx <= BOARD.x + BOARD.w && wy >= BOARD.y && wy <= BOARD.y + BOARD.h;
+  }
+
+  stepBrush() {
+    const pointer = this.input.activePointer;
+    const left = pointer.leftButtonDown();
+    const right = pointer.rightButtonDown();
+    const freshLeft = left && !this.wasLeftDown;
+    const inReach = this.pointerInReach();
+
+    // Letting go always tidies a half-drawn cord away.
+    if (!left && this.car.state.board.drawing) this.car.boardRelease();
+
+    // The thread board takes the mouse before the brush does, and the whole
+    // card is off limits to paint so a stroke can never bury the lock.
+    if (this.overBoard(pointer.worldX, pointer.worldY)) {
+      const hole = this.boardCellAt(pointer.worldX, pointer.worldY);
+      if (hole && inReach) {
+        if (right) this.car.boardClearAt(hole.c, hole.r);
+        else if (freshLeft) this.car.boardBegin(hole.c, hole.r);
+        else if (left) this.car.boardExtend(hole.c, hole.r);
+      }
+      this.wasLeftDown = left;
+      this.lastBrushCell = null;
+      return;
+    }
+
+    // A fresh left click on a door sign is an answer, not a brush stroke.
+    if (freshLeft) {
+      const panel = this.panelAt(pointer.worldX, pointer.worldY);
+      if (panel && inReach) {
+        this.answerDoor(panel.sign);
+        this.wasLeftDown = true;
+        return;
+      }
+    }
+    this.wasLeftDown = left;
+
+    if (!left && !right) {
+      this.lastBrushCell = null;
+      return;
+    }
+    if (!inReach) {
+      this.lastBrushCell = null;
+      return;
+    }
+
+    const cx = colOf(pointer.worldX);
+    const cy = rowOf(pointer.worldY);
+
+    // Walk the line from the last cell so a fast drag leaves no gaps.
+    const from = this.lastBrushCell;
+    if (from && (from.cx !== cx || from.cy !== cy)) {
+      const steps = Math.max(Math.abs(cx - from.cx), Math.abs(cy - from.cy));
+      for (let s = 1; s <= steps; s += 1) {
+        const t = s / steps;
+        this.applyBrush(
+          Math.round(from.cx + (cx - from.cx) * t),
+          Math.round(from.cy + (cy - from.cy) * t),
+          right,
+        );
+      }
+    } else {
+      this.applyBrush(cx, cy, right);
+    }
+    this.lastBrushCell = { cx, cy };
+  }
+
+  answerDoor(sign) {
+    const result = this.car.chooseSign(sign);
+    if (result.ok && result.reason === 'correct') this.playCompletion();
+  }
+
+  stepPlayer() {
+    const k = this.keys;
+    const body = this.walker.body;
+    const left = k.left.isDown || k.a.isDown;
+    const right = k.right.isDown || k.d.isDown;
+    const jump = k.up.isDown || k.w.isDown || k.space.isDown;
+
+    body.setVelocityX(left && !right ? -MOVE_SPEED : right && !left ? MOVE_SPEED : 0);
+    if (jump && body.blocked.down) body.setVelocityY(JUMP_VELOCITY);
+
+    // Falling through the paper costs nothing that was drawn.
+    if (this.walker.y > VIEW.h + 120) {
+      this.car.fell();
+      const bay = this.walker.x > 1920 ? 2120 : this.walker.x > 960 ? 1000 : 200;
+      this.walker.setPosition(bay, 360);
+      body.setVelocity(0, 0);
+    }
   }
 
   playCompletion() {
-    if (this.transitioning) return;
-    this.transitioning = true;
-    this.tweens.add({ targets: this.couplingDoor, x: VESTIBULE.couplingX + 48, alpha: 0.16, duration: 520, ease: 'Sine.easeInOut' });
-    const wash = this.add.rectangle(0, 0, VIEW.w, VIEW.h, PAPER.bookCloth, 0)
-      .setOrigin(0).setScrollFactor(0).setDepth(DEPTH.GRAIN + 2);
-    this.tweens.add({ targets: wash, fillAlpha: 0.2, duration: 420, yoyo: true, hold: 280 });
-    this.time.delayedCall(820, () => this.scene.start('DrawingStudio'));
+    const bloom = this.add
+      .rectangle(0, 0, VIEW.w, VIEW.h, PAPER.bookCloth, 0)
+      .setOrigin(0)
+      .setScrollFactor(0)
+      .setDepth(DEPTH.AIR + 1);
+    this.tweens.add({
+      targets: bloom,
+      fillAlpha: { from: 0, to: 0.26 },
+      duration: 520,
+      yoyo: true,
+      hold: 900,
+      ease: 'Sine.easeInOut',
+      onComplete: () => bloom.destroy(),
+    });
   }
 
   bayId() {
-    if (this.walker.x >= VESTIBULE.x) return 'VESTIBULE';
-    if (this.walker.x >= 1885) return 'C';
-    if (this.walker.x >= 760) return 'B';
-    return 'A';
+    return this.walker.x > 1920 ? 'C' : this.walker.x > 960 ? 'B' : 'A';
   }
 
   objectiveText() {
-    if (!this.car.isFilled('bridge-red')) return 'lift the telephone color and fill the short bridge';
-    if (!this.car.archComplete()) return 'find the three room colors and complete the distant arch';
-    if (!this.car.drawbridgeOpen()) return 'put the banner color into the counterweight';
-    return 'cross the lowered drawbridge and use the single vestibule door';
+    const car = this.car;
+    if (car.state.complete) return 'THE DOOR IS OPEN. IT WAS THE MOON.';
+    const read = car.state.seen.size;
+    if (read < PAINTINGS.length) {
+      if (this.bayId() === 'A') return 'DRAW PAPER TO CROSS — IT ONLY TAKES WHERE IT TOUCHES SOMETHING.';
+      return `BUILD UP TO THE PICTURES AND READ THEM — ${read} OF ${PAINTINGS.length} SO FAR.`;
+    }
+    if (!car.boardSolved()) return 'THREAD THE BOARD BY THE DOOR — NO TWO CORDS THROUGH ONE HOLE.';
+    return 'THE DOOR WANTS THE SIGN THAT WAS IN EVERY PICTURE.';
+  }
+
+  updateNotebook() {
+    const read = PAINTINGS.filter((p) => this.car.state.seen.has(p.id));
+    if (!read.length) {
+      this.notebook.setAlpha(0);
+      return;
+    }
+    const width = Math.max(...PAINTINGS.map((p) => p.title.length));
+    const lines = read.map(
+      (p) => `${p.title.padEnd(width, ' ')}   ${p.signs.map((s) => s.toUpperCase()).join('  ')}`,
+    );
+    this.notebook.setText(['WHAT YOU HAVE SEEN', ...lines].join('\n'));
+    this.notebook.setAlpha(0.96);
+  }
+
+  updatePictureHints() {
+    PAINTINGS.forEach((picture) => {
+      const label = this.pictureLabels[picture.id];
+      if (!label) return;
+      if (this.car.state.seen.has(picture.id)) {
+        label.setText('READ').setColor('#6f9c8b');
+        return;
+      }
+      const d = Phaser.Math.Distance.Between(
+        this.walker.x,
+        this.walker.y,
+        picture.x + picture.w / 2,
+        picture.y + picture.h / 2,
+      );
+      label.setText(d > READ_RADIUS * 2.4 ? '' : 'TOO FAR TO SEE — GET UP TO IT').setColor('#2f8c9e');
+    });
   }
 
   update(time, delta) {
     const dt = Math.min(delta, 50) / 1000;
+
+    if (Phaser.Input.Keyboard.JustDown(this.keys.restart)) {
+      this.scene.restart();
+      return;
+    }
+
+    this.stepBrush();
     this.stepPlayer();
-    this.stepPointerInteraction(dt);
-    this.updateFigurePose(time);
-    this.redrawPuzzles();
-    this.drawCarriedPigments(time);
-    this.drawPointerFeedback();
-    this.currentInteraction = this.pointedInteraction() ?? this.nearestInteraction();
-    this.showPrompt(this.promptFor(this.currentInteraction));
-    this.grain.tilePositionX = this.cameras.main.scrollX * 0.32 + Math.sin(time / 5000) * 4;
+    this.car.look(this.walker.x, this.walker.y);
+
+    if (this.paintDirty) {
+      this.redrawPaint();
+      this.paintDirty = false;
+    }
+    this.drawFigure();
+    this.drawCords();
+    this.drawCursor();
+    this.drawDoorSigns();
+
+    this.car.drainEvents().forEach((event) => {
+      if (event.type === 'picture-read') this.flashMessage('YOU CAN READ IT FROM HERE.', '#6f9c8b');
+      else if (event.type === 'cord-joined') this.flashMessage('THAT PAIR IS THREADED.', '#6f9c8b');
+      else if (event.type === 'board-solved') this.flashMessage('THE BOARD IS THREADED. THE SIGNS LIGHT UP.', '#6f9c8b');
+      else if (event.type === 'cord-blocked') this.flashMessage('ANOTHER CORD IS ALREADY IN THAT HOLE.', '#c8892f');
+      else if (event.type === 'door-dark') {
+        this.flashMessage('THE SIGNS ARE DARK — THREAD THE BOARD FIRST.', '#c8892f');
+      } else if (event.type === 'door-silent') {
+        this.flashMessage(`THE DOOR STAYS SHUT — ${event.seen} OF ${event.of} PICTURES READ.`, '#c8892f');
+      } else if (event.type === 'door-refused') this.flashMessage('NOT THAT ONE. LOOK AGAIN.', '#b4453a');
+      else if (event.type === 'door-opened') {
+        this.flashMessage('THE MOON. THE DOOR OPENS.', '#6f9c8b');
+        if (!this.advancingToStudio) {
+          this.advancingToStudio = true;
+          this.time.delayedCall(1100, () => this.scene.start('DrawingStudio'));
+        }
+      }
+      else if (event.type === 'paint-refused' && event.reason === 'varnished') {
+        this.flashMessage('THE PAPER IS VARNISHED HERE. PAINT WILL NOT TAKE.', '#c8892f');
+      } else if (event.type === 'paint-refused' && event.reason === 'nothing-to-hold-it') {
+        this.flashMessage('PAINT NEEDS SOMETHING TO HOLD IT.', '#c8892f');
+      }
+    });
+
+    this.objective.setText(this.objectiveText());
+    this.bayLabel.setText(`BAY ${this.bayId()}`);
+    this.updateNotebook();
+    this.updatePictureHints();
+
+    this.motes.forEach((mote) => {
+      mote.obj.x += mote.vx * dt;
+      mote.obj.y += (mote.vy + Math.sin(time / 900 + mote.phase) * 5) * dt;
+      if (mote.obj.x > WORLD.w + 4) mote.obj.x = -4;
+      if (mote.obj.y < -4) mote.obj.y = VIEW.h + 4;
+      if (mote.obj.y > VIEW.h + 4) mote.obj.y = -4;
+    });
+    if (this.grain) {
+      this.grain.tilePositionX = this.cameras.main.scrollX * 0.4 + Math.sin(time / 5200) * 6;
+      this.grain.tilePositionY = Math.cos(time / 6100) * 4;
+    }
+  }
+
+  drawDoorSigns() {
+    const g = this.doorLayer;
+    g.clear();
+    const opened = this.car.state.door.solved;
+    // Until the board is threaded the signs are unlit — visible as shapes, but
+    // plainly not yet askable.
+    const lit = this.car.boardSolved();
+
+    DOOR.panels.forEach((panel) => {
+      const chosen = this.car.state.door.chosen === panel.sign;
+      const right = opened && panel.sign === DOOR.correct;
+      g.fillStyle(right ? PAPER.verdigris : PAPER.sheetHigh, right ? 0.4 : lit ? 0.92 : 0.4);
+      g.fillRect(panel.x, panel.y, panel.w, panel.h);
+      g.lineStyle(right ? 2.6 : 1.6, right ? PAPER.verdigris : PAPER.graphite, lit ? 0.9 : 0.4);
+      g.strokeRect(panel.x, panel.y, panel.w, panel.h);
+      this.drawSign(
+        g,
+        panel.sign,
+        panel.x + panel.w / 2,
+        panel.y + panel.h / 2,
+        30,
+        PAPER.graphite,
+        lit ? 0.95 : 0.34,
+      );
+      if (chosen && !right) {
+        g.lineStyle(2.4, PAPER.fault, 0.85);
+        g.lineBetween(panel.x + 10, panel.y + 10, panel.x + panel.w - 10, panel.y + panel.h - 10);
+        g.lineBetween(panel.x + panel.w - 10, panel.y + 10, panel.x + 10, panel.y + panel.h - 10);
+      }
+    });
   }
 
   textState() {
-    const interaction = this.currentInteraction;
+    const pointer = this.input.activePointer;
+    const cx = colOf(pointer.worldX);
+    const cy = rowOf(pointer.worldY);
     return {
       scene: 'PaintedCountry',
-      coordinateSystem: 'world pixels; origin top-left; x right; y down',
       bay: this.bayId(),
       objective: this.objectiveText(),
+      ...this.car.snapshot(),
       player: {
         x: Math.round(this.walker.x),
         y: Math.round(this.walker.y),
         onGround: this.walker.body.blocked.down,
-        facing: 'front',
-        movementDirection: this.playerMovementDirection,
-        animation: this.playerAnimation,
-        heldVerb: this.figurePose === 'paint' ? 'PAINT' : this.figurePose === 'wash' ? 'WASH' : null,
-        insideVestibule: this.walker.x >= VESTIBULE.x,
       },
-      interaction: interaction ? { type: interaction.type, id: interaction.id } : null,
-      pointerSelection: {
-        source: this.hoverSourceId,
-        target: this.hoverTargetId,
-        holdProgress: Number((this.hold.progress / HOLD_SECONDS).toFixed(2)),
+      pointer: {
+        x: Math.round(pointer.worldX),
+        y: Math.round(pointer.worldY),
+        cell: [cx, cy],
+        inReach: this.pointerInReach(),
+        canPaint: this.car.canPaint(cx, cy),
+        canWash: this.car.canWash(cx, cy),
+        overPanel: this.panelAt(pointer.worldX, pointer.worldY)?.sign ?? null,
       },
-      tutorialSeen: { ...this.tutorialSeen },
-      drawbridgeProgress: Number(this.drawbridgeProgress.toFixed(2)),
-      ...this.car.snapshot(),
     };
   }
 }

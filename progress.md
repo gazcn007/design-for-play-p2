@@ -831,6 +831,31 @@ chapter after what it is, not after the slot it currently occupies.
   the player upside down on the ceiling walkway, and the mural scar left behind
   by a wash. No console errors.
 
+## Chapter 4 — archive gallery and moon handle
+
+- 2026-08-13: Difficulty pass at George's request. The first three completed
+  interactions are the only instructional allowance; the top legend and target
+  answer labels retire after that, leaving the paper marks to carry the rule.
+  Added five physical sigil stations across the car using the supplied icon art.
+  Each station has a separate underline that must be painted to activate it;
+  touching the icon or washing the line does nothing. The fifth, Moon, is at the
+  top of a sequential three-tread stair, so the stair is now a real late-car
+  build gate rather than optional decoration. The coupling handle remains
+  locked until all three archives have been viewed and all five sigils have been
+  activated. Added model regressions for the five stations, wrong tool, stair
+  sequencing, and expanded handle lock diagnostics. Bundled-runtime browser QA
+  confirmed the physical stations, five-icon choice, wrong-choice death beat,
+  and clean console; `assets:check`, focused tests, production build, and
+  whitespace validation pass.
+
+- 2026-08-12: Kept the three-bay ink-displacement traversal, but made the
+  chapter an investigation rather than a repeated wash/paint loop. Each bay now
+  contains a framed wall archive masked by washable black paint. A single short
+  wash clears the whole mask, then `E` opens its supplied image in full.
+- The final coupling is a deduction gate. It opens its five-icon chooser after
+  all three archives have been viewed. Moon completes the car; every other icon
+  gives a visible death beat and restarts the standalone car.
+
 ## Chapter One merge onto the playable course build
 
 - 2026-08-08: Merged `origin/main` into the Chapter One cyberpunk parkour branch. The resolution retains main's dev/prod split and chapter-select system, registers the dedicated parkour scene in both boot configurations, routes Chapter 1 to that scene, and preserves the completion-door handoff into `THE CITY THAT REMEMBERS` through validated `GameScene` start data.

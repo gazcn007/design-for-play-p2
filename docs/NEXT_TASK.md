@@ -1,12 +1,128 @@
 # Next implementation task
 
-## BUILT — AWAITING GEORGE'S CALL — Chapter 4 `THE PAINTED COUNTRY` ink-displacement puzzle
+## READY — Chapter One cyberpunk parkour extension
 
-Status: `BUILT, VERIFIED, AWAITING A DIFFICULTY CALL` — 2026-08-11
+Status: `READY`
+
+Owner: `Codex`
+
+Product decision (2026-08-09): Preserve the complete existing Chapter One
+cyberpunk parkour route and extend it in the same visual and mechanical
+language. The former top-balcony finish becomes a midpoint checkpoint; the
+actual completion door moves to the end of the new route.
+
+In scope:
+
+- extend the existing 4,300px course rather than replacing or compressing it;
+- add more authored jumps, horizontally draggable ladders and blocks,
+  autonomous side-to-side flying cars, spike strips, and readable recovery
+  ladders/platforms;
+- require the new movable geometry and cars before the final door accepts the
+  route;
+- preserve the current obstacle behavior, cyberpunk presentation, removal of
+  green solution arrows, and the door handoff into the next area;
+- make post-midpoint failure return to the midpoint while manual `R` remains a
+  complete level reset;
+- extend deterministic model and browser QA through the new finish.
+
+Acceptance criteria:
+
+1. Every existing platform and obstacle remains in the opening route.
+2. At least two new movable obstacles, two new flying-car traversals, and two
+   new spike jumps appear after the former goal.
+3. A missed new car has a recovery path that does not bypass that car.
+4. Visual and collision positions remain aligned after new obstacle dragging
+   and moving-platform travel.
+5. The final door transitions to the same next area only after the extended
+   route requirements are satisfied.
+6. Model tests, browser QA, asset verification, production build, and
+   whitespace validation pass.
+
+User correction (2026-08-09): crossing the physical midpoint gate must always
+activate the checkpoint; it must not be rejected because the player did not use
+an optional opening obstacle. The first spike jump after that checkpoint is
+three segments wide.
+
+User correction (2026-08-09): the visible top of the screen is not a physics
+ceiling, ladder tops use continuous player-controlled dismounting instead of a
+position snap, and the high third post-checkpoint spike jump must clear normally.
+That high strip is reduced to three segments and moved right to provide a proper
+jump runway.
+
+User correction (2026-08-09): AIR LANE and NIGHT GRID plus the props, ladder,
+rail and spikes resting on them move down together by 30px. The final door
+returns the player to the completed train instead of entering the next city.
+
+## Awaiting product accept — Chapter 4 `THE PAINTED COUNTRY` Bay A slice
+
+Status: `AWAITING PRODUCT ACCEPT` (not `READY` — do not start)
+
+Owner: unassigned
+
+George set the premise on 2026-08-07: chapter 4 is a paper world, and the
+mechanic is magical paint used to change parts of a mysterious train car,
+uncover clues, collect materials and reveal the route to the next car. This
+matches the Chapter 4 slot already locked in
+`docs/GAME_MASTER_V2_SIX_CHAPTERS.md` §8 (`paint/erase → reveal/change memory`),
+re-sited from an open landscape into a carriage interior.
+
+Full design: `docs/CHAPTER_04_PAINTED_COUNTRY_DESIGN_LOCK.md`. The short
+version — two verbs on one axis (PAINT makes a drawn line real, WASH makes a real
+thing drawn again and returns its pigment), three found mineral pigments with two
+loadable at a time, and a finite pigment budget, so every surface the player
+builds is taken out of a picture. The car's level design is a child's
+under-drawing, mistakes included, and the chapter's thesis beat requires painting
+a *wrong* drawing rather than correcting it.
+
+Proposed first slice is **Bay A only** (design lock §14): beats 1–3, a standalone
+entry point named `painted-country.html` for identity rather than sequence order,
+one pure deterministic region/pigment module with focused tests, one art layer
+that owns no rules, full `render_game_to_text()` coverage, and a row in
+`STANDALONE_SLICES` so the dev chapter select can reach it.
+
+This does not become `READY` until George accepts or amends the design lock.
+## READY — Chapter 4 `THE PAINTED COUNTRY` archive gallery and moon handle
+
+Status: `BUILT AND VERIFIED` — 2026-08-12
 
 Owner: `Claude Code` (designed and implemented directly at George's request; this
 is a deliberate step outside the usual product-lead-writes-the-task loop, taken
 because he asked for the change itself rather than for a task to hand to Codex)
+
+## Product decision (2026-08-12)
+
+Keep the built ink-displacement route puzzle as the traversal spine, but add a
+haunted investigation layer rather than another repeated bridge. Three wall
+archives, one in each bay, begin obscured by washable ink. A short WASH removes
+the whole cover and reveals the supplied image on the wall. The player presses
+`E` at a revealed archive to see the full image and a compact, vague horror
+fragment: people built, worshipped, and researched the same presence.
+
+All three archives must be viewed before the final coupling handle accepts an
+answer. `E` at the handle opens a five-icon choice using
+`public/assets/chapter04/icons/`. The **Moon** is the correct icon. It completes
+the car and opens the next-car handoff; every other choice kills the player and
+restarts this standalone car. This death/restart explicitly supersedes the prior
+rule that every Chapter 4 mistake must be undoable.
+
+## Acceptance criteria
+
+1. Each supplied gallery image is visibly installed in a framed wall archive,
+   fully revealed only after its washable ink cover is cleared.
+2. `E` on a revealed archive opens the full image plus a distinct, terse horror
+   fragment about building, worshipping, or researching.
+3. The handle is locked until all three archives have been viewed, with a clear
+   local reason rather than a silent refusal.
+4. The handle popup shows all five supplied icons. Moon completes; each other
+   icon visibly kills then restarts the level.
+5. Archive reveal/view state, handle state, death and completion agree with
+   `window.render_game_to_text()` and deterministic model tests.
+
+---
+
+## Superseded built task — Chapter 4 ink-displacement puzzle
+
+Status: `BUILT, VERIFIED, AND RETAINED AS THE TRAVERSAL SPINE` — 2026-08-11
 
 ## Product decision (2026-08-11, second decision of the day)
 
@@ -139,6 +255,88 @@ Say the word and it is a small change to `deliver()` plus one flag per hole.
 ---
 
 ## Completed task
+
+Status: `COMPLETE`
+
+Owner: `Codex`
+
+Task: Final Prologue UI cleanup
+
+## Product decision (2026-08-06)
+
+George approved the retro-transit colour pass and requested one bounded final
+cleanup: keep dialogue/subtitle UI clear of the player and floor interactions,
+remove the large non-interactive Archivist diagram from Phase VI, and remove
+the redundant Phase VI in-room caption. Preserve all puzzle logic, timing,
+hit regions, cameras and completion conditions.
+
+## Acceptance criteria
+
+1. Dialogue remains fully readable without covering the player or floor-mounted
+   interaction hardware.
+2. Phase VI no longer renders the central non-interactive Archivist diagram.
+3. The actual present case, remembered case, falling record, balance beam,
+   winch and air cushion remain visible and unchanged.
+4. Tutorial tests, asset verification, build and browser screenshots pass.
+
+## Completed QA
+
+- Moved the full dialogue card from the floor band to the upper window band;
+  speaker, role, typed line, choices and continue hint remain inside the card.
+- Removed Phase VI's large non-interactive Archivist diagram and its redundant
+  in-room caption while preserving every playable case, balance component and
+  state transition.
+- Browser review confirmed the conductor dialogue no longer covers the player,
+  door or floor hardware, and the Phase VI redaction fixture retains its active
+  objects without the false focal object.
+- Tutorial tests pass 457/457, 10 panoramas and 30 textures verify, production
+  build passes, browser console is clean and scoped whitespace checks pass.
+
+---
+
+## Previous completed task
+
+Status: `COMPLETE`
+
+Owner: `Codex`
+
+Task: Prologue late-1970s / early-1980s retro-transit interior skin
+
+## Product decision (2026-08-06)
+
+George approved the third visual direction. Preserve the existing blue-purple
+dusk panoramas outside every window and preserve all puzzle rules, geometry,
+camera behavior and state colours. Reskin only the shared carriage interior as
+an optimistic period transit vehicle: aged ivory wall panels, safety-orange
+lower panels and door leaves, charcoal structure and floor, oxidized silver
+hardware, small cyan status lamps, period route typography and restrained
+printed wear. This is retro transit, not outer space; add no stars, planets or
+new exterior backdrop.
+
+## Acceptance criteria
+
+1. All six Prologue rooms share one ivory/orange/charcoal material language.
+2. The existing dusk panorama remains visible and unchanged through the windows.
+3. The protagonist, machinery, state feedback and interaction prompts remain
+   readable against the lighter shell.
+4. No puzzle logic, hit region, stage data, camera rule or completion condition
+   changes.
+5. Tutorial tests, asset verification, production build and whitespace checks
+   pass, followed by browser screenshots of at least two rooms.
+
+## Completed QA
+
+- Preserved the existing dusk panoramas and all puzzle-state colours.
+- Verified the opening carriage and Phase IV at 960x600 in a clean Chromium
+  session; both show the shared ivory/orange/charcoal skin and readable actors.
+- Confirmed real keyboard movement in Phase IV and matching live
+  `render_game_to_text()` output after the reskin.
+- Tutorial tests, asset verification, production build and whitespace checks
+  pass.
+
+---
+
+## Previous completed task
 
 Status: `COMPLETE`
 

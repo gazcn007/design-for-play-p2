@@ -3,6 +3,8 @@ import { GAME_H, GAME_W, GRAVITY, LANE_NEAR, MOVE } from '../../constants.js';
 import Player from '../../Player.js';
 import { STORY_WORLDS } from '../../story.js';
 import { music } from '../../shared/musicDirector.js';
+import { createSaveStore } from '../../shell/saveSystem.js';
+import { CINEMATICS, navigateAfterCinematic } from '../../shell/gameFlow.js';
 import { WorldAssetLoader, getWorldAsset, queueWorldAsset } from '../../worlds/worldAssets.js';
 import {
   PARKOUR_HEIGHT,
@@ -20,8 +22,6 @@ import {
   resetParkourState,
   stepFlyingCars,
 } from './parkourModel.js';
-import { createSaveStore } from '../../shell/saveSystem.js';
-import { CINEMATICS, navigateAfterCinematic } from '../../shell/gameFlow.js';
 
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace';
 const CYAN = 0x25e6ff;
@@ -148,16 +148,12 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
 
     this.setupInput();
     this.setupDragInput();
-    if (data.checkpoint === 'midpoint') {
-      this.seedMidpointCheckpoint();
-    }
+    if (data.checkpoint === 'midpoint') this.seedMidpointCheckpoint();
     this.setupQAState();
     music.play('chapter-two-neon-safety-test', {
       src: 'assets/music/ch1/1.3_neon_safety_test.mp3',
       volume: 0.45,
       fade: 3.5,
-      outFade: 3.5,
-      dialogueDuckDb: -8,
       loop: true,
     });
     this.game.events.emit('cyberpunk:entered');
@@ -166,6 +162,7 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
       this.input.off('pointermove', this.onPointerMove, this);
       this.input.off('pointerup', this.onPointerUp, this);
       this.nextAreaLoader?.destroy();
+      music.stop({ fade: 1.8 });
     });
   }
 
@@ -538,7 +535,7 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
   }
 
   buildHud() {
-    this.add.text(22, 18, 'CHAPTER TWO  //  CYBERPUNK PARKOUR', {
+    this.add.text(22, 18, 'CHAPTER ONE  //  CYBERPUNK PARKOUR', {
       fontFamily: MONO,
       fontSize: '12px',
       color: '#25e6ff',
@@ -856,18 +853,13 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
   }
 
   seedMidpointCheckpoint() {
-    this.state.movables.forEach(({ id }) => {
-      const movable = movableById(this.state, id);
-      if (!movable || !['ladder-a', 'block-a', 'ladder-b', 'block-b'].includes(id)) return;
-      movable.moved = true;
-      if (!this.state.movedMovables.includes(id)) this.state.movedMovables.push(id);
-      if (!this.state.movedKinds.includes(movable.kind)) this.state.movedKinds.push(movable.kind);
-    });
-    recordCarRide(this.state, 'car-a');
-    recordCarRide(this.state, 'car-b');
+    for (const movable of this.state.movables) movable.moved = true;
+    this.state.movedMovables = this.state.movables.map(({ id }) => id);
+    this.state.movedKinds = [...new Set(this.state.movables.map(({ kind }) => kind))];
+    for (const car of this.state.flyingCars.slice(0, 2)) recordCarRide(this.state, car.id);
     activateCheckpoint(this.state);
-    this.player.body.reset(MIDPOINT_X + 90, MIDPOINT_ROOF_Y - 50);
-    this.objectiveText.setText('CHECKPOINT RESTORED  //  REACH FINAL BALCONY');
+    this.player.body.reset(MIDPOINT_X + 60, MIDPOINT_ROOF_Y - 50);
+    this.objectiveText.setText('CHECKPOINT ACTIVE  //  REACH FINAL BALCONY');
   }
 
   tryCompleteGoal() {
