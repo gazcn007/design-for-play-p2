@@ -142,10 +142,10 @@ app.start().then(() => {
     }
   }
   const qaDirectionX = {
-    labyrinth: 14,
+    labyrinth: 38,
     'borrowed-grid': 22,
     'echo-city': 30,
-    'painted-country': 38,
+    'painted-country': 14,
   }[qaDirection];
   if (captureMode && beat === 'corridor' && ['labyrinth', 'borrowed-grid', 'painted-country'].includes(qaArtifact)) {
     app.directionProgress.dispatch({ type: 'artifact.take', id: qaArtifact });

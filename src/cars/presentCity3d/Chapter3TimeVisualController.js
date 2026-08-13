@@ -30,17 +30,20 @@ const PALETTES = Object.freeze({
     fillIntensity: 1.05,
   }),
   NIGHT: Object.freeze({
-    background: 0x263847,
-    fog: 0x273b4a,
+    // Preserve midnight blue while keeping paving, doors and the route
+    // readable on dim displays. The previous values could crush the whole
+    // exterior into black after leaving the hotel.
+    background: 0x334b5e,
+    fog: 0x31495a,
     fogDensity: 0.0067,
-    exposure: 1,
-    hemiSky: 0x6f879e,
-    hemiGround: 0x232a35,
-    hemiIntensity: 0.95,
-    sun: 0x91acd0,
-    sunIntensity: 2.1,
-    fill: 0x47798b,
-    fillIntensity: 1.55,
+    exposure: 1.1,
+    hemiSky: 0x829ab2,
+    hemiGround: 0x2d3543,
+    hemiIntensity: 1.25,
+    sun: 0xa9c0df,
+    sunIntensity: 2.65,
+    fill: 0x5a93a6,
+    fillIntensity: 2.05,
   }),
   DAWN: Object.freeze({
     background: 0x8a9da4,

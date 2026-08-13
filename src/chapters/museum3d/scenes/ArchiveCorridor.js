@@ -137,6 +137,23 @@ export class ArchiveCorridor {
       number: '4',
       screenColor: 0x21131a,
     });
+    // Door 4 is the only playable museum door. Give it a visible interaction
+    // point so the player does not have to guess which part of the panel owns E.
+    this.labyrinthInteractPoint = new THREE.Group();
+    this.labyrinthInteractPoint.name = 'door-4-interaction-point';
+    this.labyrinthInteractPoint.position.set(38.62, 1.02, -1.77);
+    const pointRing = new THREE.Mesh(
+      new THREE.TorusGeometry(0.11, 0.022, 10, 28),
+      new THREE.MeshBasicMaterial({ color: 0xf0c56d, depthTest: false }),
+    );
+    pointRing.name = 'door-4-interact-ring';
+    const pointCore = new THREE.Mesh(
+      new THREE.SphereGeometry(0.035, 12, 8),
+      new THREE.MeshBasicMaterial({ color: 0xffe4a0, depthTest: false }),
+    );
+    pointCore.position.z = 0.015;
+    this.labyrinthInteractPoint.add(pointRing, pointCore);
+    g.add(this.labyrinthInteractPoint);
 
     // The whole journey is already catalogued before the Labyrinth opens.
     this.artifactNiches = new Map();
@@ -487,13 +504,25 @@ export class ArchiveCorridor {
     // Doorways no longer auto-open on collision. Facing Door 4 displays the
     // interaction prompt; E / Enter is the sole way into the Labyrinth.
     this._doorwayDirection = directionAtDoorway(player);
+    this.ctx.interaction.setFallback(
+      this._doorwayDirection === CHAPTER05_DIRECTIONS.LABYRINTH
+        ? `direction-${CHAPTER05_DIRECTIONS.LABYRINTH}`
+        : null,
+    );
+    if (this.labyrinthInteractPoint) {
+      const pulse = 1 + Math.sin(performance.now() / 220) * 0.12;
+      this.labyrinthInteractPoint.scale.setScalar(pulse);
+      this.labyrinthInteractPoint.visible = snapshot.phase === 'corridor';
+    }
     const time = performance.now() / 1000;
     for (const niche of this.artifactNiches.values()) {
       if (niche.displayed) animateReturnArtifact(niche.artifact, time);
     }
   }
 
-  exit() {}
+  exit() {
+    this.ctx.interaction.setFallback(null);
+  }
 
   dispose() {
     this.root.clear();

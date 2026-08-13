@@ -132,6 +132,8 @@ test('all four numbers retain a doorway band while Door 4 is the only museum int
   assert.doesNotMatch(corridor, /echo-city-interaction-proxy/);
   assert.doesNotMatch(corridor, /echo-case/);
   assert.match(corridor, /if \(!isDirectionPlayable\(id\)\) return false/);
+  assert.match(corridor, /door-4-interaction-point/);
+  assert.match(corridor, /setFallback\([\s\S]*direction-\$\{CHAPTER05_DIRECTIONS\.LABYRINTH\}/);
   assert.deepEqual(DIRECTION_DOORWAYS.map(({ id }) => id), [
     'sealed-record-1',
     CHAPTER05_DIRECTIONS.BORROWED_GRID,

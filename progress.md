@@ -18,6 +18,13 @@ production Conductor boss, never a video or the old Chapter 6 greybox.
 
 ## Work log
 
+- 2026-08-13: Repaired two production blockers reported after the full-flow
+  integration. Museum Door 4 now has a visible gold interaction point and a
+  doorway-proximity fallback, so E opens the embedded Labyrinth even when the
+  centre reticle misses the thin hidden proxy. Echo City midnight now keeps a
+  stronger blue hemisphere/fill-light floor and higher exposure so the night
+  route remains readable instead of crushing to black on dim displays.
+
 - 2026-08-13: Ran a fresh chapter-by-chapter visual audit from the active
   integration worktree, with production title plus direct playable routes.
   Chapter 5 is present as three separately verified pieces: Museum lobby,
