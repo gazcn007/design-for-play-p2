@@ -737,3 +737,50 @@ chapter after what it is, not after the slot it currently occupies.
 - 2026-08-12: Ladder climbing no longer disables collision for the entire city. Only the roof attached to the active ladder is temporarily passable; every unrelated building remains solid. Horizontal ladder movement stays locked until the player's feet clear that roof, then the existing continuous A/D dismount resumes without teleporting. No platform, ladder, obstacle, or route geometry changed.
 - 2026-08-12: Upward climbing now stops when the player's feet meet the visible ladder top. The ladder engagement range extends beyond the artwork only by half the player body's height plus an 8px physics tolerance, preserving the natural sideways dismount without allowing the character to climb into empty air.
 - 2026-08-12 lateral-release correction: A/D now exits a ladder immediately at any height. Collision is restored before the same physics step, so input toward the attached building is blocked while input away from it produces a normal fall. Top dismounts, visible-height limits, recovery routes and topology remain unchanged.
+- 2026-08-13 ladder-top transfer correction: At the visible top of a ladder,
+  lateral input toward its attached roof now carries the player across the
+  narrow edge gap with their feet held on the roof line, so the player can
+  continue walking without falling. This behavior is refined by the full-body
+  release rule below; no course geometry changed.
+- 2026-08-13 full-body ladder release correction: Superseding the earlier
+  single-input release, A/D now moves the player across the visible ladder
+  while they remain attached. Climbing ends only after the character's entire
+  physics body clears a rail. Building collision remains live during the move,
+  preventing a player from using the wider dismount motion to clip through an
+  attached wall; all recovery roof transfers and course geometry are intact.
+
+## Chapter One Mara trail
+
+- 2026-08-13: Continued the search for Mara through the cyberpunk parkour
+  without changing its obstacle topology. A rooftop mechanic at the starting
+  platform confirms that Mara crossed the movable-ladder route and left a
+  message at the final balcony. A physical letter beside the final door reveals
+  that Mara could not wait, took the train's next door before dawn, and will
+  leave another mark.
+- Both story interactions use the preceding chapter's restrained black-panel,
+  monospaced typewriter treatment. Talking to the mechanic is optional; reading
+  Mara's letter is required before the final door opens so the reveal cannot be
+  skipped. Story evidence persists through route resets and is included in
+  `render_game_to_text()` for deterministic QA.
+- Verification: all 637 Node tests, asset validation, production build and
+  whitespace checks pass. Full browser QA covers the mechanic, letter, every
+  existing parkour regression, the letter-gated completion, return to the train,
+  Prologue handoff and direct Car 2 entry with no page errors.
+- 2026-08-13 robot/grounding correction: Rebuilt the rooftop mechanic as a
+  human-shaped service robot with a natural face, hair and coat silhouette plus
+  readable cyan eyes, facial seam, joint caps and chest status light. Dialogue
+  now pins the player's Arcade body at the exact interaction position with
+  movement and gravity suspended, then restores and resets that body before
+  returning control. A live regression advances all three mechanic lines,
+  closes the panel, waits through resumed physics and asserts no fall, death or
+  checkpoint reset.
+- 2026-08-13 mechanic visual cleanup: Replaced the small overlapping robot
+  details with a larger, higher-contrast silhouette built from aligned coat,
+  limb and face shapes. A single cyan visor, temple port, chest indicator and
+  restrained panel seams now carry the synthetic read cleanly at gameplay
+  scale without changing the NPC's position or interaction.
+- 2026-08-13 mechanic alignment correction: Removed the offset Phaser polygon
+  geometry that displaced the robot's torso. The coat and shoulders now share
+  the container's exact centre line; arms overlap the shoulder shell, legs
+  overlap the waist, and the neck bridges the torso and head. The NPC's world
+  position, dialogue and interaction range remain unchanged.
