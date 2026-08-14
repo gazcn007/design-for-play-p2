@@ -4,6 +4,11 @@ const http = require('http');
 const path = require('path');
 const { URL } = require('url');
 
+// A stable localhost origin is essential: the browser stores NIGHTFALL saves
+// (including collected Magic Stones) per origin. A random port made every app
+// launch look like a different game profile.
+const APP_PORT = 41730;
+
 const MIME = {
   '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8',
@@ -44,7 +49,7 @@ function startGameServer(root) {
       });
     });
     server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => resolve(server));
+    server.listen(APP_PORT, '127.0.0.1', () => resolve(server));
   });
 }
 
@@ -52,13 +57,12 @@ let server;
 async function launch() {
   try {
     server = await startGameServer(gameDirectory());
-    const { port } = server.address();
     const window = new BrowserWindow({
       width: 1440, height: 900, minWidth: 960, minHeight: 620,
       title: 'NIGHTFALL', backgroundColor: '#03050a', autoHideMenuBar: true,
       webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
     });
-    await window.loadURL(`http://127.0.0.1:${port}/`);
+    await window.loadURL(`http://127.0.0.1:${APP_PORT}/`);
   } catch (error) {
     dialog.showErrorBox('NIGHTFALL could not start', error.message);
     app.quit();

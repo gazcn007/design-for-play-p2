@@ -40,6 +40,14 @@ production Conductor boss, never a video or the old Chapter 6 greybox.
 
 ## Work log
 
+- 2026-08-14: Chapter 2 desktop-app playtest correction: the first flying
+  platform (`car-a`) previously ended at x=1550, which only grazed the
+  x=1600 next roof and made the transfer unreliable under Arcade collision.
+  Its endpoint is now x=1700, carrying the player decisively onto the roof.
+  The separate desktop wrapper hotfix keeps its localhost origin fixed at
+  port 41730 so save-slot state and Magic Stone progress persist across app
+  launches. Pending: focused browser QA and desktop package rebuild.
+
 - 2026-08-14: Replaced the old Black Knife 60-second survival scene with Mathias's current `mathbecsan/Chapter-6-final-boss` main build (commit `9a1b354`): its five-phase Conductor fight, hand-drawn spritesheets, paper ship, UI, fairness telegraphs, and battle music are now the four-stone hidden route. Winning reveals `UNSEAL THE TRUE ENDING` and correctly enters the existing true-ending page. Production browser QA covered movement, shooting, win-state, and the full handoff with no errors.
 - 2026-08-14: Rebalanced only Movement III / Echo City's poetry duel. A correct continuation now deals 25 damage, so its 200 HP segment reaches the Movement IV threshold after exactly four correct answers. No other movement's HP or damage values changed; production browser QA measured 25 damage from a correct verse with no errors.
 - 2026-08-14: Restored Echo City Butch's authored Chapter 3 skeleton animation package in the final integration: idle, walk, jump-start, airborne loop, and landing now cross-fade based on the real movement state. Production browser QA confirmed `Walk_Loop`, `Jump_Start`, and `Jump_Land` in sequence with no console or asset errors.

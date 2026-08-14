@@ -94,7 +94,9 @@ export const FLYING_CAR_DEFS = Object.freeze([
   {
     id: 'car-a',
     minX: 1100,
-    maxX: 1550,
+    // Drive well onto the next roof. The old endpoint only grazed its edge,
+    // which made the first airborne transfer unreliable in the desktop build.
+    maxX: 1700,
     startX: 1100,
     y: 180,
     width: 132,

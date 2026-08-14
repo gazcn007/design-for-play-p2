@@ -943,6 +943,7 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     const right = this.keys.right.isDown || this.keys.d.isDown;
     const up = this.keys.up.isDown || this.keys.w.isDown;
     const down = this.keys.down.isDown || this.keys.s.isDown;
+    const jumpPressed = Phaser.Input.Keyboard.JustDown(this.keys.jump);
     const ladder = this.nearbyLadder();
     if (!this.climbing && ladder && (up || down)) {
       this.climbing = true;
@@ -964,7 +965,14 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
         ?? activeLadder.y - activeLadder.height / 2;
       const distanceToTop = this.player.body.bottom - roofY;
       const canDismount = distanceToTop <= 0.5;
-      const horizontalVelocity = left === right ? 0 : left ? -120 : 120;
+      // At a ladder's roof line, Space uses the authored safe exit direction.
+      // This gives players a clear, forgiving way to continue when they reach
+      // the top with the usual jump control instead of needing to discover a
+      // lateral A/D dismount.
+      const requestedDirection = left === right ? 0 : left ? -1 : 1;
+      const safeDirection = activeLadder.dismountDirection ?? -1;
+      const dismountDirection = requestedDirection || (canDismount && jumpPressed ? safeDirection : 0);
+      const horizontalVelocity = dismountDirection * 120;
       if (canDismount && horizontalVelocity !== 0) {
         // Keep the player's feet on the roof line during the short lateral
         // transfer. Ladder attachment ends only after the full character body

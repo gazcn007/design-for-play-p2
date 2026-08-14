@@ -68,6 +68,7 @@ test('illegal placement stays on its rail and restores committed collision posit
 test('flying cars move autonomously, expose phase, and reverse at authored bounds', () => {
   const state = createParkourState();
   const car = state.flyingCars[0];
+  assert.equal(car.maxX, 1700, 'the first transfer car must overlap the next roof by a safe margin');
   const first = stepFlyingCars(state, 100)[0];
   assert.ok(first.deltaX > 0);
   assert.ok(first.phase > 0);
