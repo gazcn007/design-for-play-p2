@@ -107,7 +107,9 @@ export const FLYING_CAR_DEFS = Object.freeze([
   {
     id: 'car-b',
     minX: 3780,
-    maxX: 3940,
+    // The second transfer must carry the rider well onto the POWER roof.
+    // 3940 only touched its x=4000 edge; this leaves a forgiving landing area.
+    maxX: 4120,
     startX: 3780,
     y: 330,
     width: 132,

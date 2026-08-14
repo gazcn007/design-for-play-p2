@@ -40,6 +40,12 @@ production Conductor boss, never a video or the old Chapter 6 greybox.
 
 ## Work log
 
+- 2026-08-14: Chapter 2 second-transfer correction: left the repaired first
+  car (`car-a`) untouched. The separate middle car (`car-b`) previously ended
+  at x=3940, merely touching the POWER roof beginning at x=4000. Its endpoint
+  is now x=4120, so its 132px platform carries the player decisively onto that
+  roof. Focused model tests pass 9/9; the desktop package must be refreshed.
+
 - 2026-08-14: Final-integration regression hotfixes: restored Chapter 2's
   normal Space jump by reading the input only while actually climbing;
   keeps the optional Space ladder dismount. The Labyrinth's final seal is now

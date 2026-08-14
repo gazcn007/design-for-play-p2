@@ -69,6 +69,11 @@ test('flying cars move autonomously, expose phase, and reverse at authored bound
   const state = createParkourState();
   const car = state.flyingCars[0];
   assert.equal(car.maxX, 1700, 'the first transfer car must overlap the next roof by a safe margin');
+  assert.equal(
+    state.flyingCars.find(({ id }) => id === 'car-b').maxX,
+    4120,
+    'the second transfer car must carry the player safely onto the POWER roof',
+  );
   const first = stepFlyingCars(state, 100)[0];
   assert.ok(first.deltaX > 0);
   assert.ok(first.phase > 0);
