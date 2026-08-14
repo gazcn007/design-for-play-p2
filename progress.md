@@ -40,6 +40,14 @@ production Conductor boss, never a video or the old Chapter 6 greybox.
 
 ## Work log
 
+- 2026-08-14: Final Boss Movement I recovery correction: respawn locations now
+  score their clearance from persistent collapsed-floor rubble, active landed
+  impact hazards, laser/sweep lanes, and ring attacks before selecting a
+  point. A fall that costs only one health layer also uses this safe search
+  instead of forcing the player to the fixed opening coordinate. Full deaths
+  preserve their chosen safe position rather than being overwritten by that
+  old coordinate.
+
 - 2026-08-14: Chapter 2 second-transfer correction: left the repaired first
   car (`car-a`) untouched. The separate middle car (`car-b`) previously ended
   at x=3940, merely touching the POWER roof beginning at x=4000. Its endpoint
