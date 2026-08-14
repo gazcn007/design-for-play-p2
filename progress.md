@@ -1429,6 +1429,12 @@ chapter after what it is, not after the slot it currently occupies.
 - Return now resolves through the visible stream rather than firing a separate Indigo paper card. The existing paint-fill shader and strips remain, so each successful return visibly fills upward from the Conductor's legs.
 - Verification: source syntax and Final Boss production build pass. Browser play-test confirmed both transfer states expose 5 strands and 9 droplets; a completed return dealt 13 damage (62 → 49) and raised the Conductor paint coverage to 0.58 with no browser errors. Visual captures: `output/final-boss-paint-transfer/absorbing-flow.png` and `output/final-boss-paint-transfer/returning-flow.png`.
 
+### 2026-08-14 — Final submission desktop delivery
+
+- Added an Electron desktop wrapper which serves the full production `dist/` build in its own application window. It carries the normal route and `hidden-final-boss.html` together in the same build.
+- Created local deliverables at `release/NIGHTFALL Final Submission/`: universal macOS `NIGHTFALL.app`, Windows x64 `NIGHTFALL for Windows.exe`, and `Web Version/`. Generated releases are excluded from Git; desktop source and reproducible package commands are committed.
+- Source commit `53244a3` was pushed to `fork/codex/nightfall-full-integration-2026-08-13`; draft PR: https://github.com/georgezboa/design-for-play-p2/pull/1.
+
 ### 2026-08-14 — Black Knife final visibility and post-break prompt correction
 
 - The previous supposedly open position still shared the pigment-card/folded-paper depth band. The stone is now in the clear front strip of the central case (`x: 0.86, z: 1.08`), remains fixed before and after breaking, and keeps the same small, unlit, rough grey-brown rock material.
