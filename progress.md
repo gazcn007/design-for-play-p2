@@ -40,6 +40,17 @@ production Conductor boss, never a video or the old Chapter 6 greybox.
 
 ## Work log
 
+- 2026-08-14: Final-integration regression hotfixes: restored Chapter 2's
+  normal Space jump by reading the input only while actually climbing;
+  keeps the optional Space ladder dismount. The Labyrinth's final seal is now
+  active on the final walked route rather than hidden by a floor-only gate,
+  and hit processing is guarded during the invulnerability window so one
+  collision cannot consume multiple lives. The true ending now redirects to
+  the title menu's complete scrolling credits. Final Boss Movements I–II
+  restore their neutral key/fill lights beneath the red wash so world colours
+  and materials remain visible. Focused Chapter 2, Labyrinth and game-flow
+  tests passed 39/39; pending full rebuild/package refresh.
+
 - 2026-08-14: Chapter 2 desktop-app playtest correction: the first flying
   platform (`car-a`) previously ended at x=1550, which only grazed the
   x=1600 next roof and made the transfer unreliable under Arcade collision.

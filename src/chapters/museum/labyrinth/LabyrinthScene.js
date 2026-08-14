@@ -484,7 +484,10 @@ export class LabyrinthScene extends Phaser.Scene {
       if (!active) statue.sprite.body.setVelocity(0, 0);
       this.statueSprites[i].eye.setVisible(active);
     }
-    const exitActive = this.activeFloor === (this.layout.exit.floor ?? 0);
+    // The final archive seal is a destination marker, not a hidden
+    // floor-specific collectible. Keeping it active on the walked final route
+    // prevents the lower-left final way from appearing to have no exit.
+    const exitActive = true;
     this.gateSprite?.setVisible(exitActive);
     this.gateLabel?.setVisible(exitActive);
     if (this.gateSprite?.body) this.gateSprite.body.enable = exitActive;
@@ -890,6 +893,7 @@ export class LabyrinthScene extends Phaser.Scene {
   // ------------------------------------------------------------ end states
 
   onHit() {
+    if (this.state !== 'playing' || this.time.now < this.player.invulnUntil) return;
     this.player.lives -= 1;
     this.player.invulnUntil = this.time.now + TUNING.invulnMs;
     this.primaryHunterId = null;

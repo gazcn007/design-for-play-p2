@@ -1097,13 +1097,13 @@ class SpectacleBattle {
     this.scene.fog.color.setHex(fogColors[index]);
     this.rim.color.setHex(phase.color);
     this.redCeilingLights.visible = index < 2;
-    // Movements I–II are lit only by the three red ceiling beams. Disable the
-    // warm key and amber rim that were turning the arena orange; later worlds
-    // keep their authored neutral/cyan lighting.
-    this.hemi.visible = index >= 2;
+    // Keep the original readable key/fill lighting in I–II, then layer the
+    // red ceiling wash over it. Removing all neutral fill made painted props
+    // collapse to black and erased the worlds' authored colours.
+    this.hemi.visible = true;
     this.redWash.visible = index < 2;
-    this.key.visible = index >= 2;
-    this.rim.visible = index >= 2;
+    this.key.visible = true;
+    this.rim.visible = true;
     this.key.color.setHex(index === 3 ? 0xffedcf : index === 2 ? 0xd5efff : 0xffe7c0);
     this.puppet.root.visible = index !== 2;
     this.butchRoot.visible = index === 2;

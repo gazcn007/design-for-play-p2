@@ -943,7 +943,6 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     const right = this.keys.right.isDown || this.keys.d.isDown;
     const up = this.keys.up.isDown || this.keys.w.isDown;
     const down = this.keys.down.isDown || this.keys.s.isDown;
-    const jumpPressed = Phaser.Input.Keyboard.JustDown(this.keys.jump);
     const ladder = this.nearbyLadder();
     if (!this.climbing && ladder && (up || down)) {
       this.climbing = true;
@@ -959,6 +958,7 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     }
 
     if (this.climbing && this.activeLadder) {
+      const jumpPressed = Phaser.Input.Keyboard.JustDown(this.keys.jump);
       const activeLadder = this.activeLadder;
       const platform = this.activeLadderPlatform;
       const roofY = platform?.body?.top
