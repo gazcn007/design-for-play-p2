@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 export const HOTEL_POSITIONS = Object.freeze({
-  playerStart: [-2.85, 0.5, 0.30], lev: [-2.65, 0.5, -0.7], hana: [0, 0, -2.5], deskApproach: [-1.0, 0.5, -1.2],
+  playerStart: [-2.85, 0.5, 0.30], lev: [-2.65, 0.5, -0.7], hana: [0, 0, -2.5], deskApproach: [-1.0, 0.5, -1.05],
   // Lobby guests are seated at the dining furniture and no longer wander.
   irena: [-1.98, 0, 0.84], irenaApproach: [-2.75, 0.5, 0.84],
   vesna: [-1.03, 0, 2.24], vesnaApproach: [-2.45, 0.5, 2.75],

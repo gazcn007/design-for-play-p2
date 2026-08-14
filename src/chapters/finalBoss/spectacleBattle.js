@@ -4,12 +4,12 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 import conductorUrl from '../../../public/assets/chapter03-3d/characters/male_municipal_shared_rig.glb?url';
-import tramUrl from '../../../public/assets/chapter03-3d/models/municipal_tram_web.glb?url';
 import stationUrl from '../../../public/assets/chapter03-3d/models/ch03_open_air_station.glb?url';
 import fountainUrl from '../../../public/assets/chapter03-3d/models/reunion_fountain_web.glb?url';
 import clockUrl from '../../../public/assets/chapter03-3d/models/clock_tower_web.glb?url';
 import archiveUrl from '../../../public/assets/chapter03-3d/models/old_municipal_archive_web.glb?url';
 import butchUrl from '../../../public/assets/chapter03-3d/characters/butch_shared_rig.glb?url';
+import chapter3AnimationsUrl from '../../../public/assets/chapter03-3d/animations/quaternius_ual1_standard.glb?url';
 import tenementUrl from '../../../public/assets/chapter03-3d/models/ch03_perimeter_tenement.glb?url';
 import workersHallUrl from '../../../public/assets/chapter03-3d/models/ch03_perimeter_workers_hall.glb?url';
 import bakeryUrl from '../../../public/assets/chapter03-3d/models/ch03_shop_bakery_tenement.glb?url';
@@ -39,7 +39,6 @@ import ch4SootUrl from './assets/paper/ch4-pigment-soot.png?url';
 import ch4IndigoUrl from './assets/paper/ch4-pigment-indigo.png?url';
 import ch4VerdigrisUrl from './assets/paper/ch4-pigment-verdigris.png?url';
 import ch4ConductorUrl from './assets/paper/ch4-conductor.png?url';
-import maraPaperUrl from './assets/paper/mara-rescue.png?url';
 import captchaTrain01Url from './assets/captcha/train-01.jpg?url';
 import captchaTrain02Url from './assets/captcha/train-02.jpg?url';
 import captchaTrain03Url from './assets/captcha/train-03.jpg?url';
@@ -58,8 +57,7 @@ import captchaCat02Url from './assets/captcha/cat-02.jpg?url';
 import captchaCat03Url from './assets/captcha/cat-03.jpg?url';
 import captchaPlane01Url from './assets/captcha/plane-01.jpg?url';
 import captchaPlane02Url from './assets/captcha/plane-02.jpg?url';
-import thresholdMusicUrl from '../../../public/assets/music/ch6/6.1_threshold_modern.mp3?url';
-import gridMusicUrl from '../../../public/assets/music/ch6/6.2_grid_modern.mp3?url';
+import verdiDiesIraeUrl from '../../../public/assets/music/ch5/5.7_verdi_dies_irae.mp3?url';
 import echoCityMusicUrl from '../../../public/assets/music/ch6/6.3_dvorak_new_world_mvt4_theme.mp3?url';
 import allLinesMusicUrl from '../../../public/assets/music/ch6/6.4_mussorgsky_kiev_gate.mp3?url';
 import departureMusicUrl from '../../../public/assets/music/ch6/6.5_night_train_departure.mp3?url';
@@ -79,9 +77,14 @@ import butchVoice218 from '../../../public/assets/chapter03-3d/voice/ch03/butch/
 import butchVoice244 from '../../../public/assets/chapter03-3d/voice/ch03/butch/CH03_BUTCH_0244.ogg?url';
 import { music } from '../../shared/musicDirector.js';
 import { audioFocus } from '../../shared/audioFocus.js';
+
+const poetryVoiceUrls = import.meta.glob('./assets/voice/poetry/*.mp3', { eager: true, query: '?url', import: 'default' });
+const poetryVoice = (id) => poetryVoiceUrls[`./assets/voice/poetry/${id}.mp3`] || null;
 import { CINEMATICS, playCinematic } from '../../shell/gameFlow.js';
+import { showEndCredits } from '../../shell/endCredits.js';
 import { installPauseMenu } from '../../shell/pauseMenu.js';
 import { createSaveStore } from '../../shell/saveSystem.js';
+import { devParam } from '../../devMode.js';
 
 const PINK = 0xff176f;
 const CYAN = 0x43e9ff;
@@ -92,8 +95,21 @@ const CONDUCTOR_Z = -15.8;
 const CH1_COUNTER_EVERY = 3;
 const NIGHT_MEMORY_DAMAGE = 18;
 const CYBER_LADDER_DAMAGE = 30;
-const PAINT_DAMAGE = 22;
+// Movement IV now pressures movement with falling solid grids, so each returned
+// pigment takes a little longer to finish the Conductor.
+const PAINT_DAMAGE = 13;
 const PHASE_START_HP = [400, 300, 200, 100];
+const CONDUCTOR_TEST_MOVEMENTS = Object.freeze({
+  'conductor-1': 0,
+  'conductor-2': 1,
+  'conductor-3': 2,
+  'conductor-4': 3,
+});
+
+function requestedConductorTestMovement() {
+  const movement = CONDUCTOR_TEST_MOVEMENTS[devParam('qa')];
+  return Number.isInteger(movement) ? movement : null;
+}
 const CH1_TRAIN_PATTERNS = [
   { id: 'horizontal-single', paths: [{ direction: [1, 0], lane: -0.8 }] },
   { id: 'diagonal-pair', paths: [{ direction: [1, 0.56], lane: -3.7 }, { direction: [-1, 0.56], lane: 3.7, delay: 0.14 }] },
@@ -116,15 +132,20 @@ const CYBER_DROP_SLOTS = [
 // Dvořák's fourth movement so its famous Allegro con fuoco arrival meets the
 // player as the city opens, rather than making the fight wait through a prelude.
 const BOSS_SCORE = {
-  threshold: { id: 'threshold-modern', src: thresholdMusicUrl, volume: 0.54, fade: 2.8, outFade: 1.4, loop: true },
-  grid: { id: 'grid-modern', src: gridMusicUrl, volume: 0.58, fade: 1.25, outFade: 1.0, loop: true },
   echoCity: { id: 'echo-city-new-world-fire', src: echoCityMusicUrl, volume: 0.52, fade: 2.4, outFade: 2.2, dialogueDuckDb: -10, loop: true },
   allLines: { id: 'mussorgsky-kiev-gate', src: allLinesMusicUrl, volume: 0.54, fade: 1.65, outFade: 3.8, loop: true },
   departure: { id: 'departure', src: departureMusicUrl, volume: 0.54, fade: 3.2, outFade: 5.5, loop: true },
 };
+// The false-boss run keeps the Museum collapse momentum through its first two
+// movements. Movement III immediately changes to its authored Dvořák cue.
+BOSS_SCORE.falseBossVerdi = {
+  id: 'false-boss-verdi-dies-irae', src: verdiDiesIraeUrl, volume: 0.42,
+  fade: 0.9, outFade: 1.8, loop: false, dialogueDuckDb: -9,
+  then: 'false-boss-after-verdi', thenOptions: { ...BOSS_SCORE.echoCity, id: 'false-boss-after-verdi' },
+};
 const PHASES = [
-  { id: 'night', title: 'I · NIGHT SERVICE', world: 'THROWN DEPARTURES', form: 'PASSENGER', color: AMBER, music: BOSS_SCORE.threshold, verb: 'SPACE' },
-  { id: 'borrowed', title: 'II · BORROWED GRID', world: 'CUT THE CURRENT', form: 'RUNNER', color: CYAN, music: BOSS_SCORE.grid, verb: 'SPACE' },
+  { id: 'night', title: 'I · NIGHT SERVICE', world: 'THROWN DEPARTURES', form: 'PASSENGER', color: AMBER, music: BOSS_SCORE.falseBossVerdi, verb: 'SPACE' },
+  { id: 'borrowed', title: 'II · BORROWED GRID', world: 'CUT THE CURRENT', form: 'RUNNER', color: CYAN, music: BOSS_SCORE.falseBossVerdi, verb: 'SPACE' },
   { id: 'echo', title: 'III · ECHO CITY', world: 'WORDS LEAVE MARKS', form: 'BUTCH', color: CYAN, music: BOSS_SCORE.echoCity, verb: 'SPACE' },
   { id: 'painted', title: 'IV · PAINTED COUNTRY', world: 'TAKE BACK THE COLOR', form: 'INK FIGURE', color: 0xff806f, music: BOSS_SCORE.allLines, verb: 'SPACE' },
 ];
@@ -156,6 +177,31 @@ const ECHO_EXCHANGES = [
     ],
   },
 ];
+// Authored Movement III: a staged Shakespeare verse duel. This replaces the
+// older Conductor argument loop while retaining its pause, damage and reaction
+// plumbing.
+const ECHO_POETRY_QUESTIONS = [
+  ['twelfth-music', 0, 'TWELFTH NIGHT · 1.1', 'IF MUSIC BE THE FOOD OF LOVE—', ['PLAY ON.', 'THE CLOCK FORGETS ITS HOUR.', 'AND ALL THE LIGHTS GO OUT.'], 0],
+  ['hamlet-being', 0, 'HAMLET · 3.1', 'TO BE, OR NOT TO BE—', ['THE STAGE IS SET.', 'THAT IS THE QUESTION.', 'THE NIGHT IS YOUNG.'], 1],
+  ['summer-day', 0, 'SONNET 18', 'SHALL I COMPARE THEE TO A SUMMER’S DAY?', ['TIME CLOSES EVERY DOOR.', 'THE WINTER ANSWERS NO.', 'THOU ART MORE LOVELY AND MORE TEMPERATE.'], 2],
+  ['world-stage', 0, 'AS YOU LIKE IT · 2.7', 'ALL THE WORLD’S A STAGE—', ['AND ALL THE MEN AND WOMEN MERELY PLAYERS.', 'WHILE SILENCE WAITS BEHIND THE CURTAIN.', 'AND MORNING SWALLOWS EVERY NAME.'], 0],
+  ['rose-name', 0, 'ROMEO AND JULIET · 2.2', 'WHAT’S IN A NAME?', ['A SHADOW WRITTEN ON THE WALL.', 'THAT WHICH WE CALL A ROSE, BY ANY OTHER WORD WOULD SMELL AS SWEET.', 'THE SUM OF EVERY DEED.'], 1],
+  ['true-love', 1, 'A MIDSUMMER NIGHT’S DREAM · 1.1', 'THE COURSE OF TRUE LOVE—', ['RUNS SWIFTER THAN THE TIDE.', 'IS CROWNED BEFORE THE DAWN.', 'NEVER DID RUN SMOOTH.'], 2],
+  ['dream-stuff', 1, 'THE TEMPEST · 4.1', 'WE ARE SUCH STUFF—', ['AS DREAMS ARE MADE ON.', 'AS MEMORY FORGETS AT DAWN.', 'AS TIME WILL TURN TO DUST.'], 0],
+  ['self-true', 1, 'HAMLET · 1.3', 'THIS ABOVE ALL—', ['LET NOTHING PASS UNSEEN.', 'TO THINE OWN SELF BE TRUE.', 'KEEP FAITH WITH DARKEST NIGHT.'], 1],
+  ['greatness', 1, 'TWELFTH NIGHT · 2.5', 'SOME ARE BORN GREAT—', ['SOME ARE LOST BEFORE THEIR HOUR.', 'SOME WAKE TO FIND THE CROWN.', 'SOME ACHIEVE GREATNESS, AND SOME HAVE GREATNESS THRUST UPON ’EM.'], 2],
+  ['cowards', 1, 'JULIUS CAESAR · 2.2', 'COWARDS DIE MANY TIMES BEFORE THEIR DEATHS—', ['THE VALIANT NEVER TASTE OF DEATH BUT ONCE.', 'THE BRAVE OUTLIVE THE MEMORY OF FEAR.', 'THE FAITHFUL MEET THE DARKNESS FACE TO FACE.'], 0],
+  ['mercy', 2, 'THE MERCHANT OF VENICE · 4.1', 'THE QUALITY OF MERCY IS NOT STRAINED—', ['IT FALLS UNSEEN ON KING AND CLOWN.', 'IT DROPPETH AS THE GENTLE RAIN FROM HEAVEN.', 'IT MOVES LIKE MUSIC THROUGH THE AIR.'], 1],
+  ['disgrace', 2, 'SONNET 29', 'WHEN, IN DISGRACE WITH FORTUNE AND MEN’S EYES—', ['I SUMMON UP REMEMBRANCE OF THINGS PAST.', 'I TURN MY THOUGHTS TO SUMMERS LONG SINCE DEAD.', 'I ALL ALONE BEWEEP MY OUTCAST STATE.'], 2],
+  ['true-minds', 2, 'SONNET 116', 'LET ME NOT TO THE MARRIAGE OF TRUE MINDS—', ['ADMIT IMPEDIMENTS.', 'CONFESS THE ALTERATION TIME COMMANDS.', 'ALLOW FALSE WITNESS TO DIVIDE.'], 0],
+  ['full-fathom', 2, 'THE TEMPEST · 1.2', 'FULL FATHOM FIVE THY FATHER LIES—', ['HIS VOICE IS BURIED IN THE FOAM.', 'OF HIS BONES ARE CORAL MADE.', 'THE TIDE HAS SEALED HIS EYES WITH PEARL.'], 1],
+  ['waves', 2, 'SONNET 60', 'LIKE AS THE WAVES MAKE TOWARDS THE PEBBLED SHORE—', ['SO FALL OUR NAMES BEYOND THE REACH OF TIME.', 'SO BREAK OUR HOURS AGAINST THE STONES OF NIGHT.', 'SO DO OUR MINUTES HASTEN TO THEIR END.'], 2],
+].map(([id, tier, source, prompt, choices, correct]) => ({ id, tier, source, prompt, choices, correct }));
+// Echo City begins at 200 HP. Four correct verses at 25 each carry it, and
+// only it, across the 100-HP threshold into Movement IV.
+const ECHO_POETRY_DAMAGE = 25;
+const ECHO_COMBAT_INTERVAL = 10;
+const PAINT_HOLD_SECONDS = 0.68;
 const CAPTCHA_IMAGE_SETS = [[
   { src: captchaTrain01Url, train: true, label: 'steam locomotive' },
   { src: captchaDog01Url, train: false, label: 'dog' },
@@ -451,7 +497,15 @@ class SpectacleBattle {
     if (this.voiceAudio) { this.voiceAudio.preload = 'auto'; this.voiceAudio.playsInline = true; this.voiceAudio.volume = 0.9; }
     this.voiceState = { playing: false, speaker: null, tone: null, text: null };
     this.echoOutcome = null;
+    this.echoQuiz = { attempts: 0, correct: 0, used: new Set(), current: null };
+    this.echoRecital = { active: false, countdownShown: null };
+    this.echoCombatClock = ECHO_COMBAT_INTERVAL;
+    this.falseBossScoreStarted = false;
+    this.falseBossScoreLocked = false;
     this.paintTutorial = { stage: 'pending' };
+    this.paintHold = { active: false, button: -1, elapsed: 0, point: null, target: null, completed: false };
+    this.butchActionState = 'idle';
+    this.butchLandTimer = 0;
     this.raycaster = new THREE.Raycaster();
     this.pointerNdc = new THREE.Vector2();
     this.buildLights();
@@ -466,6 +520,7 @@ class SpectacleBattle {
 
   buildLights() {
     this.hemi = new THREE.HemisphereLight(0x8fb9cc, 0x08070a, 2.5);
+    this.redWash = new THREE.HemisphereLight(0x5a0010, 0x100006, 0.9);
     this.key = new THREE.DirectionalLight(0xd5efff, 4.1);
     this.key.position.set(-7, 16, 10);
     this.key.castShadow = true;
@@ -473,7 +528,22 @@ class SpectacleBattle {
     Object.assign(this.key.shadow.camera, { left: -18, right: 18, top: 16, bottom: -16 });
     this.rim = new THREE.PointLight(PINK, 42, 28, 2);
     this.rim.position.set(0, 6, -7);
-    this.scene.add(this.hemi, this.key, this.rim);
+    this.redCeilingLights = new THREE.Group();
+    [-7.2, 0, 7.2].forEach((x) => {
+      const housing = new THREE.Mesh(
+        new THREE.BoxGeometry(2.25, 0.16, 0.72),
+        new THREE.MeshStandardMaterial({ color: 0x2a0709, emissive: 0xff071b, emissiveIntensity: 6.2 }),
+      );
+      // Keep the fixture above the camera frame. These wide, dim beams overlap
+      // with the red ambient wash so the arena reads as blood-red, not as three
+      // bright circles on an otherwise dark floor.
+      housing.position.set(x, 16.4, -1.8);
+      const glow = new THREE.SpotLight(0xff0017, 90, 28, 0.58, 0.5, 2);
+      glow.position.set(x, 16.1, -1.35);
+      glow.target.position.set(x, 0, -1.35);
+      this.redCeilingLights.add(housing, glow, glow.target);
+    });
+    this.scene.add(this.hemi, this.redWash, this.key, this.rim, this.redCeilingLights);
   }
 
   buildWorlds() {
@@ -607,15 +677,64 @@ class SpectacleBattle {
       this.paintCreep.add(strip);
     }
     this.conductorRoot.add(this.paintCreep);
+    this.paintTransfer = new THREE.Group();
+    const transferColors = [0x202126, 0x435d91, 0x4f8f7c, 0xff806f, 0xf2a541];
+    for (let i = 0; i < 5; i += 1) {
+      const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()]);
+      const strand = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: transferColors[i], transparent: true, opacity: 0.96, depthWrite: false, depthTest: false }));
+      strand.renderOrder = 40;
+      strand.visible = false;
+      this.paintTransfer.add(strand);
+    }
+    for (let i = 0; i < 9; i += 1) {
+      const droplet = new THREE.Mesh(new THREE.CircleGeometry(0.075 + (i % 3) * 0.025, 9), new THREE.MeshBasicMaterial({ color: transferColors[i % transferColors.length], transparent: true, opacity: 0.96, depthWrite: false, depthTest: false, side: THREE.DoubleSide }));
+      droplet.userData.paintDroplet = true;
+      droplet.renderOrder = 41;
+      droplet.visible = false;
+      this.paintTransfer.add(droplet);
+    }
+    this.paintTransfer.visible = false;
+    this.scene.add(this.paintTransfer);
     this.player = { x: 0, y: 0, z: 6.1, vy: 0, grounded: true, hp: 4, maxHp: 4, inv: 0, respawnInv: 0, respawns: 0, phaseHeals: 0, hitTimer: 0, dash: 0, dashCd: 0, attack: 0, attackCd: 0, combo: 0, facingX: 0, facingZ: -1, ammo: 0, ladder: false, color: 0 };
     this.boss = { x: 0, z: CONDUCTOR_Z, hp: 400, maxHp: 400, phaseStartHp: 400, paintCoverage: 0, inv: 0, exposed: 0, attackClock: 1.4, stagger: 0, gesture: 'idle', gestureTime: 0, reaction: 'idle', flash: 0, rounds: 0, phaseRound: 0 };
     this.suitcase = null;
     this.ladderWeapon = makePaperCard(this.textureLoader, ch2LadderUrl, 1.25, 4, { alpha: true, nearest: true });
     this.ladderWeapon.visible = false;
     this.scene.add(this.ladderWeapon);
-    this.maraRoot = makePaperCard(this.textureLoader, maraPaperUrl, 1.5, 2.75, { alpha: true, nearest: true });
-    this.maraRoot.visible = false; this.scene.add(this.maraRoot);
-    this.escapeTrain = new THREE.Group(); this.escapeTrain.visible = false; this.scene.add(this.escapeTrain);
+    this.departureTrain = new THREE.Group();
+    const paperPlane = (width, height, color, x, y, z = 0.08) => {
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(width, height), paperMaterial(color, this.paperTexture));
+      plane.position.set(x, y, z);
+      return plane;
+    };
+    // A graphite drawing on a paper card: deliberately monochrome, with loose pencil marks.
+    const outline = paperPlane(13.2, 3.2, 0x242528, 0, 2.08, -0.05);
+    const body = paperPlane(12.9, 2.86, 0xd9d7cf, 0, 2.1);
+    const roof = paperPlane(13.35, 0.42, 0x383a3d, 0, 3.72, 0.12);
+    const lowerBand = paperPlane(12.95, 0.38, 0x777875, 0, 1.03, 0.13);
+    const frontCap = paperPlane(0.72, 2.58, 0xb9b8b1, 6.13, 2.08, 0.14);
+    const rearCap = paperPlane(0.72, 2.58, 0xb9b8b1, -6.13, 2.08, 0.14);
+    const windows = [-4.9, -3.35, -1.8, -0.25, 1.3, 2.85, 4.4].map((x) => paperPlane(1.12, 0.72, 0x525458, x, 2.48, 0.16));
+    const wheels = [-4.45, -1.48, 1.48, 4.45].map((x) => {
+      const wheel = new THREE.Mesh(new THREE.CircleGeometry(0.43, 16), paperMaterial(0x292b2d, this.paperTexture));
+      wheel.position.set(x, 0.54, 0.18);
+      return wheel;
+    });
+    const paperSeams = [-5.55, -2.58, 0.4, 3.38].map((x) => paperPlane(0.07, 2.35, 0x353638, x, 2.05, 0.19));
+    const sketchStrokes = [
+      [-5.65, 3.13, 0.95, 0.03], [-4.43, 1.48, 1.28, -0.025], [-3.76, 3.36, 0.72, 0.02],
+      [-2.18, 1.34, 1.55, 0.018], [-0.98, 3.2, 1.22, -0.03], [0.42, 1.52, 1.68, 0.024],
+      [2.36, 3.31, 1.12, -0.02], [3.48, 1.36, 1.44, 0.028], [5.02, 3.1, 0.78, -0.025],
+    ].map(([x, y, width, rotation]) => {
+      const stroke = paperPlane(width, 0.035, 0x444548, x, y, 0.21);
+      stroke.material.transparent = true;
+      stroke.material.opacity = 0.52;
+      stroke.rotation.z = rotation;
+      return stroke;
+    });
+    this.departureTrain.add(outline, body, roof, lowerBand, frontCap, rearCap, ...windows, ...wheels, ...paperSeams, ...sketchStrokes);
+    this.departureTrain.visible = false;
+    this.scene.add(this.departureTrain);
   }
 
   buildHud() {
@@ -627,7 +746,7 @@ class SpectacleBattle {
       <div id="command-label" class="command-label"></div>
       <div id="tutorial-hint" class="tutorial-hint"></div>
       <div id="dialogue-choices" class="dialogue-choices hidden"></div>
-      <div id="rescue-prompt" class="rescue-prompt hidden">SPACE · PULL MARA INTO THE TRAIN</div>
+      <div id="rescue-prompt" class="rescue-prompt hidden">SPACE · JUMP ABOARD THE SKETCH TRAIN</div>
       <div class="player-hud"><span id="form-label">GRAPHITE FORM</span><div id="paper-health" class="paper-health"></div><small id="ability-label">SPACE · SHIFT DASH</small></div>
       <div id="boss-hit" class="boss-hit">EXPOSED</div>
       <div id="transition-title" class="transition-title"><small>THE FLOOR CANNOT HOLD</small><b></b><span></span></div>
@@ -675,6 +794,12 @@ class SpectacleBattle {
       if (this.phase === 3 && this.mode === 'play') event.preventDefault();
     });
     this.renderer.domElement.addEventListener('pointerdown', (event) => this.handlePaintPointer(event));
+    this.renderer.domElement.addEventListener('pointermove', (event) => this.updatePaintPointer(event));
+    this.renderer.domElement.addEventListener('pointerup', (event) => this.releasePaintPointer(event));
+    this.renderer.domElement.addEventListener('pointercancel', (event) => this.releasePaintPointer(event));
+    this.renderer.domElement.addEventListener('pointerleave', () => {
+      if (this.paintHold.active) this.releasePaintPointer({ button: this.paintHold.button });
+    });
   }
 
   groundPointFromPointer(event) {
@@ -689,10 +814,97 @@ class SpectacleBattle {
 
   handlePaintPointer(event) {
     if (this.mode !== 'play' || this.phase !== 3 || this.transition || this.dialogueOpen) return;
-    if (event.button === 2) {
-      event.preventDefault();
-      this.absorbPaint(this.groundPointFromPointer(event));
-    } else if (event.button === 0) this.usePaintBrush();
+    if (![0, 2].includes(event.button)) return;
+    event.preventDefault();
+    const point = this.groundPointFromPointer(event);
+    const target = event.button === 2 ? this.findAbsorbablePaint(point) : null;
+    this.paintHold = { active: true, button: event.button, elapsed: 0, point, target, completed: false };
+    this.renderer.domElement.setPointerCapture?.(event.pointerId);
+    this.setTutorialHint(event.button === 2 ? 'HOLD RIGHT CLICK · ABSORB' : 'HOLD LEFT CLICK · RETURN');
+    this.command(`${event.button === 2 ? 'ABSORBING' : 'RETURNING'} 0%`, true);
+    this.commandLabel.classList.add('paint-hold');
+    this.updatePaintTransfer(0);
+  }
+
+  updatePaintPointer(event) {
+    if (!this.paintHold.active) return;
+    this.paintHold.point = this.groundPointFromPointer(event);
+    if (this.paintHold.button === 2) this.paintHold.target = this.findAbsorbablePaint(this.paintHold.point);
+  }
+
+  releasePaintPointer(event) {
+    if (!this.paintHold.active || (event.button >= 0 && event.button !== this.paintHold.button)) return;
+    const completed = this.paintHold.completed;
+    this.paintHold.target?.asset?.scale.setScalar(1);
+    this.paintHold = { active: false, button: -1, elapsed: 0, point: null, target: null, completed: false };
+    this.commandLabel.classList.remove('paint-hold');
+    this.paintTransfer.visible = false;
+    this.paintTransfer.children.forEach((item) => { item.visible = false; });
+    if (!completed && this.phase === 3) this.command('KEEP HOLDING');
+    if (this.paintTutorial.stage === 'await-pigment') this.setTutorialHint('HOLD RIGHT CLICK · ABSORB');
+    else if (this.paintTutorial.stage === 'absorbed') this.setTutorialHint('HOLD LEFT CLICK · RETURN');
+    else this.hideTutorialHint();
+  }
+
+  updatePaintHold(dt) {
+    if (!this.paintHold.active || this.phase !== 3 || this.mode !== 'play') return;
+    this.paintHold.elapsed += dt;
+    const progress = THREE.MathUtils.clamp(this.paintHold.elapsed / PAINT_HOLD_SECONDS, 0, 1);
+    this.command(`${this.paintHold.button === 2 ? 'ABSORBING' : 'RETURNING'} ${Math.round(progress * 100)}%`, true);
+    this.updatePaintTransfer(progress);
+    if (progress < 1 || this.paintHold.completed) return;
+    this.paintHold.completed = true;
+    if (this.paintHold.button === 2) this.absorbPaint(this.paintHold.point);
+    else this.usePaintBrush();
+  }
+
+  findAbsorbablePaint(point = null) {
+    return this.hazards.find((hazard) => {
+      if (hazard.type !== 'pigment' || !hazard.absorbable) return false;
+      return Math.hypot(this.player.x - hazard.x, this.player.z - hazard.z) < 4.2
+        && point && Math.hypot(point.x - hazard.x, point.z - hazard.z) < 2.4;
+    }) || null;
+  }
+
+  updatePaintTransfer(progress) {
+    if (!this.paintHold.active) return;
+    const absorbing = this.paintHold.button === 2;
+    const target = absorbing ? (this.paintHold.target || this.findAbsorbablePaint(this.paintHold.point)) : null;
+    if (absorbing && !target) { this.paintTransfer.visible = false; return; }
+    const from = absorbing ? new THREE.Vector3(target.x, 0.65, target.z) : new THREE.Vector3(this.player.x, 1.15 + this.player.y, this.player.z);
+    const to = absorbing ? new THREE.Vector3(this.player.x, 1.1 + this.player.y, this.player.z) : new THREE.Vector3(this.boss.x, 6.7, this.boss.z + 0.7);
+    this.paintTransfer.visible = true;
+    const strands = this.paintTransfer.children.filter((item) => !item.userData.paintDroplet);
+    const droplets = this.paintTransfer.children.filter((item) => item.userData.paintDroplet);
+    strands.forEach((strand, index) => {
+      const stagger = THREE.MathUtils.clamp(progress * 1.35 - index * 0.055, 0.025, 1);
+      const end = from.clone().lerp(to, stagger);
+      const middle = from.clone().lerp(end, 0.52);
+      middle.x += Math.sin(this.elapsed * 13 + index * 1.8) * (0.08 + progress * 0.14) + (index - 2) * 0.065;
+      middle.y += 0.18 + Math.sin(progress * Math.PI) * 0.42;
+      middle.z += Math.cos(this.elapsed * 11 + index) * 0.08;
+      strand.geometry.setFromPoints([from, middle, end]);
+      strand.material.opacity = 0.42 + progress * 0.5;
+      strand.visible = true;
+    });
+    droplets.forEach((droplet, index) => {
+      const travel = (this.elapsed * 1.65 + index / droplets.length) % 1;
+      const flow = absorbing ? travel : 1 - travel;
+      droplet.position.lerpVectors(from, to, flow);
+      droplet.position.y += Math.sin(flow * Math.PI) * (0.35 + progress * 0.55);
+      droplet.position.x += Math.sin(this.elapsed * 17 + index * 2.1) * 0.08;
+      droplet.position.z += Math.cos(this.elapsed * 15 + index * 1.7) * 0.07;
+      droplet.scale.setScalar(0.72 + progress * 0.6 + Math.sin(this.elapsed * 20 + index) * 0.08);
+      droplet.material.opacity = 0.5 + progress * 0.45;
+      droplet.lookAt(this.camera.position);
+      droplet.visible = true;
+    });
+    if (absorbing && target.asset) target.asset.scale.setScalar(Math.max(0.68, 1 - progress * 0.28 + Math.sin(this.elapsed * 18) * 0.025));
+  }
+
+  advancePaintHold(ms) {
+    const steps = Math.max(1, Math.ceil(ms / (1000 / 60)));
+    for (let i = 0; i < steps && !this.paintHold.completed; i += 1) this.updatePaintHold(1 / 60);
   }
 
   playVoice(cue, onEnded = null) {
@@ -714,7 +926,7 @@ class SpectacleBattle {
 
   async loadAssets() {
     await MeshoptDecoder.ready;
-    const urls = { conductor: conductorUrl, butch: butchUrl, tram: tramUrl, station: stationUrl, fountain: fountainUrl, clock: clockUrl, archive: archiveUrl, tenement: tenementUrl, workersHall: workersHallUrl, bakery: bakeryUrl, printworks: printworksUrl, trash: trashUrl, bench: benchUrl, speaker: speakerUrl };
+    const urls = { conductor: conductorUrl, butch: butchUrl, chapter3Animations: chapter3AnimationsUrl, station: stationUrl, fountain: fountainUrl, clock: clockUrl, archive: archiveUrl, tenement: tenementUrl, workersHall: workersHallUrl, bakery: bakeryUrl, printworks: printworksUrl, trash: trashUrl, bench: benchUrl, speaker: speakerUrl };
     await Promise.all(Object.entries(urls).map(async ([id, url]) => {
       try {
         const gltf = await this.loader.loadAsync(url);
@@ -725,7 +937,6 @@ class SpectacleBattle {
     }));
     this.installConductor();
     this.installButch();
-    this.installEscapeTrain();
     this.installWorldAssets();
     this.assetsReady = true;
   }
@@ -778,21 +989,35 @@ class SpectacleBattle {
     this.conductorAction = action;
   }
 
-  installEscapeTrain() {
-    const tram = this.cloneAsset('tram', 3.8, 12.5);
-    if (tram) this.escapeTrain.add(tram);
-  }
-
   installButch() {
     const source = this.assets.get('butch');
     if (!source) return;
     const root = fitModel(cloneSkeleton(source.root), 3.15);
     this.butchRoot.add(root);
-    if (source.animations.length) {
+    const sharedAnimations = this.assets.get('chapter3Animations')?.animations || [];
+    const animationClips = [...sharedAnimations, ...source.animations];
+    if (animationClips.length) {
       this.butchMixer = new THREE.AnimationMixer(root);
-      this.butchActions = Object.fromEntries(source.animations.map((clip) => [clip.name, this.butchMixer.clipAction(clip)]));
-      (Object.entries(this.butchActions).find(([name]) => /idle/i.test(name))?.[1] || Object.values(this.butchActions)[0])?.play();
+      this.butchActions = Object.fromEntries(animationClips.map((clip) => [clip.name.replace(/_Rig$/, ''), this.butchMixer.clipAction(clip)]));
+      this.playButchAction('Idle_Loop', false, true);
     }
+  }
+
+  playButchAction(name, once = false, immediate = false) {
+    const next = this.butchActions?.[name];
+    if (!next || (this.butchAction === next && !once)) return Boolean(next);
+    const previous = this.butchAction;
+    next.enabled = true;
+    next.reset();
+    next.setEffectiveTimeScale(1);
+    next.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, once ? 1 : Infinity);
+    next.clampWhenFinished = once;
+    if (previous && !immediate) previous.crossFadeTo(next, 0.14, true);
+    else previous?.stop();
+    next.play();
+    this.butchAction = next;
+    this.butchActionState = name;
+    return true;
   }
 
   installWorldAssets() {
@@ -800,32 +1025,41 @@ class SpectacleBattle {
     // Conductor-thrown hazards; no skyline, landmark or prop remains fixed.
   }
 
-  begin() {
+  begin({ movement = 0 } = {}) {
+    const startMovement = THREE.MathUtils.clamp(Math.round(movement), 0, PHASES.length - 1);
     this.clearCombat();
     this.mode = 'play';
-    this.phase = 0;
+    this.phase = startMovement;
+    this.falseBossScoreStarted = false;
+    this.falseBossScoreLocked = startMovement < 2;
     this.elapsed = 0;
     this.transition = null;
     this.tutorialShown = new Set();
     this.tutorialHint.classList.remove('show');
-    this.onboarding = { active: true, stage: 'go-near', caseHazard: null };
+    this.onboarding = { active: startMovement === 0, stage: startMovement === 0 ? 'go-near' : 'skipped-for-test-node', caseHazard: null };
     this.cyberOnboarding = { active: false, stage: 'pending', target: null, blocksCut: 0 };
     this.cyberLaddersSpawned = 0;
     this.cyberLadderStrikes = 0;
     this.cyberRingCooldown = 0;
+    this.echoQuiz = { attempts: 0, correct: 0, used: new Set(), current: null };
+    this.echoRecital = { active: false, countdownShown: null };
+    this.echoCombatClock = ECHO_COMBAT_INTERVAL;
     this.player.maxHp = DIFFICULTY[difficulty].layers;
     this.player.hp = this.player.maxHp;
     Object.assign(this.player, { x: 0, y: 0, z: 6.1, vy: 0, grounded: true, inv: 1, respawnInv: 0, respawns: 0, phaseHeals: 0, hitTimer: 0, dash: 0, dashCd: 0, attack: 0, attackCd: 0, ammo: 0, ladder: false, color: 0 });
-    Object.assign(this.boss, { x: 0, z: CONDUCTOR_Z, hp: 400, phaseStartHp: 400, paintCoverage: 0, inv: 0, exposed: 0, attackClock: 999, stagger: 0, gesture: 'idle', gestureTime: 0, reaction: 'idle', rounds: 0, phaseRound: 0 });
+    Object.assign(this.boss, { x: 0, z: CONDUCTOR_Z, hp: PHASE_START_HP[startMovement], phaseStartHp: PHASE_START_HP[startMovement], paintCoverage: 0, inv: 0, exposed: 0, attackClock: startMovement === 0 ? 999 : 1.4, stagger: 0, gesture: 'idle', gestureTime: 0, reaction: 'idle', flash: 0, rounds: 0, phaseRound: 0 });
     this.playerRoot.position.set(0, 0, 6.1);
     this.conductorRoot.position.set(0, -2.8, CONDUCTOR_Z);
     this.conductorRoot.scale.setScalar(5);
     this.conductorRoot.visible = true;
-    this.setWorld(0);
-    this.puppet.setForm(0, true);
+    this.setWorld(startMovement);
+    this.puppet.setForm(startMovement, true);
     this.hud.classList.remove('hidden');
     this.command('');
-    this.spawnTutorialSuitcase();
+    if (startMovement === 0) this.spawnTutorialSuitcase();
+    if (startMovement === 1) this.startCyberOnboarding();
+    if (startMovement === 3) this.startPaintOnboarding();
+    this.command(PHASES[startMovement].verb);
     this.updateHud();
   }
 
@@ -841,8 +1075,11 @@ class SpectacleBattle {
     this.dialoguePause = false;
     this.activeHoles = [];
     this.playerRoot.visible = true;
-    this.maraRoot.visible = false;
-    this.escapeTrain.visible = false;
+    this.departureTrain.visible = false;
+    if (this.paintTransfer) {
+      this.paintTransfer.visible = false;
+      this.paintTransfer.children.forEach((item) => { item.visible = false; });
+    }
     this.ladderWeapon.visible = false;
     this.rescuePrompt?.classList.add('hidden');
     this.systemGate?.classList.add('hidden');
@@ -859,6 +1096,14 @@ class SpectacleBattle {
     this.scene.background.setHex(fogColors[index]);
     this.scene.fog.color.setHex(fogColors[index]);
     this.rim.color.setHex(phase.color);
+    this.redCeilingLights.visible = index < 2;
+    // Movements I–II are lit only by the three red ceiling beams. Disable the
+    // warm key and amber rim that were turning the arena orange; later worlds
+    // keep their authored neutral/cyan lighting.
+    this.hemi.visible = index >= 2;
+    this.redWash.visible = index < 2;
+    this.key.visible = index >= 2;
+    this.rim.visible = index >= 2;
     this.key.color.setHex(index === 3 ? 0xffedcf : index === 2 ? 0xd5efff : 0xffe7c0);
     this.puppet.root.visible = index !== 2;
     this.butchRoot.visible = index === 2;
@@ -868,6 +1113,11 @@ class SpectacleBattle {
     this.holeVisuals.forEach((hole) => { hole.visible = false; });
     this.activeHoles = [];
     this.echoOutcome = null;
+    if (index === 2) {
+      this.echoQuiz = { attempts: 0, correct: 0, used: new Set(), current: null };
+      this.echoRecital = { active: false, countdownShown: null };
+      this.echoCombatClock = ECHO_COMBAT_INTERVAL;
+    }
     this.paintTutorial = { stage: index === 3 ? 'await-pigment' : 'pending' };
     this.cyberRingCooldown = index === 1 ? 0.9 : 0;
     this.boss.phaseStartHp = PHASE_START_HP[index];
@@ -1013,11 +1263,11 @@ class SpectacleBattle {
     this.boss.exposed = 999;
     this.player.color = 0;
     this.spawnPigmentObject(0, { tutorial: true, x: 2.8, z: 3.2 });
-    this.setTutorialHint('RIGHT CLICK · ABSORB COLOR');
+    this.setTutorialHint('HOLD RIGHT CLICK · ABSORB COLOR');
   }
 
   jump() {
-    if (this.mode !== 'play' || this.transition || !this.player.grounded) return;
+    if (!['play', 'departure'].includes(this.mode) || this.transition || !this.player.grounded) return;
     this.player.vy = 8.7;
     this.player.grounded = false;
     this.tone(330, 0.08, 'triangle', 0.03);
@@ -1043,7 +1293,7 @@ class SpectacleBattle {
   }
 
   spaceAction() {
-    if (this.mode === 'rescue') { this.interact(); return; }
+    if (this.mode === 'departure') { this.jumpAboardDepartureTrain(); return; }
     if (this.mode !== 'play' || this.transition) return;
     const activeCyberRing = this.phase === 1 ? this.hazards.find((hazard) => {
       if (hazard.type !== 'cyber-ring' || !hazard.struck) return false;
@@ -1063,12 +1313,12 @@ class SpectacleBattle {
     if (nearCase || nearCyber) { this.interact(); return; }
     if (this.phase === 0 && this.player.ammo > 0) { this.attack(); return; }
     if (this.phase === 1 && this.player.ladder && this.player.z < -3.5) { this.attack(); return; }
-    if (this.phase === 2 && this.boss.exposed > 0) { this.openDialogue(); return; }
+    if (this.phase === 2) { this.jump(); return; }
     this.jump();
   }
 
   interact() {
-    if (this.mode === 'rescue') { this.boardEscapeTrain(); return; }
+    if (this.mode === 'departure') { this.jumpAboardDepartureTrain(); return; }
     if (this.mode !== 'play' || this.transition) return;
     const caseDrop = this.player.ammo === 0 ? this.hazards.find((hazard) => hazard.type === 'suitcase-rain' && hazard.usable && hazard.landed && !hazard.opened && Math.hypot(this.player.x - hazard.x, this.player.z - hazard.z) < 2.8) : null;
     if (this.phase === 0 && caseDrop) {
@@ -1100,7 +1350,7 @@ class SpectacleBattle {
         if (block) this.cutCyberBlock(block);
         else this.command(this.hazards.some((hazard) => hazard.type === 'cyber-ladder' && !hazard.picked) ? 'THE LADDER IS FALLING' : 'MOVE TO A LANDED GRID BLOCK');
       }
-    } else if (this.phase === 2) this.openDialogue();
+    }
   }
 
   throwSuitcaseMemory() {
@@ -1155,44 +1405,66 @@ class SpectacleBattle {
     if (tutorialStrike) this.completeCyberOnboarding();
   }
 
-  openDialogue() {
+  openDialogue(source = 'manual') {
     if (this.phase !== 2 || this.dialogueOpen || this.boss.exposed <= 0) return;
+    if (this.echoRecital.active && source !== 'combat-timer') return;
     this.dialogueOpen = true;
     this.dialoguePause = true;
-    const exchange = ECHO_EXCHANGES[this.boss.phaseRound % ECHO_EXCHANGES.length];
-    this.activeEchoExchange = exchange;
-    this.activeEchoReplies = exchange.replies;
-    this.dialogueChoices.innerHTML = `<div class="dialogue-speaker">${exchange.claim.speaker}</div><div class="dialogue-claim">${exchange.claim.text}</div><div class="dialogue-replies">${exchange.replies.map((line, index) => `<button data-choice="${index}"><b>${index + 1}</b>${line.cue.text}</button>`).join('')}</div>`;
+    const tier = Math.min(2, Math.floor(this.echoQuiz.attempts / 3));
+    let pool = ECHO_POETRY_QUESTIONS.filter((question) => question.tier === tier && !this.echoQuiz.used.has(question.id));
+    if (!pool.length) pool = ECHO_POETRY_QUESTIONS.filter((question) => !this.echoQuiz.used.has(question.id));
+    if (!pool.length) { this.echoQuiz.used.clear(); pool = ECHO_POETRY_QUESTIONS.filter((question) => question.tier === 2); }
+    const question = pool[(this.boss.phaseRound + this.echoQuiz.attempts) % pool.length];
+    this.echoQuiz.used.add(question.id);
+    this.echoQuiz.current = question;
+    this.activeEchoReplies = question.choices.map((text, index) => ({
+      cue: voiceCue('BUTCH', text, poetryVoice(`${question.id}-choice-${index + 1}`), index === question.correct ? 'recognition-resolve' : 'uncertain-recall'),
+      correct: index === question.correct, damage: ECHO_POETRY_DAMAGE, reaction: 'shame',
+    }));
+    const tierLabel = ['I · FORM', 'II · MEMORY', 'III · METER'][tier];
+    const claim = voiceCue('CONDUCTOR', question.prompt, poetryVoice(`${question.id}-prompt`), tier === 2 ? 'measured-challenge' : 'cold-recital');
+    this.dialogueChoices.innerHTML = `<div class="dialogue-meta"><span>${question.source}</span><span>${tierLabel} · QUESTION ${this.echoQuiz.attempts + 1}</span></div><div class="dialogue-speaker">${claim.speaker}</div><div class="dialogue-claim poetry-line">${claim.text}</div><div class="dialogue-replies poetry-replies">${this.activeEchoReplies.map((line, index) => `<button data-choice="${index}"><b>${index + 1}</b><em>${line.cue.text}</em></button>`).join('')}</div>`;
     this.dialogueChoices.classList.remove('hidden');
     this.dialogueChoices.querySelectorAll('button').forEach((button) => button.addEventListener('click', () => this.chooseDialogue(Number(button.dataset.choice))));
-    this.playVoice(exchange.claim);
-    this.showTutorialOnce('echo-argument', 'CHOOSE ONE LINE // ONLY THE TRUTH BREAKS HIM');
-    this.command('TIME HOLDS // ANSWER');
+    this.playVoice(claim);
+    this.showTutorialOnce('echo-argument', 'COMPLETE THE VERSE // 1 · 2 · 3');
+    this.command('TIME HOLDS // COMPLETE THE LINE');
   }
 
   chooseDialogue(index) {
     if (!this.dialogueOpen) return;
-    const line = this.activeEchoReplies?.[index] || this.activeEchoReplies?.[0] || ECHO_EXCHANGES[0].replies[0];
+    const line = this.activeEchoReplies?.[index] || this.activeEchoReplies?.[0];
+    if (!line) return;
+    this.echoQuiz.attempts += 1;
     this.dialogueChoices.querySelectorAll('button').forEach((button) => { button.disabled = true; });
     this.dialogueChoices.querySelector('.dialogue-speaker').textContent = line.cue.speaker;
     this.dialogueChoices.querySelector('.dialogue-claim').textContent = line.cue.text;
     this.dialogueChoices.querySelector('.dialogue-replies').innerHTML = '';
+    if (line.correct) {
+      this.echoQuiz.correct += 1;
+      this.echoOutcome = { correct: true, reply: line.cue.text, rebuttal: null };
+      this.command('THE RECORD BREAKS'); this.hitBoss(line.damage, line.reaction);
+      this.playVoice(line.cue, () => { this.closeDialogue(); this.advanceEchoRecital(); });
+      return;
+    }
     this.playVoice(line.cue, () => {
-      if (line.correct) {
-        this.echoOutcome = { correct: true, reply: line.cue.text, rebuttal: null };
-        this.closeDialogue();
-        this.command('THE RECORD BREAKS');
-        this.hitBoss(line.damage, line.reaction);
-        return;
-      }
-      this.echoOutcome = { correct: false, reply: line.cue.text, rebuttal: line.rebut.text };
-      this.dialogueChoices.querySelector('.dialogue-speaker').textContent = line.rebut.speaker;
-      this.dialogueChoices.querySelector('.dialogue-claim').textContent = line.rebut.text;
-      this.dialogueChoices.querySelector('.dialogue-replies').innerHTML = '<button data-continue><b>↵</b>KEEP MOVING</button>';
-      this.dialogueChoices.querySelector('[data-continue]').addEventListener('click', () => this.closeDialogue());
-      this.playVoice(line.rebut);
-      this.command('HE REFUSES THE PREMISE');
+        const correction = voiceCue('CONDUCTOR', 'NO. THAT IS NOT THE LINE.', poetryVoice('wrong-correction'), 'curt-correction');
+      this.echoOutcome = { correct: false, reply: line.cue.text, rebuttal: correction.text };
+      this.dialogueChoices.querySelector('.dialogue-speaker').textContent = correction.speaker;
+      this.dialogueChoices.querySelector('.dialogue-claim').textContent = correction.text;
+      this.dialogueChoices.querySelector('.dialogue-replies').innerHTML = '';
+      this.playVoice(correction, () => { this.closeDialogue(); this.advanceEchoRecital(); });
+      this.command('THE VERSE HOLDS');
     });
+  }
+
+  advanceEchoRecital() {
+    if (!this.echoRecital.active) return;
+    this.echoRecital.active = false;
+    this.boss.exposed = 0;
+    this.echoCombatClock = ECHO_COMBAT_INTERVAL;
+    this.boss.attackClock = 0.2;
+    this.command('MOVE // NEXT VERSE IN 10');
   }
 
   closeDialogue() {
@@ -1206,33 +1478,31 @@ class SpectacleBattle {
   }
 
   absorbPaint(point = null) {
-    const pigment = this.hazards.find((hazard) => {
-      if (hazard.type !== 'pigment' || !hazard.absorbable) return false;
-      const nearPlayer = Math.hypot(this.player.x - hazard.x, this.player.z - hazard.z) < 4.2;
-      const aimed = point && Math.hypot(point.x - hazard.x, point.z - hazard.z) < 2.4;
-      return nearPlayer && aimed;
-    });
+    const pigment = this.paintHold.target || this.findAbsorbablePaint(point);
     if (pigment && this.player.color < 3) {
+      pigment.asset?.scale.setScalar(1);
       pigment.absorbable = false; pigment.life = 0;
       this.player.color += 1;
       this.spawnImpact(this.player.x, 1, this.player.z, pigment.color);
       this.command(`COLOR ABSORBED ${this.player.color}/3`);
       if (this.paintTutorial.stage === 'await-pigment') {
         this.paintTutorial.stage = 'absorbed';
-        this.setTutorialHint('LEFT CLICK · RETURN COLOR');
+        this.setTutorialHint('HOLD LEFT CLICK · RETURN COLOR');
         this.boss.exposed = Math.max(this.boss.exposed, 999);
       }
       return true;
     }
-    this.command('RIGHT CLICK A LANDED PIGMENT NEAR YOU');
+    this.command('HOLD RIGHT CLICK ON LANDED PIGMENT');
     return false;
   }
 
   usePaintBrush() {
-    if (this.player.color < 1) { this.command('RIGHT CLICK LANDED COLOR FIRST'); return; }
-    if (this.boss.exposed <= 0) { this.command('HOLD THE COLOR UNTIL HIS HANDS DROP'); return; }
+    if (this.player.color < 1) { this.command('HOLD RIGHT CLICK ON COLOR FIRST'); return; }
     this.player.color = 0;
-    this.spawnPlayerProjectile(0xff806f, 'paint', PAINT_DAMAGE);
+    this.hitBoss(PAINT_DAMAGE, 'rage');
+    this.spawnImpact(this.boss.x, 6.7, this.boss.z + 0.7, 0xff806f);
+    this.tone(580, 0.16, 'triangle', 0.04);
+    this.command('COLOR RETURNED');
     if (this.paintTutorial.stage === 'absorbed') {
       this.paintTutorial.stage = 'complete';
       this.hideTutorialHint();
@@ -1301,42 +1571,56 @@ class SpectacleBattle {
   }
 
   startRescueSequence() {
-    if (this.mode === 'rescue' || this.mode === 'cinematic') return;
-    this.mode = 'rescue';
+    if (this.mode === 'departure' || this.mode === 'cinematic') return;
+    this.mode = 'departure';
     this.clearHazards();
     this.boss.hp = Math.max(1, this.boss.hp);
     this.boss.reaction = 'pain'; this.boss.gestureTime = 2;
     this.boss.attackClock = 999;
     this.player.inv = 99;
-    this.maraRoot.visible = true;
-    this.maraRoot.position.set(4.2, 1.38, 0.8);
-    this.escapeTrain.visible = true;
-    this.escapeTrain.position.set(-24, 0, 1.2);
-    this.rescueTimer = 0;
-    this.rescuePrompt.classList.remove('hidden');
-    this.showTutorialOnce('rescue-mara', 'MARA // REACH HER AND PRESS SPACE');
+    this.departureTrain.visible = true;
+    this.departureTrain.position.set(-24, 0, 1.2);
+    this.departureTimer = 0;
+    this.departureBoardable = false;
+    this.rescuePrompt.classList.add('hidden');
+    this.showTutorialOnce('painted-train-arrival', 'THE SKETCH TRAIN IS ARRIVING // MOVE TO THE PLATFORM EDGE');
     this.trauma = 0.9;
     this.tone(48, 0.8, 'sawtooth', 0.07);
   }
 
-  boardEscapeTrain() {
-    if (this.mode !== 'rescue') return;
-    if (Math.hypot(this.player.x - this.maraRoot.position.x, this.player.z - this.maraRoot.position.z) > 3.4) {
-      this.command('GET TO MARA FIRST'); return;
+  jumpAboardDepartureTrain() {
+    if (this.mode !== 'departure') return;
+    if (!this.departureBoardable) { this.command('WAIT FOR THE TRAIN TO SLOW'); return; }
+    if (this.player.grounded) {
+      this.jump();
+      this.command('JUMP ABOARD');
     }
+  }
+
+  boardDepartureTrain() {
+    if (this.mode !== 'departure') return;
     this.mode = 'cinematic';
     this.rescuePrompt.classList.add('hidden');
     this.cinematicTime = 0;
-    this.playerRoot.position.set(this.maraRoot.position.x - 0.8, 0, this.maraRoot.position.z);
-    this.command('HOLD ON. WE LEAVE TOGETHER.');
+    this.playerRoot.position.set(this.departureTrain.position.x + 1.2, 2.6, this.departureTrain.position.z);
+    this.command('THE TRAIN TAKES YOU FORWARD.');
     this.playMusic(BOSS_SCORE.departure);
   }
 
   updateRescue(dt) {
-    if (this.mode === 'rescue') {
-      this.rescueTimer += dt;
-      this.escapeTrain.position.x = Math.min(-2.5, this.escapeTrain.position.x + 28 * dt);
-      this.escapeTrain.rotation.y = 0;
+    if (this.mode === 'departure') {
+      this.departureTimer += dt;
+      const targetX = -0.7;
+      const speed = this.departureTrain.position.x < -3.2 ? 13.5 : 2.05;
+      this.departureTrain.position.x = Math.min(targetX, this.departureTrain.position.x + speed * dt);
+      this.departureBoardable = this.departureTrain.position.x >= -3.2;
+      if (this.departureBoardable) {
+        this.rescuePrompt.classList.remove('hidden');
+        this.setTutorialHint('SLOW MOTION // SPACE · JUMP ABOARD');
+        const closeEnough = Math.abs(this.player.x - (this.departureTrain.position.x + 1.1)) < 4.8
+          && Math.abs(this.player.z - this.departureTrain.position.z) < 3.5;
+        if (closeEnough && this.player.y > 0.52) this.boardDepartureTrain();
+      }
       return;
     }
     if (this.mode !== 'cinematic') return;
@@ -1344,13 +1628,12 @@ class SpectacleBattle {
     const t = this.cinematicTime;
     if (t < 1.1) {
       const jump = Math.sin(Math.min(1, t / 1.1) * Math.PI) * 2.4;
-      const boardX = this.escapeTrain.position.x + 1.2;
+      const boardX = this.departureTrain.position.x + 1.2;
       this.playerRoot.position.lerp(new THREE.Vector3(boardX, jump, 1.2), 1 - Math.exp(-dt * 5));
-      this.maraRoot.position.lerp(new THREE.Vector3(boardX + 0.6, 1.38 + jump, 1.2), 1 - Math.exp(-dt * 5));
     } else {
-      this.playerRoot.visible = false; this.maraRoot.visible = false;
-      this.escapeTrain.position.x += 22 * dt;
-      this.cameraTarget.lerp(this.escapeTrain.position.clone().add(new THREE.Vector3(0, 1.8, 0)), 1 - Math.exp(-dt * 4));
+      this.playerRoot.visible = false;
+      this.departureTrain.position.x += 11 * dt;
+      this.cameraTarget.lerp(this.departureTrain.position.clone().add(new THREE.Vector3(0, 1.8, 0)), 1 - Math.exp(-dt * 4));
     }
     if (t > 5.2) this.finish(true);
   }
@@ -1552,12 +1835,14 @@ class SpectacleBattle {
     this.playConductorAction('Interact', true);
     const pressure = Math.min(4, Math.floor((this.boss.phaseRound - 1) / 2));
     const phasePressure = this.phase === 3 ? 2 : Math.floor((this.phase + 1) / 2);
-    const count = Math.min(this.phase === 3 ? 8 : 6, DIFFICULTY[difficulty].overlap + phasePressure + pressure);
+    const count = this.phase === 3 ? 1 : Math.min(6, DIFFICULTY[difficulty].overlap + phasePressure + pressure);
     const chapterOneWindow = this.phase === 0 && this.boss.phaseRound % CH1_COUNTER_EVERY === 0;
     this.pendingCommand = { phase: this.phase, count, chapterOneWindow, time: 0.62 };
-    this.boss.attackClock = chapterOneWindow
-      ? Math.max(3.6, (5.5 - pressure * 0.35) * DIFFICULTY[difficulty].bossWindow)
-      : Math.max(1.05, (DIFFICULTY[difficulty].beat - pressure * 0.16 - this.phase * 0.1) * THREE.MathUtils.randFloat(0.9, 1.06));
+    this.boss.attackClock = this.phase === 3
+      ? Math.max(2.15, (3.4 - Math.min(0.9, this.boss.phaseRound * 0.1)) * DIFFICULTY[difficulty].bossWindow)
+      : chapterOneWindow
+        ? Math.max(3.6, (5.5 - pressure * 0.35) * DIFFICULTY[difficulty].bossWindow)
+        : Math.max(1.05, (DIFFICULTY[difficulty].beat - pressure * 0.16 - this.phase * 0.1) * THREE.MathUtils.randFloat(0.9, 1.06));
     if (chapterOneWindow) {
       this.boss.exposed = Math.max(3.4, (4.8 - pressure * 0.3) * DIFFICULTY[difficulty].bossWindow);
       this.command('COUNTER WINDOW // SOME CASES BREAK THE FLOOR');
@@ -1712,7 +1997,7 @@ class SpectacleBattle {
   }
 
   spawnPigmentObject(index, options = {}) {
-    if (this.paintTutorial.stage === 'await-pigment') this.setTutorialHint('RIGHT CLICK · ABSORB COLOR');
+    if (this.paintTutorial.stage === 'await-pigment') this.setTutorialHint('HOLD RIGHT CLICK · ABSORB COLOR');
     const x = options.x ?? THREE.MathUtils.clamp(this.player.x + THREE.MathUtils.randFloatSpread(6), -10.5, 10.5);
     const z = options.z ?? THREE.MathUtils.clamp(this.player.z + THREE.MathUtils.randFloatSpread(4), -6.5, 6.5);
     const colors = [0x202126, 0x435d91, 0x4f8f7c];
@@ -1723,18 +2008,72 @@ class SpectacleBattle {
     this.hazards.push({ root, asset: object, assetId: ['bone-black-region', 'indigo-region', 'verdigris-region'][(this.boss.rounds + index) % 3], type: 'pigment', x, z, color, tutorial: Boolean(options.tutorial), persistentUntilLearned: Boolean(options.tutorial), timer: DIFFICULTY[difficulty].telegraph, struck: false, landed: false, absorbable: false, life: options.tutorial ? 999 : 3.2 });
   }
 
-  spawnPaintSweep(index) {
-    const vertical = (this.boss.rounds + index) % 2 === 0;
-    const offset = vertical ? THREE.MathUtils.randFloat(-10.5, 10.5) : THREE.MathUtils.randFloat(-5.8, 5.8);
+  spawnPaintSweep(index, options = {}) {
+    const vertical = options.vertical ?? (this.boss.rounds + index) % 2 === 0;
+    const offset = options.offset ?? (vertical ? THREE.MathUtils.randFloat(-10.5, 10.5) : THREE.MathUtils.randFloat(-5.8, 5.8));
     const colors = [0x202126, 0x435d91, 0x4f8f7c];
     const color = colors[(this.boss.rounds + index) % colors.length];
     const root = this.telegraphPlane(color, vertical ? 1.25 : 29, vertical ? 20 : 1.25, vertical ? offset : 0, vertical ? 0 : offset);
     root.children[0].material.opacity = 0.12;
     this.hazards.push({
       root, asset: root.children[0], assetId: 'painted-country-color-sweep', type: 'paint-sweep', vertical, offset,
-      timer: DIFFICULTY[difficulty].telegraph * 0.82 + index * 0.05, struck: false,
+      timer: options.timer ?? DIFFICULTY[difficulty].telegraph * 0.82 + index * 0.05, struck: false,
       life: difficulty === 'low' ? 0.5 : 0.68, color,
     });
+  }
+
+  spawnPaintCover(index, options = {}) {
+    const existing = this.hazards.filter((hazard) => hazard.type === 'paint-cover' && !hazard.destroyed);
+    if (existing.length >= 2) return existing[0];
+    const x = THREE.MathUtils.clamp(
+      options.x ?? this.player.x + (index % 2 === 0 ? 2.65 : -2.65),
+      ARENA.minX + 1.5,
+      ARENA.maxX - 1.5,
+    );
+    const z = options.z ?? this.player.z;
+    const yaw = options.yaw ?? (options.axis === 'x' ? Math.PI / 2 : 0);
+    const root = this.telegraphPlane(0x46618c, 2.7, 2.7, x, z);
+    // Each falling card may face any direction. It is a physical obstacle only:
+    // color sweeps deliberately pass through it from every direction.
+    const tile = makePaperCard(this.textureLoader, ch4IndigoUrl, 2.05, 2.05, { alpha: true, nearest: true });
+    tile.position.y = 9;
+    tile.rotation.y = yaw;
+    tile.rotation.z = index % 2 === 0 ? -0.12 : 0.12;
+    root.add(tile);
+    const edge = flatBox(2.08, 2.08, 0.1, new THREE.MeshStandardMaterial({
+      color: 0x46618c, emissive: 0x1b315c, emissiveIntensity: 0.35, roughness: 0.92,
+    }));
+    edge.position.y = 9;
+    edge.rotation.y = yaw;
+    root.add(edge);
+    const hazard = {
+      root, asset: tile, edge, assetId: 'ch4-indigo-paper-grid-cover', type: 'paint-cover', x, z, yaw,
+      timer: 0.16, struck: false, landed: false, life: 5.6,
+      color: 0x46618c,
+    };
+    this.hazards.push(hazard);
+    return hazard;
+  }
+
+  spawnPaintCoverWave() {
+    const round = this.boss.phaseRound;
+    const makeGrid = (delay = 0) => {
+      const seed = round * 2.399 + delay * 1.731;
+      // Grids create an independent obstacle in the route toward the Conductor,
+      // never on the laser's lane. The card can land at any compass angle.
+      const x = THREE.MathUtils.clamp(this.player.x + Math.sin(seed) * 6.2, ARENA.minX + 1.6, ARENA.maxX - 1.6);
+      const z = THREE.MathUtils.clamp(this.player.z - 3.1 - (Math.cos(seed * 1.37) + 1) * 0.55, ARENA.minZ + 1.6, ARENA.maxZ - 1.6);
+      const yaw = THREE.MathUtils.euclideanModulo(seed * 1.61, Math.PI * 2);
+      this.spawnPaintCover(round + delay, { x, z, yaw });
+    };
+    const sweepVertical = round % 2 === 0;
+    const sweepOffset = sweepVertical
+      ? THREE.MathUtils.clamp(this.player.x + Math.cos(round * 1.17) * 7.1, -10.5, 10.5)
+      : THREE.MathUtils.clamp(this.player.z + Math.sin(round * 1.17) * 4.4, -5.8, 5.8);
+    this.spawnPaintSweep(round, { vertical: sweepVertical, offset: sweepOffset, timer: 1.72 });
+    makeGrid();
+    if (round >= 3 && round % 2 === 0) makeGrid(0.5);
+    this.command(round >= 3 && round % 2 === 0 ? 'TWO GRIDS // DO NOT GET PINNED' : 'INDIGO GRID DROPS // KEEP MOVING');
   }
 
   telegraphPlane(color, w, d, x, z) {
@@ -1756,7 +2095,9 @@ class SpectacleBattle {
     }
     if (hazard.type === 'suitcase-rain' || hazard.type === 'cyber-block' || hazard.type === 'cyber-ladder' || hazard.type === 'echo-hole' || hazard.type === 'pigment') hit = Math.hypot(p.x - hazard.x, p.z - hazard.z) < 2.1;
     if (hazard.type === 'laser') hit = hazard.vertical ? Math.abs(p.x - hazard.offset) < 0.55 : Math.abs(p.z - hazard.offset) < 0.55;
-    if (hazard.type === 'paint-sweep') hit = hazard.vertical ? Math.abs(p.x - hazard.offset) < 0.78 : Math.abs(p.z - hazard.offset) < 0.78;
+    if (hazard.type === 'paint-sweep') {
+      hit = hazard.vertical ? Math.abs(p.x - hazard.offset) < 0.78 : Math.abs(p.z - hazard.offset) < 0.78;
+    }
     if (hazard.type === 'cyber-ring') hit = Math.abs(Math.hypot(p.x - hazard.x, p.z - hazard.z) - hazard.radius) < 0.52;
     if (hit && !hazard.tutorial && !hazard.hitChecked) {
       hazard.hitChecked = true;
@@ -1799,12 +2140,14 @@ class SpectacleBattle {
           hazard.asset.material.opacity = Math.min(0.92, 0.5 + Math.sin(this.elapsed * 32) * 0.14);
           this.resolveHazard(hazard);
           if (hazard.radius >= hazard.maxRadius) hazard.life = 0;
-        } else if (['suitcase-rain', 'cyber-block', 'cyber-ladder', 'echo-hole', 'pigment'].includes(hazard.type) && !hazard.landed) {
-          hazard.asset.position.y = Math.max(0.45, hazard.asset.position.y - 18 * DIFFICULTY[difficulty].speedScale * dt);
-          hazard.asset.rotation.z += dt * 5;
-          if (hazard.asset.position.y <= 0.46) {
+        } else if (['suitcase-rain', 'cyber-block', 'cyber-ladder', 'echo-hole', 'pigment', 'paint-cover'].includes(hazard.type) && !hazard.landed) {
+          const landingY = hazard.type === 'paint-cover' ? 1.12 : 0.45;
+          hazard.asset.position.y = Math.max(landingY, hazard.asset.position.y - 18 * DIFFICULTY[difficulty].speedScale * dt);
+          hazard.asset.rotation.z += hazard.type === 'paint-cover' ? dt * 0.4 : dt * 5;
+          if (hazard.type === 'paint-cover') hazard.edge.position.y = hazard.asset.position.y;
+          if (hazard.asset.position.y <= landingY + 0.01) {
             hazard.landed = true; hazard.absorbable = hazard.type === 'pigment';
-            this.resolveHazard(hazard);
+            if (hazard.type !== 'paint-cover') this.resolveHazard(hazard);
             if (hazard.type === 'echo-hole') this.addPersistentHole(hazard.x, hazard.z, 1.45 + Math.min(0.35, this.boss.phaseRound * 0.045));
             if (hazard.type === 'suitcase-rain' && hazard.breaksFloor) {
               this.addPersistentHole(hazard.x, hazard.z, 1.35 + Math.min(0.35, this.boss.phaseRound * 0.04));
@@ -1907,8 +2250,32 @@ class SpectacleBattle {
     this.tone(220, 0.28, 'triangle', 0.045);
   }
 
+  resolvePaintWallMovement(fromX, fromZ, nextX, nextZ) {
+    let x = nextX;
+    let z = nextZ;
+    this.hazards.filter((hazard) => hazard.type === 'paint-cover' && hazard.landed && !hazard.destroyed).forEach((wall) => {
+      const normalX = Math.sin(wall.yaw);
+      const normalZ = Math.cos(wall.yaw);
+      const tangentX = Math.cos(wall.yaw);
+      const tangentZ = -Math.sin(wall.yaw);
+      const fromAcross = (fromX - wall.x) * normalX + (fromZ - wall.z) * normalZ;
+      const nextAcross = (x - wall.x) * normalX + (z - wall.z) * normalZ;
+      const nextAlong = (x - wall.x) * tangentX + (z - wall.z) * tangentZ;
+      if (Math.abs(nextAlong) > 1.38) return;
+      const crossed = fromAcross * nextAcross <= 0;
+      const tooClose = Math.abs(nextAcross) < 0.4;
+      if (!crossed && !tooClose) return;
+      const side = Math.sign(fromAcross || nextAcross || 1);
+      const correction = side * 0.4 - nextAcross;
+      x += normalX * correction;
+      z += normalZ * correction;
+    });
+    return { x, z };
+  }
+
   updatePlayer(dt) {
     const p = this.player;
+    const wasGrounded = p.grounded;
     p.inv = Math.max(0, p.inv - dt);
     p.respawnInv = Math.max(0, p.respawnInv - dt);
     p.hitTimer = Math.max(0, p.hitTimer - dt);
@@ -1921,8 +2288,11 @@ class SpectacleBattle {
     const length = Math.hypot(dx, dz) || 1;
     const speed = p.dash > 0 ? 16 : 6.3;
     if (dx || dz) { p.facingX = dx / length; p.facingZ = dz / length; }
-    p.x = THREE.MathUtils.clamp(p.x + (dx / length) * speed * dt, ARENA.minX, ARENA.maxX);
-    p.z = THREE.MathUtils.clamp(p.z + (dz / length) * speed * dt, ARENA.minZ, ARENA.maxZ);
+    const intendedX = THREE.MathUtils.clamp(p.x + (dx / length) * speed * dt, ARENA.minX, ARENA.maxX);
+    const intendedZ = THREE.MathUtils.clamp(p.z + (dz / length) * speed * dt, ARENA.minZ, ARENA.maxZ);
+    const resolved = this.resolvePaintWallMovement(p.x, p.z, intendedX, intendedZ);
+    p.x = resolved.x;
+    p.z = resolved.z;
     const hole = this.activeHoles?.find((entry) => Math.hypot(p.x - entry.x, p.z - entry.z) < entry.radius * 0.82);
     if (hole && p.y <= 0.15 && p.respawnInv <= 0) {
       p.y = -0.8;
@@ -1935,6 +2305,8 @@ class SpectacleBattle {
       if (!p.grounded && p.vy < -4) { this.trauma = Math.max(this.trauma, 0.1); this.tone(110, 0.055, 'triangle', 0.02); }
       p.y = 0; p.vy = 0; p.grounded = true;
     } else p.grounded = false;
+    if (!wasGrounded && p.grounded) this.butchLandTimer = 0.2;
+    this.butchLandTimer = Math.max(0, this.butchLandTimer - dt);
     this.playerRoot.position.set(p.x, p.y, p.z);
     this.respawnAura.visible = p.respawnInv > 0;
     this.respawnShield.visible = p.respawnInv > 0;
@@ -1955,8 +2327,18 @@ class SpectacleBattle {
       this.ladderWeapon.rotation.set(0, this.playerRoot.rotation.y, -0.08 + Math.sin(this.elapsed * 9) * 0.025);
     }
     if (this.phase === 2) {
+      const moving = Boolean(dx || dz);
+      const butchAction = this.butchLandTimer > 0
+        ? 'Jump_Land'
+        : !p.grounded
+          ? (p.vy > 1.2 ? 'Jump_Start' : 'Jump_Loop')
+          : moving
+            ? 'Walk_Loop'
+            : 'Idle_Loop';
+      this.playButchAction(butchAction, butchAction === 'Jump_Land');
+      if (this.butchAction && butchAction === 'Walk_Loop') this.butchAction.setEffectiveTimeScale(1.3);
       this.butchRoot.rotation.z = p.hitTimer > 0 ? Math.sin(this.elapsed * 48) * 0.12 : 0;
-      this.butchRoot.position.y = p.grounded ? Math.abs(Math.sin(this.elapsed * 10)) * (dx || dz ? 0.08 : 0) : 0.08;
+      this.butchRoot.position.y = 0;
     }
     this.updateOnboardingHint();
     this.updateCyberOnboardingHint();
@@ -1966,7 +2348,22 @@ class SpectacleBattle {
     this.boss.inv = Math.max(0, this.boss.inv - dt);
     this.boss.exposed = Math.max(0, this.boss.exposed - dt);
     this.boss.stagger = Math.max(0, this.boss.stagger - dt);
-    if (!this.onboarding?.active && !this.cyberOnboarding?.active) this.boss.attackClock -= dt;
+    if (!this.onboarding?.active && !this.cyberOnboarding?.active && !this.echoRecital.active) this.boss.attackClock -= dt;
+    if (this.phase === 2 && !this.echoRecital.active && !this.dialogueOpen) {
+      this.echoCombatClock = Math.max(0, this.echoCombatClock - dt);
+      const countdown = Math.max(1, Math.ceil(this.echoCombatClock));
+      if (countdown !== this.echoRecital.countdownShown) {
+        this.echoRecital.countdownShown = countdown;
+        this.command(`NEXT VERSE IN ${countdown}`);
+      }
+      if (this.echoCombatClock <= 0) {
+        this.clearHazards();
+        this.echoRecital.active = true;
+        this.boss.exposed = 999;
+        this.boss.attackClock = 999;
+        this.openDialogue('combat-timer');
+      }
+    }
     this.boss.gestureTime = Math.max(0, this.boss.gestureTime - dt);
     this.boss.flash = Math.max(0, this.boss.flash - dt);
     if (this.phase === 1) {
@@ -2001,12 +2398,10 @@ class SpectacleBattle {
               this.spawnCyberLaser(i);
               if (i < Math.max(3, command.count - 1)) this.spawnCyberBlock(i);
             } else if (command.phase === 2) this.spawnEchoHole(i);
-            else {
-              this.spawnPigmentObject(i);
-              if (i < Math.max(2, command.count - 1)) this.spawnPaintSweep(i);
-            }
+            else this.spawnPigmentObject(i);
           }
           if (command.phase === 1) this.ensureCyberLadder('combat');
+          if (command.phase === 3) this.spawnPaintCoverWave();
         }
       }
     }
@@ -2039,7 +2434,7 @@ class SpectacleBattle {
     });
     this.updatePaintCreep();
     if (this.boss.gestureTime <= 0 && this.boss.reaction !== 'idle') { this.boss.reaction = 'idle'; this.playConductorAction('Idle_Loop'); }
-    if (!this.onboarding?.active && !this.cyberOnboarding?.active && this.boss.attackClock <= 0) this.spawnBeat();
+    if (!this.onboarding?.active && !this.cyberOnboarding?.active && !this.echoRecital.active && this.boss.attackClock <= 0) this.spawnBeat();
   }
 
   updateEffects(dt) {
@@ -2070,11 +2465,10 @@ class SpectacleBattle {
       this.updateTransition(dt);
       return;
     }
-    if (this.mode === 'rescue') {
+    if (this.mode === 'departure') {
       this.elapsed += dt;
-      this.updatePlayer(dt);
+      this.updatePlayer(this.departureBoardable ? dt * 0.36 : dt);
       this.updateRescue(dt);
-      this.updateBoss(dt);
       return;
     }
     if (this.mode === 'cinematic') { this.elapsed += dt; this.updateRescue(dt); return; }
@@ -2089,6 +2483,7 @@ class SpectacleBattle {
     if (this.updateTransition(dt)) { this.updateEffects(dt); return; }
     this.updatePlayer(dt);
     this.updateBoss(dt);
+    this.updatePaintHold(dt);
     this.updateHazards(dt);
     this.updateProjectiles(dt);
     this.updateEffects(dt);
@@ -2096,7 +2491,7 @@ class SpectacleBattle {
 
   updateCamera(dt) {
     if (this.mode === 'cinematic') {
-      const trainView = this.escapeTrain.position.clone().add(new THREE.Vector3(-9, 6.5, 13));
+      const trainView = this.departureTrain.position.clone().add(new THREE.Vector3(-9, 6.5, 13));
       this.camera.position.lerp(trainView, 1 - Math.exp(-dt * 3));
     } else if (!this.transition) {
       const ideal = new THREE.Vector3(this.player.x * 0.12, 11.8 + this.player.y * 0.15, 19.8 + this.player.z * 0.06);
@@ -2114,7 +2509,7 @@ class SpectacleBattle {
   }
 
   updateHud() {
-    if (!['play', 'rescue', 'cinematic'].includes(this.mode)) return;
+    if (!['play', 'departure', 'cinematic'].includes(this.mode)) return;
     const pct = Math.max(0, this.boss.hp / this.boss.maxHp) * 100;
     this.bossFill.style.width = `${pct}%`;
     const delayed = Number(this.bossDelay.dataset.value || 100);
@@ -2129,7 +2524,7 @@ class SpectacleBattle {
     this.abilityLabel.textContent = this.player.respawnInv > 0
       ? `INVULNERABLE ${this.player.respawnInv.toFixed(1)}`
       : this.phase === 3
-        ? `RMB ABSORB ${this.player.color}/3 · LMB RETURN · SHIFT DASH`
+        ? `HOLD RMB ABSORB ${this.player.color}/3 · HOLD LMB RETURN · INDIGO GRIDS BLOCK YOUR PATH`
         : this.player.dashCd > 0 ? `SPACE · DASH ${this.player.dashCd.toFixed(1)}` : 'SPACE · DASH READY';
   }
 
@@ -2156,9 +2551,9 @@ class SpectacleBattle {
     this.hud.classList.add('hidden');
     this.stopMusic();
     const revealResult = () => {
-      document.querySelector('#result-kicker').textContent = won ? 'MARA IS ABOARD' : 'THE LINE TAKES YOU';
+      document.querySelector('#result-kicker').textContent = won ? 'THE SKETCH TRAIN IS ABOARDING' : 'THE LINE TAKES YOU';
       document.querySelector('#result-title').textContent = won ? 'THE NIGHT TRAIN LEAVES' : 'PAPER TORN';
-      document.querySelector('#result-copy').textContent = won ? 'Not one answer. Not one version. Two passengers, leaving together.' : 'Read the Conductor’s hands, move before impact, and use each world against him.';
+      document.querySelector('#result-copy').textContent = won ? 'The paper doors close. The line continues.' : 'Read the Conductor’s hands, move before impact, and use each world against him.';
       document.querySelector('#result').classList.remove('hidden');
     };
     if (!won) {
@@ -2169,7 +2564,8 @@ class SpectacleBattle {
       id: 'ending',
       src: CINEMATICS.ending,
       label: 'NIGHTFALL ending cinematic',
-      onComplete: () => window.location.assign('/?credits=1'),
+      preserveBlackout: true,
+      onComplete: () => showEndCredits(),
     });
   }
 
@@ -2192,6 +2588,19 @@ class SpectacleBattle {
     // This is called from the start/phase input path. Claiming here closes the
     // focus race where the page reported a cue but its Audio element was paused.
     audioFocus.claim();
+    if (cue.id === BOSS_SCORE.falseBossVerdi.id) {
+      // Phase changes inside the false boss must not replace Dies Irae early.
+      if (this.falseBossScoreStarted && music.currentId()) return;
+      this.falseBossScoreStarted = true;
+      this.falseBossScoreLocked = true;
+      this.currentMusic = cue;
+      music.play(`final-boss-${cue.id}`, {
+        ...cue,
+        onThen: () => { this.falseBossScoreLocked = false; },
+      });
+      return;
+    }
+    if (this.falseBossScoreLocked) this.falseBossScoreLocked = false;
     this.currentMusic = cue;
     music.play(`final-boss-${cue.id}`, { ...cue, loop: cue.loop !== false });
   }
@@ -2237,6 +2646,7 @@ createSaveStore().markCheckpoint('chapter-6-start');
 // Chapter 5 already supplies the menu-to-boss transition through its red-lit
 // collapse and black threshold. Arriving from that route therefore reveals
 // the arena directly instead of inserting a second title/menu interruption.
+const conductorTestMovement = requestedConductorTestMovement();
 if (new URLSearchParams(window.location.search).get('from') === 'chapter5') {
   const curtain = document.createElement('div');
   curtain.className = 'nf-entry-blackout';
@@ -2248,6 +2658,9 @@ if (new URLSearchParams(window.location.search).get('from') === 'chapter5') {
     requestAnimationFrame(() => requestAnimationFrame(() => curtain.classList.add('is-revealed')));
     window.setTimeout(() => curtain.remove(), 1400);
   });
+} else if (conductorTestMovement !== null) {
+  document.querySelector('#menu').classList.add('hidden');
+  game.assetsPromise.finally(() => game.begin({ movement: conductorTestMovement }));
 }
 
 window.render_game_to_text = () => JSON.stringify({
@@ -2255,7 +2668,7 @@ window.render_game_to_text = () => JSON.stringify({
   mode: game.mode, difficulty, phase: game.phase, phaseTitle: PHASES[game.phase].title, activeWorld: PHASES[game.phase].world,
   music: music.qa(),
   assetsReady: game.assetsReady,
-  player: { x: +game.player.x.toFixed(2), y: +game.player.y.toFixed(2), z: +game.player.z.toFixed(2), form: game.puppet.form, action: game.puppet.action, hpLayers: game.player.hp, maxHpLayers: game.player.maxHp, grounded: game.player.grounded, ammo: game.player.ammo, color: game.player.color, ladder: game.player.ladder, invulnerableSeconds: +game.player.inv.toFixed(2), respawnInvulnerableSeconds: +game.player.respawnInv.toFixed(2), respawns: game.player.respawns, phaseHeals: game.player.phaseHeals, turnYaw: +game.playerRoot.rotation.y.toFixed(2), dashCooldownMs: Math.round(game.player.dashCd * 1000), attackCooldownMs: Math.round(game.player.attackCd * 1000) },
+  player: { x: +game.player.x.toFixed(2), y: +game.player.y.toFixed(2), z: +game.player.z.toFixed(2), form: game.puppet.form, action: game.phase === 2 ? game.butchActionState : game.puppet.action, butchAnimation: game.phase === 2 ? game.butchActionState : null, hpLayers: game.player.hp, maxHpLayers: game.player.maxHp, grounded: game.player.grounded, ammo: game.player.ammo, color: game.player.color, ladder: game.player.ladder, invulnerableSeconds: +game.player.inv.toFixed(2), respawnInvulnerableSeconds: +game.player.respawnInv.toFixed(2), respawns: game.player.respawns, phaseHeals: game.player.phaseHeals, turnYaw: +game.playerRoot.rotation.y.toFixed(2), dashCooldownMs: Math.round(game.player.dashCd * 1000), attackCooldownMs: Math.round(game.player.attackCd * 1000) },
   arena: { bounds: ARENA, rearEdgeZ: -8, staticCombatProps: game.phase === 2 ? Math.max(0, game.worldRoots[2].children.length - 1) : 0, safeAreaRatio: +Math.max(0.28, 1 - (game.activeHoles || []).reduce((loss, hole) => loss + hole.radius * 0.055, 0)).toFixed(2), holes: (game.activeHoles || []).map((h) => ({ x: +h.x.toFixed(2), z: +h.z.toFixed(2), radius: h.radius, visual: h.visual.userData.kind || 'unknown' })) },
   boss: { id: 'the-conductor', form: game.conductorRoot.userData.form, x: +game.boss.x.toFixed(2), z: +game.boss.z.toFixed(2), outsideArena: game.boss.z < ARENA.minZ - 4, hp: game.boss.hp, maxHp: game.boss.maxHp, phaseStartHp: game.boss.phaseStartHp, paintCoverage: +game.boss.paintCoverage.toFixed(2), paintStripsVisible: game.paintCreep.children.filter((strip) => strip.visible).length, exposed: game.boss.exposed > 0, exposedSeconds: +game.boss.exposed.toFixed(2), gesture: game.boss.gesture, reaction: game.boss.reaction, lastDamageCause: game.boss.lastDamageCause || null, attackRound: game.boss.rounds, phaseRound: game.boss.phaseRound },
   onboarding: { active: Boolean(game.onboarding?.active), stage: game.onboarding?.stage || null, combatPaused: Boolean(game.onboarding?.active) },
@@ -2263,10 +2676,10 @@ window.render_game_to_text = () => JSON.stringify({
   transition: game.transition ? (game.transition.kind === 'system-gate'
     ? { kind: 'system-gate', nextWorld: PHASES[game.transition.nextPhase].world, stage: game.transition.stage, selectedTiles: [...game.transition.selected], failures: game.transition.failures, captchaSet: game.transition.captchaSet }
     : { kind: 'world-fall', nextWorld: PHASES[game.transition.nextPhase].world, progress: +(game.transition.time / game.transition.duration).toFixed(2), giantHoleRadius: +(game.portal.scale.x).toFixed(2) }) : null,
-  ui: { overheadPromptVisible: game.commandLabel.classList.contains('show'), tutorialVisible: game.tutorialHint.classList.contains('show'), tutorialText: game.tutorialHint.textContent, tutorialsShown: [...(game.tutorialShown || [])], dialogueOpen: game.dialogueOpen, combatPausedForDialogue: game.dialoguePause, echoOutcome: game.echoOutcome, voice: game.voiceState, paintTutorialStage: game.paintTutorial?.stage || null },
-  hazards: game.hazards.map((h) => { const world = h.type === 'paper-train' ? h.asset.getWorldPosition(new THREE.Vector3()) : null; return { type: h.type, assetId: h.assetId, patternId: h.patternId || null, breaksFloor: Boolean(h.breaksFloor), usable: Boolean(h.usable), picked: Boolean(h.picked), motion: h.type === 'paper-train' ? (Math.abs(h.direction.y) < 0.08 ? 'horizontal' : Math.abs(h.direction.x) < 0.08 ? 'vertical' : 'diagonal') : h.type === 'cyber-ring' ? 'expanding-ring' : h.struck ? (h.type === 'laser' ? 'horizontal' : 'vertical') : 'telegraph', radius: h.type === 'cyber-ring' ? +h.radius.toFixed(2) : null, speed: h.type === 'cyber-ring' ? +h.speed.toFixed(2) : null, bandWidth: h.type === 'cyber-ring' ? +(h.bandHalfWidth * 2).toFixed(2) : null, warningAngle: h.type === 'paper-train' ? +Math.atan2(h.direction.y, h.direction.x).toFixed(3) : null, travelAngle: h.type === 'paper-train' ? +Math.atan2(h.direction.y, h.direction.x).toFixed(3) : null, cardLocalYaw: h.type === 'paper-train' ? +h.asset.rotation.y.toFixed(3) : null, state: h.landed ? 'landed' : h.struck ? 'moving' : 'telegraph', collisionActive: Boolean(h.struck && !h.hitChecked), consumed: Boolean(h.cut || h.opened || h.picked || (h.type === 'pigment' && h.landed && !h.absorbable)), x: +(world?.x ?? h.x ?? h.root.position.x).toFixed(2), y: +(world?.y ?? h.asset?.position.y ?? 0).toFixed(2), z: +(world?.z ?? h.z ?? h.root.position.z).toFixed(2), seconds: +Math.max(0, h.timer).toFixed(2) }; }),
-  rescue: { stage: game.mode === 'rescue' ? 'reach-mara' : game.mode === 'cinematic' ? 'train-departure' : null, maraVisible: game.maraRoot.visible, maraPosition: { x: +game.maraRoot.position.x.toFixed(2), z: +game.maraRoot.position.z.toFixed(2) }, trainVisible: game.escapeTrain.visible, trainX: +game.escapeTrain.position.x.toFixed(2), promptVisible: !game.rescuePrompt.classList.contains('hidden') },
-  controls: { move: 'WASD/arrows', contextAction: 'Space: interact/jump in movements I-III; movement IV uses right mouse to absorb aimed pigment and left mouse to return it', dash: 'Shift/X', fullscreen: 'F' },
+  ui: { overheadPromptVisible: game.commandLabel.classList.contains('show'), commandText: game.commandLabel.textContent, tutorialVisible: game.tutorialHint.classList.contains('show'), tutorialText: game.tutorialHint.textContent, tutorialsShown: [...(game.tutorialShown || [])], dialogueOpen: game.dialogueOpen, combatPausedForDialogue: game.dialoguePause, echoOutcome: game.echoOutcome, echoQuiz: { attempts: game.echoQuiz.attempts, correct: game.echoQuiz.correct, questionId: game.echoQuiz.current?.id || null, correctChoice: game.echoQuiz.current?.correct ?? null }, echoRecital: { active: game.echoRecital.active, combatSeconds: +game.echoCombatClock.toFixed(2) }, voice: game.voiceState, paintTutorialStage: game.paintTutorial?.stage || null, paintHold: { active: game.paintHold.active, button: game.paintHold.button, progress: +Math.min(1, game.paintHold.elapsed / PAINT_HOLD_SECONDS).toFixed(2), completed: game.paintHold.completed, transferVisible: game.paintTransfer.visible, strandsVisible: game.paintTransfer.children.filter((item) => !item.userData.paintDroplet && item.visible).length, dropletsVisible: game.paintTransfer.children.filter((item) => item.userData.paintDroplet && item.visible).length } },
+  hazards: game.hazards.map((h) => { const world = h.type === 'paper-train' ? h.asset.getWorldPosition(new THREE.Vector3()) : null; return { type: h.type, assetId: h.assetId, patternId: h.patternId || null, breaksFloor: Boolean(h.breaksFloor), usable: Boolean(h.usable), picked: Boolean(h.picked), motion: h.type === 'paper-train' ? (Math.abs(h.direction.y) < 0.08 ? 'horizontal' : Math.abs(h.direction.x) < 0.08 ? 'vertical' : 'diagonal') : h.type === 'cyber-ring' ? 'expanding-ring' : h.struck ? (h.type === 'laser' ? 'horizontal' : 'vertical') : 'telegraph', radius: h.type === 'cyber-ring' ? +h.radius.toFixed(2) : null, speed: h.type === 'cyber-ring' ? +h.speed.toFixed(2) : null, bandWidth: h.type === 'cyber-ring' ? +(h.bandHalfWidth * 2).toFixed(2) : null, warningAngle: h.type === 'paper-train' ? +Math.atan2(h.direction.y, h.direction.x).toFixed(3) : null, travelAngle: h.type === 'paper-train' ? +Math.atan2(h.direction.y, h.direction.x).toFixed(3) : null, cardLocalYaw: h.type === 'paper-train' ? +h.asset.rotation.y.toFixed(3) : null, yaw: h.type === 'paint-cover' ? +h.yaw.toFixed(3) : null, state: h.landed ? 'landed' : h.struck ? 'moving' : 'telegraph', collisionActive: Boolean(h.struck && !h.hitChecked), consumed: Boolean(h.cut || h.opened || h.picked || h.destroyed || (h.type === 'pigment' && h.landed && !h.absorbable)), obstacle: h.type === 'paint-cover', x: +(world?.x ?? h.x ?? h.root.position.x).toFixed(2), y: +(world?.y ?? h.asset?.position.y ?? 0).toFixed(2), z: +(world?.z ?? h.z ?? h.root.position.z).toFixed(2), seconds: +Math.max(0, h.timer).toFixed(2) }; }),
+  rescue: { stage: game.mode === 'departure' ? 'painted-train-arrival' : game.mode === 'cinematic' ? 'train-departure' : null, maraVisible: false, trainVisible: game.departureTrain.visible, trainX: +game.departureTrain.position.x.toFixed(2), slowMotion: Boolean(game.departureBoardable), promptVisible: !game.rescuePrompt.classList.contains('hidden') },
+  controls: { move: 'WASD/arrows', contextAction: 'Space: interact/jump in movements I-III; movement IV uses hold right mouse to absorb aimed pigment and hold left mouse to return it', dash: 'Shift/X', fullscreen: 'F' },
   assetErrors: game.assetErrors,
 });
 
@@ -2323,11 +2736,12 @@ window.damageFinalBossPlayer = (amount = 1) => {
 };
 window.damageFinalBoss = (amount = 25) => { if (game.mode === 'play') { game.hitBoss(amount); game.render(); } };
 window.setFinalBossPaintCharge = (amount = 3) => { if (game.mode === 'play' && game.phase === 3) { game.player.color = Math.max(0, Math.min(3, Number(amount) || 0)); game.render(); } };
-window.rightClickFinalBossPigment = (x, z) => { if (game.mode === 'play' && game.phase === 3) { game.absorbPaint(new THREE.Vector3(Number(x), 0, Number(z))); game.render(); } };
-window.leftClickFinalBossPaint = () => { if (game.mode === 'play' && game.phase === 3) { game.usePaintBrush(); game.render(); } };
+window.rightClickFinalBossPigment = (x, z, holdMs = 800, release = true) => { if (game.mode === 'play' && game.phase === 3) { game.paintHold = { active: true, button: 2, elapsed: 0, point: new THREE.Vector3(Number(x), 0, Number(z)), target: null, completed: false }; game.updatePaintTransfer(0); game.advancePaintHold(Number(holdMs)); if (release) game.releasePaintPointer({ button: 2 }); game.render(); } };
+window.leftClickFinalBossPaint = (holdMs = 800, release = true) => { if (game.mode === 'play' && game.phase === 3) { game.paintHold = { active: true, button: 0, elapsed: 0, point: null, target: null, completed: false }; game.updatePaintTransfer(0); game.advancePaintHold(Number(holdMs)); if (release) game.releasePaintPointer({ button: 0 }); game.render(); } };
+window.releaseFinalBossPaintPointer = () => { if (game.paintHold.active) game.releasePaintPointer({ button: game.paintHold.button }); game.render(); };
 window.addFinalBossTestHole = (x, z, radius = 1.5) => { if (game.mode === 'play') { game.addPersistentHole(Number(x), Number(z), Number(radius)); game.render(); } };
 window.forceFinalBossPattern = (pattern) => {
-  const map = { train: () => game.spawnPaperTrainPattern(0, true), 'train-diagonal': () => game.spawnPaperTrainPattern(1, true), 'train-vertical': () => game.spawnPaperTrainPattern(2, true), 'train-double': () => game.spawnPaperTrainPattern(3, true), 'train-cross': () => game.spawnPaperTrainPattern(4, true), 'train-triple': () => game.spawnPaperTrainPattern(5, true), suitcase: () => game.spawnSuitcaseRain(0), laser: () => game.spawnCyberLaser(0), 'ring-laser': () => game.spawnCyberRingLaser(), block: () => game.spawnCyberBlock(0), hole: () => game.spawnEchoHole(0), pigment: () => game.spawnPigmentObject(0) };
+  const map = { train: () => game.spawnPaperTrainPattern(0, true), 'train-diagonal': () => game.spawnPaperTrainPattern(1, true), 'train-vertical': () => game.spawnPaperTrainPattern(2, true), 'train-double': () => game.spawnPaperTrainPattern(3, true), 'train-cross': () => game.spawnPaperTrainPattern(4, true), 'train-triple': () => game.spawnPaperTrainPattern(5, true), suitcase: () => game.spawnSuitcaseRain(0), laser: () => game.spawnCyberLaser(0), 'ring-laser': () => game.spawnCyberRingLaser(), block: () => game.spawnCyberBlock(0), hole: () => game.spawnEchoHole(0), pigment: () => game.spawnPigmentObject(0), 'pigment-near': () => game.spawnPigmentObject(0, { x: game.player.x + 1, z: game.player.z - 1 }), cover: () => game.spawnPaintCover(0, { x: game.player.x + 2.65, z: game.player.z, axis: 'x' }), 'cover-sweep': () => { const x = game.player.x + 2.65; game.spawnPaintCover(0, { x, z: game.player.z, axis: 'x' }); game.spawnPaintSweep(0, { vertical: false, offset: game.player.z }); game.player.x = x + 1.1; game.playerRoot.position.x = game.player.x; }, 'wall-wave': () => game.spawnPaintCoverWave() };
   game.clearHazards();
   game.boss.attackClock = 999;
   map[pattern]?.(); game.render();

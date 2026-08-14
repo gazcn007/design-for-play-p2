@@ -2,7 +2,7 @@
 // Independent of the Phaser prototypes and of the main Nightfall game.
 
 import { Museum3DApp } from './Museum3DApp.js';
-import { createInitialState } from './state/chapter05Model.js';
+import { createInitialState, createMuseumEntryState } from './state/chapter05Model.js';
 import { installQaHooks } from './qa/museum3dQaState.js';
 import { DEBUG_BEATS } from './config.js';
 import { installDevMenuReturnControl } from '../../devMenuReturn.js';
@@ -10,6 +10,7 @@ import { installPauseMenu } from '../../shell/pauseMenu.js';
 import { createCollapseState } from './state/collapseGauntlet.js';
 import { COLLAPSE_SCRIPT, COLLAPSE_WARNING_SECONDS } from './systems/CollapseGauntletDirector.js';
 import { preloadChapter } from '../../shell/chapterPreloader.js';
+import { resolveFinalBossDestination } from '../../shell/finalBossRoute.js';
 
 installDevMenuReturnControl();
 installPauseMenu({ checkpointId: 'chapter-5-start' });
@@ -63,7 +64,7 @@ function stateForBeat(beat) {
 
 const params = new URLSearchParams(window.location.search);
 const beat = params.get('beat');
-const initialState = beat && DEBUG_BEATS.includes(beat) ? stateForBeat(beat) : createInitialState();
+const initialState = beat && DEBUG_BEATS.includes(beat) ? stateForBeat(beat) : createMuseumEntryState();
 const captureMode = params.get('capture') === '1' || params.get('simlock') === '1';
 const standaloneDirectionId = beat === 'echo' ? 'echo-city' : null;
 
@@ -72,6 +73,7 @@ const app = new Museum3DApp({
   lockOverlay: document.getElementById('lock-overlay'),
   promptEl: document.getElementById('prompt'),
   subtitleEl: document.getElementById('subtitle'),
+  coordinateEl: document.getElementById('runtime-coordinates'),
   minimapRoot: document.getElementById('echo-minimap'),
   minimapCanvas: document.getElementById('echo-minimap-canvas'),
   fadeEl: document.getElementById('fade'),
@@ -80,6 +82,10 @@ const app = new Museum3DApp({
   directionClose: document.getElementById('direction-close'),
   directionTitle: document.getElementById('direction-title'),
   directionStatus: document.getElementById('direction-status'),
+  directionTranslation: document.getElementById('direction-translation'),
+  directionMode: document.getElementById('direction-mode'),
+  directionCopy: document.getElementById('direction-copy'),
+  directionBegin: document.getElementById('direction-begin'),
   initialState,
   captureMode,
   standaloneDirectionId,
@@ -88,7 +94,14 @@ const app = new Museum3DApp({
 installQaHooks(app);
 if (params.get('simlock') === '1') app.setSimulatedLock(true);
 app.start().then(() => {
-  if (beat === 'collapse') preloadChapter('chapter6');
+  if (captureMode && params.get('qa-view')) window.__qa.setView(params.get('qa-view'));
+  if (beat === 'collapse') preloadChapter(resolveFinalBossDestination().preloadChapterId);
+  if (captureMode && !beat && params.get('qa-archive-wing') === '1') {
+    // Deterministic browser proof for the real integrated lobby bootstrap:
+    // starting inside the archive threshold must enter the corridor without
+    // the legacy standalone ticket hunt.
+    app.controller.setPose(7.1, 0, -Math.PI / 2);
+  }
   const qaDirection = params.get('qa-direction');
   const qaArtifact = params.get('qa-artifact');
   if (captureMode && params.get('qa-safe') === '1') {

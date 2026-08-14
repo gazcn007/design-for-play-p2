@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { magicStoneSnapshot } from './shell/magicStones.js';
 import './shell/titleMenu.css';
 import { GAME_W, GAME_H, GRAVITY } from './constants.js';
 import { DEV_MODE, hasDevRoute } from './devMode.js';
@@ -9,7 +10,7 @@ import GameScene from './scenes/GameScene.js';
 import HudScene from './scenes/HudScene.js';
 import CyberpunkParkourScene from './cars/cyberpunkParkour/CyberpunkParkourScene.js';
 import { createTitleMenu } from './shell/titleMenu.js';
-import { applySettings, readSettings } from './shell/saveSystem.js';
+import { applySettings, readSettings, volumeForChannel } from './shell/saveSystem.js';
 import { installPauseMenu } from './shell/pauseMenu.js';
 
 // Phaser starts the first scene in the array. The chapter select is added only
@@ -47,13 +48,13 @@ const config = {
   scene: scenes,
 };
 
-let game = null;
+  let game = null;
 
 const startGame = () => {
   if (game) return game;
   game = new Phaser.Game(config);
   const syncSettings = (settings = readSettings()) => {
-    game.sound.volume = Math.max(0, Math.min(1, settings.masterVolume / 100));
+    game.sound.volume = volumeForChannel(settings, 'sfx');
     game.registry.set('nightfallSettings', settings);
   };
   syncSettings(applySettings(readSettings()));
@@ -99,6 +100,14 @@ const renderGameToText = () => {
       focused: document.activeElement?.textContent?.trim() ?? null,
       titleVisible: true,
       dialog: dialog?.open ? dialog.querySelector('h2')?.textContent ?? 'dialog' : null,
+      chapterSelect: title.dataset.chapterSelect === 'open' && Boolean(dialog?.open),
+      chapterEntries: title.dataset.chapterSelect === 'open' && dialog?.open
+        ? [...dialog.querySelectorAll('[data-chapter]')].map((entry) => ({
+            number: Number(entry.dataset.chapter),
+            title: entry.querySelector('strong')?.textContent ?? '',
+            detail: entry.querySelector('small')?.textContent ?? '',
+          }))
+        : [],
       credits: creditsPanel
         ? {
             visible: Boolean(dialog?.open),
@@ -129,6 +138,7 @@ const renderGameToText = () => {
   const player = scene?.player;
   const devMenu = game.scene.getScene('DevMenu');
   return JSON.stringify({
+    magicStones: magicStoneSnapshot(),
     coordinateSystem: 'origin top-left; +x right; +y down; world units are pixels',
     devMode: DEV_MODE,
     scene: scene?.sys?.isActive()

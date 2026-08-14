@@ -1,20 +1,26 @@
 import { directionDefinition, isDirectionPlayable } from '../directions/directionRegistry.js';
 
 export class EmbeddedDirectionExhibit {
-  constructor({ root, iframe, closeButton, titleEl, statusEl, progress, onOpen, onClose }) {
+  constructor({ root, iframe, closeButton, titleEl, statusEl, translationRoot = null, modeEl = null, copyEl = null, beginButton = null, progress, onOpen, onClose }) {
     this.root = root;
     this.iframe = iframe;
     this.closeButton = closeButton;
     this.titleEl = titleEl;
     this.statusEl = statusEl;
+    this.translationRoot = translationRoot;
+    this.modeEl = modeEl;
+    this.copyEl = copyEl;
+    this.beginButton = beginButton;
     this.progress = progress;
     this.onOpen = onOpen;
     this.onClose = onClose;
     this.opened = false;
     this.directionId = null;
     this._loaded = new Set();
+    this._translationTimer = null;
 
     this.closeButton.addEventListener('click', () => this.close());
+    this.beginButton?.addEventListener('click', () => this._finishTranslation());
     this._onMessage = (event) => {
       if (!this.opened || event.origin !== window.location.origin || event.source !== this.iframe.contentWindow) return;
       const definition = directionDefinition(this.directionId);
@@ -39,7 +45,9 @@ export class EmbeddedDirectionExhibit {
 
     this.opened = true;
     this.directionId = directionId;
-    this.titleEl.textContent = definition.title;
+    this.titleEl.textContent = definition.archiveTitle ?? `ARCHIVAL RECONSTRUCTION · DOOR ${definition.title}`;
+    if (this.modeEl) this.modeEl.textContent = definition.modeLabel ?? 'ARCHIVAL RECONSTRUCTION';
+    if (this.copyEl) this.copyEl.textContent = definition.ingress ?? '';
     this.statusEl.textContent = this.progress.getSnapshot().completed[directionId] ? '·' : 'ESC';
     this.root.classList.toggle('complete', this.progress.getSnapshot().completed[directionId]);
     if (!this._loaded.has(directionId) || this.iframe.dataset.direction !== directionId) {
@@ -50,8 +58,27 @@ export class EmbeddedDirectionExhibit {
     this.root.classList.add('open');
     this.root.setAttribute('aria-hidden', 'false');
     this.onOpen?.({ directionId });
-    this.iframe.focus();
+    if (this.translationRoot) {
+      this.root.classList.add('translating');
+      this.translationRoot.setAttribute('aria-hidden', 'false');
+      this.beginButton?.focus?.();
+      clearTimeout(this._translationTimer);
+      // The player acknowledges the law once before control transfers to the
+      // reconstructed genre. This prevents the iframe from stealing the click
+      // while the explanatory card is still being read.
+    } else {
+      this.iframe.focus();
+    }
     return true;
+  }
+
+  _finishTranslation() {
+    if (!this.opened) return;
+    clearTimeout(this._translationTimer);
+    this._translationTimer = null;
+    this.root.classList.remove('translating');
+    this.translationRoot?.setAttribute('aria-hidden', 'true');
+    this.iframe.focus();
   }
 
   close() {
@@ -59,7 +86,11 @@ export class EmbeddedDirectionExhibit {
     const directionId = this.directionId;
     this.opened = false;
     this.directionId = null;
+    clearTimeout(this._translationTimer);
+    this._translationTimer = null;
     this.root.classList.remove('open');
+    this.root.classList.remove('translating');
+    this.translationRoot?.setAttribute('aria-hidden', 'true');
     this.root.setAttribute('aria-hidden', 'true');
     // Hand keyboard focus back to the museum: while the framed game is open
     // it owns key events, and leaving focus inside the now-hidden iframe

@@ -9,6 +9,8 @@
 //   reclassified  — reclassified lobby (desk in glass, doorway behind)
 import { ECHO_CITY_ENTRY } from '../scenes/EchoCityWalkingSim.js';
 import { COLLAPSE_ENTRY } from '../state/collapseGauntlet.js';
+import { CHAPTER_EXHIBIT_ORDER, chapterExhibit } from '../data/chapterExhibitCatalog.js';
+import { music } from '../../../shared/musicDirector.js';
 
 export function installQaHooks(app) {
   const qa = {
@@ -65,6 +67,12 @@ export function installQaHooks(app) {
       if (name === 'lobby') {
         qa.jumpTo('lobby');
         qa.lookAt(-6.2, 0.4, 2, 2.5, 0.02);
+      } else if (name === 'central-display') {
+        qa.jumpTo('lobby');
+        qa.lookAt(-3.45, 0.1, 1.5, 0, -0.02);
+      } else if (name === 'black-knife-stone') {
+        qa.jumpTo('lobby');
+        qa.lookAt(-3.65, 1.25, -3.65, 3.2, -0.03);
       } else if (name === 'corridor') {
         qa.jumpTo('corridor', { x: 9.5, z: 0, yaw: -Math.PI / 2 });
       } else if (name === 'echo') {
@@ -117,6 +125,17 @@ export function installQaHooks(app) {
       collapse: s.collapse,
       collapseGameplay: app.scenes.get('corridor')?.gauntlet?.getSnapshot?.() ?? null,
       directions: app.directionProgress.getSnapshot(),
+      museumExhibits: CHAPTER_EXHIBIT_ORDER.map((id) => {
+        const exhibit = chapterExhibit(id);
+        return {
+          id,
+          chapter: exhibit.chapter,
+          title: exhibit.title,
+          mode: exhibit.mode,
+          present: id === 'last-train' || app.scenes.get('corridor')?.artifactNiches?.has(id) === true,
+        };
+      }),
+      centralDisplay: app.scenes.get('lobby')?.getCentralDisplayState?.() ?? null,
       focusedInteractable: focused ? { id: focused.id, prompt: typeof focused.prompt === 'function' ? focused.prompt() : focused.prompt } : null,
       dialoguePlaying: app.dialogue.isPlaying,
       dialogueLine: app.dialogue.currentLine,
@@ -125,6 +144,7 @@ export function installQaHooks(app) {
         open: app.labyrinth.opened,
         completed: app.labyrinth.completed,
       },
+      music: music.qa(),
       availableActions: app.model.availableActions(),
     };
     return JSON.stringify(payload);

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 import { BORROWED_GRID_CHAPTER05_CONTRACT } from '../../src/chapters/borrowedGrid/chapter05BorrowedGridContract.js';
 import { CHAPTER05_DIRECTIONS, PLAYABLE_DIRECTION_ORDER, directionDefinition } from '../../src/chapters/museum3d/directions/directionRegistry.js';
-import { DIRECTION_DOORWAYS, directionAtDoorway } from '../../src/chapters/museum3d/directions/directionDoorways.js';
+import { DIRECTION_DOORWAYS, directionAtDoorway, isAtLabyrinthDoor } from '../../src/chapters/museum3d/directions/directionDoorways.js';
 import { ArchiveCorridor } from '../../src/chapters/museum3d/scenes/ArchiveCorridor.js';
 import { Chapter05DirectionProgress } from '../../src/chapters/museum3d/state/chapter05DirectionProgress.js';
 import { EmbeddedDirectionExhibit } from '../../src/chapters/museum3d/systems/EmbeddedDirectionExhibit.js';
@@ -126,6 +126,8 @@ test('all four numbers retain a doorway band while Door 4 is the only museum int
     }), zone.id);
   }
   assert.equal(directionAtDoorway({ x: 18, z: 0 }), null);
+  assert.equal(directionAtDoorway({ x: 38, z: 0 }), CHAPTER05_DIRECTIONS.LABYRINTH);
+  assert.equal(directionAtDoorway({ x: 38, z: -1.9 }), CHAPTER05_DIRECTIONS.LABYRINTH);
   assert.doesNotMatch(corridor, /registerDirection\(CHAPTER05_DIRECTIONS\.ECHO_CITY/);
   assert.doesNotMatch(corridor, /registerDirection\(CHAPTER05_DIRECTIONS\.PAINTED_COUNTRY/);
   assert.match(corridor, /id: 'echo-city'/);
@@ -155,6 +157,22 @@ test('sealed bays cannot open and the Labyrinth remains the only embedded route'
 
   assert.deepEqual(calls, [['open', CHAPTER05_DIRECTIONS.LABYRINTH]]);
   assert.deepEqual(PLAYABLE_DIRECTION_ORDER, [CHAPTER05_DIRECTIONS.LABYRINTH]);
+});
+
+test('Door 4 owns a direct proximity input path even when pointer lock drops', () => {
+  assert.match(app, /this\._atLabyrinthDoor = \(\) =>/);
+  assert.match(app, /isAtLabyrinthDoor\(this\.controller\.position, state\.phase\)/);
+  assert.match(app, /if \(this\._enterLabyrinthFromDoor\(\)\) return;/);
+  assert.doesNotMatch(app, /allowCorridorFallback/);
+  assert.doesNotMatch(corridor, /player\.x >= 35\.8 && player\.x <= 39\.4/);
+  assert.match(app, /door-4-direct-interact/);
+  assert.match(app, /ENTER DOOR 4 · THE LABYRINTH/);
+  assert.equal(isAtLabyrinthDoor({ x: 38, z: -1.3 }, 'corridor'), true);
+  // A normal player presses E from the readable full-door view, not only from
+  // the QA camera's closer z=0 pose.
+  assert.equal(isAtLabyrinthDoor({ x: 38, z: 0.8 }, 'corridor'), true);
+  assert.equal(isAtLabyrinthDoor({ x: 38, z: 1.2 }, 'corridor'), false);
+  assert.equal(isAtLabyrinthDoor({ x: 38, z: -1.3 }, 'collapse'), false);
 });
 
 test('doors 2 and 4 revisit their original worlds from new roles while door 1 preserves the first full maze run', () => {

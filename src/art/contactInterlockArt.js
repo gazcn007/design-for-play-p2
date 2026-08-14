@@ -248,7 +248,10 @@ export default class ContactInterlockArt {
       DEPTH.TOP,
     );
     this._prompts.relay = this.track(
-      this.scene.add.text(relayX, deviceY - 74, '', promptStyle).setOrigin(0.5),
+      // Keep this prompt directly above its cabinet, below the player and the
+      // bright window panorama. `deviceY` belongs to the upper controls, so
+      // anchoring to the cabinet's wall run avoids drifting it into the sky.
+      this.scene.add.text(relayX, wallY - 74, '', promptStyle).setOrigin(0.5),
       DEPTH.TOP,
     );
   }

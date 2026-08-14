@@ -120,6 +120,11 @@ export const CHAPTER_PRELOAD_PROFILES = Object.freeze({
       '/assets/chapter03-3d/models/ch03_pa_speaker.glb',
     ]),
   }),
+  hiddenBoss: Object.freeze({
+    route: '/hidden-final-boss.html?from=chapter5',
+    priority: 'high',
+    assets: Object.freeze([]),
+  }),
 });
 
 const jobs = new Map();

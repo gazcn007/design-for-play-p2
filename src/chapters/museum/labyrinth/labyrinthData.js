@@ -83,6 +83,8 @@ export const PAL = {
   eye: 0x6e2a22,
   eyeFrozen: 0xb3563d,
   eyeHunt: 0xff3b3b,
+  mapBackground: 0x16445b,
+  mapWall: 0xf3e8bd,
 };
 
 // One restrained cool wash per wing — pure atmosphere, never geometry. The
@@ -111,15 +113,23 @@ export const TUNING = {
   shieldPickupRadius: 40,
   shieldCap: 3, // max carried charges
   shieldDurationMs: 3000, // how long one activation blocks all statue damage
+  shieldTutorialThreatRadius: 720, // first post-pickup hunter teaches Space before impact
 
   statueCount: WINGS.reduce((sum, w) => sum + w.statues, 0),
   statueSpeed: 0.205, // px/ms while hunting — still slower than the player
   statueRadius: 17, // "landing a hit" is now a real Arcade Physics overlap
   // between the player's and statue's circle bodies, not a distance check.
-  activationRadius: 620, // px — inside this, an unseen statue starts hunting
+  activationRadius: 860, // px — unseen statues now commit from farther down a corridor
+  returnRadius: 1320, // px — beyond this leash they path back to their original post
+  statuePatrolSpeed: 0.135, // px/ms while roaming between distant rooms
+  statuePatrolMinSteps: 6, // never choose the room it is already guarding
+  statuePatrolMaxSteps: 18, // a broad route that can carry it out of a dead end
   visionRange: 460, // px — beyond this the player can't "see" a statue at all
   visionConeDeg: 62, // half-angle either side of facing counts as "looked at"
   repathMs: 380, // how often a hunting statue recomputes its path
+  maxConcurrentHuntersPerWing: 1, // prevents two-statue corridor sandwiches
+  wingEntryGraceMs: 1800, // crossing a new gate cannot immediately consume the restored life
+  hunterReliefAfterHitMs: 2200, // the second statue cannot immediately replace a hunter that just hit
 
   chaseProximity: 560, // px — how close a hunting statue must be to trigger the chase theme
   chaseFadeMs: 700,
@@ -130,8 +140,8 @@ export const TUNING = {
   torchRadius: 190,
   torchFuelMs: 20000,
   torchRelightRadius: 76,
-  torchAttractionRadius: 920,
-  darkActivationRadius: 410,
+  torchAttractionRadius: 1120,
+  darkActivationRadius: 620,
 
   minimapSize: 190, // px, square survey map pinned to the lower-right
 
@@ -147,7 +157,7 @@ export const STRINGS = {
   title: 'THE MUSEUM OF ONE ANSWER',
   slice: 'LABYRINTH WING',
   plaque: '"It only moves while you\'re not looking. Keep it in your eyes."',
-  controls: 'WASD / ARROWS  MOVE   ·   Q  SHIELD   ·   R  RESTART',
+  controls: 'WASD / ARROWS  MOVE   ·   SPACE  SHIELD   ·   R  RESTART',
   keysLabel: (n, total) => `KEYS  ${n} / ${total}`,
   livesLabel: 'LIVES',
   shieldLabel: (n) => `SHIELD  ×${n}`,
@@ -157,6 +167,8 @@ export const STRINGS = {
     'YOU LOOKED AWAY TOO LONG.',
   ],
   shieldFoundNote: (n) => `SHIELD RECOVERED — ${n} CHARGE${n === 1 ? '' : 'S'}.`,
+  shieldFirstFoundNote: 'SHIELD RECOVERED — PRESS SPACE WHEN A STATUE CLOSES IN.',
+  shieldTutorialPrompt: '[SPACE]  ACTIVATE SHIELD',
   shieldFullNote: 'ALREADY CARRYING AS MANY SHIELDS AS YOU CAN HOLD.',
   shieldUpNote: 'SHIELD UP — IT CAN\'T TOUCH YOU.',
   shieldEmptyNote: 'NO SHIELD CHARGES — FIND ONE FIRST.',
@@ -171,6 +183,7 @@ export const STRINGS = {
   wingGateLockedNote: (name, need) => `SEALED — FIND ${need} MORE KEY${need === 1 ? '' : 'S'} TO OPEN ${name}.`,
   wingGateOpenNote: (name) => `THE WAY TO ${name} IS OPEN.`,
   wingCard: (name) => name,
+  wingLivesRestored: 'NEW WING — LIVES RESTORED TO THREE.',
   gameOverLine: 'THE ARCHIVE KEEPS EVERYTHING YOU FOUND.',
   gameOverSub: 'START AGAIN — FROM ZERO   ·   [R] RESTART',
   winLine: 'YOU WALKED OUT WITH EVERY KEY.',
@@ -185,4 +198,5 @@ export const STRINGS = {
   movingMazeShifted: 'THE PASSAGES HAVE MOVED.',
   stairHint: '[E]  CHANGE FLOOR',
   fragmentClueNear: 'THE BROKEN EYES ALL FACE THIS WAY.',
+  lastGalleryIntro: 'TWO FLOORS SHARE ONE PLAN. USE E AT THE STAIRS. THE FINAL SEAL IS NOT ON THE MAP.',
 };

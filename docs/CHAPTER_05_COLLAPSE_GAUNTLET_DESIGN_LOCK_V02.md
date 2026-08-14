@@ -14,6 +14,15 @@ lighting, wider Final Archive room, key-insertion animation, impact-only dust,
 and hard-cut Chapter 6 handoff. Earlier language about player-following debris,
 ambient airborne dust, and unresolved approval questions is superseded.
 
+Final-boss routing amendment (2026-08-13): the Museum now freezes one
+authoritative destination before the blackout. With fewer than five magic
+stones it routes to the Conductor in `ALL WORLDS AT ONCE`; with all five it
+routes to `BLACK KNIFE`. The fifth is the Museum's Black Knife Stone behind
+the shattered evidence glass. Preloading and final navigation consume that same
+frozen decision. Two route-specific intro films are now designed and awaiting
+user-generated media; until those files are delivered, the existing black
+handoff remains in place.
+
 ---
 
 ## 1. One-sentence premise

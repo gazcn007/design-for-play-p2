@@ -10,33 +10,28 @@ import { StaticCollisionWorld } from './player/StaticCollisionWorld.js';
 import { InteractionSystem } from './systems/InteractionSystem.js';
 import { DialogueSystem } from './systems/DialogueSystem.js';
 import { AudioGuide } from './systems/AudioGuide.js';
-import { TransitionDirector } from './systems/TransitionDirector.js';
+import { TransitionDirector } from './systems/TransitionDirector.js?v=door4-state-sync-20260813-1';
 import { EmbeddedDirectionExhibit } from './systems/EmbeddedDirectionExhibit.js';
 import { EchoCityMinimap } from './systems/EchoCityMinimap.js';
 import { Chapter05DirectionProgress } from './state/chapter05DirectionProgress.js';
-import { CHAPTER05_DIRECTIONS, PLAYABLE_DIRECTION_ORDER } from './directions/directionRegistry.js';
+import { CHAPTER05_DIRECTIONS, PLAYABLE_DIRECTION_ORDER, directionDefinition } from './directions/directionRegistry.js';
+import { isAtLabyrinthDoor } from './directions/directionDoorways.js';
 import { animateReturnArtifact, createReturnArtifact } from './assets/ReturnArtifacts.js';
 import { createMuseumMaterialLibrary } from './assets/MuseumMaterials.js';
-import { ServiceLobby } from './scenes/ServiceLobby.js';
+import { ServiceLobby } from './scenes/ServiceLobby.js?v=door4-state-sync-20260813-1';
 import { ArchiveCorridor } from './scenes/ArchiveCorridor.js';
 import { ECHO_CITY_ENTRY, EchoCityWalkingSim, NIGHT_ROUND_STOPS } from './scenes/EchoCityWalkingSim.js';
 import { getEchoWorkFeedback } from './systems/EchoCityWorkFeedback.js';
 import {
   COLLAPSE_BLACK_HOLD_MS,
-  COLLAPSE_CHAPTER06_DELAY_MS,
-  COLLAPSE_CHAPTER06_ROUTE,
   COLLAPSE_ENTRY,
   COLLAPSE_STRINGS,
 } from './state/collapseGauntlet.js';
+import { resolveFinalBossDestination } from '../../shell/finalBossRoute.js';
 import { preloadChapter } from '../../shell/chapterPreloader.js';
+import { navigateAfterCinematic } from '../../shell/gameFlow.js';
 import { music } from '../../shared/musicDirector.js';
-
-const CHAPTER5_SCORE = Object.freeze({
-  lobby: { id: 'ch5-gallery', src: '/assets/music/ch5/5.2_faure_pie_jesu.mp3', volume: 0.32, fade: 4.5 },
-  corridor: { id: 'ch5-promenade', src: '/assets/music/ch5/5.1_mussorgsky_promenade.mp3', volume: 0.34, fade: 4 },
-  echo: { id: 'ch5-old-castle', src: '/assets/music/ch5/5.3_mussorgsky_old_castle.mp3', volume: 0.3, fade: 4.5 },
-  collapse: { id: 'ch5-dies-irae', src: '/assets/music/ch5/5.7_verdi_dies_irae.mp3', volume: 0.42, fade: 1.2 },
-});
+import { CHAPTER5_SCORE } from './chapter05Score.js';
 
 function buildCarriedNightKit() {
   const root = new THREE.Group();
@@ -109,9 +104,10 @@ function buildLabyrinthKeyRing(materials) {
 }
 
 export class Museum3DApp {
-  constructor({ container, lockOverlay, promptEl, subtitleEl, minimapRoot, minimapCanvas, fadeEl, directionRoot, directionFrame, directionClose, directionTitle, directionStatus, initialState, captureMode = false, standaloneDirectionId = null }) {
+  constructor({ container, lockOverlay, promptEl, subtitleEl, coordinateEl, minimapRoot, minimapCanvas, fadeEl, directionRoot, directionFrame, directionClose, directionTitle, directionStatus, directionTranslation, directionMode, directionCopy, directionBegin, initialState, captureMode = false, standaloneDirectionId = null }) {
     this.container = container;
     this.lockOverlay = lockOverlay;
+    this.coordinateEl = coordinateEl;
     this.standaloneDirectionId = standaloneDirectionId;
     this._standaloneComplete = false;
 
@@ -190,6 +186,10 @@ export class Museum3DApp {
       closeButton: directionClose,
       titleEl: directionTitle,
       statusEl: directionStatus,
+      translationRoot: directionTranslation,
+      modeEl: directionMode,
+      copyEl: directionCopy,
+      beginButton: directionBegin,
       progress: this.directionProgress,
       onOpen: () => {
         this.controller.unlock();
@@ -199,9 +199,12 @@ export class Museum3DApp {
       onClose: ({ directionId, completed, artifactCarried }) => {
         this._syncCarriedArtifact();
         this.scenes.get('corridor')?._syncArtifacts?.();
+        const definition = directionDefinition(directionId);
         const message = artifactCarried
           ? 'CLICK TO RETURN — PLACE WHAT YOU BROUGHT BACK'
-          : completed ? 'CLICK TO RETURN TO THE ARCHIVE — DIRECTION COMPLETE' : 'CLICK TO RETURN TO THE ARCHIVE';
+          : completed
+            ? `CLICK TO RETURN TO THE ARCHIVE — ${definition.egress ?? 'DIRECTION COMPLETE'}`
+            : 'CLICK TO RETURN TO THE ARCHIVE';
         this._showLockOverlay(message);
         if (completed) this._maybeStartCollapse(directionId);
       },
@@ -250,6 +253,35 @@ export class Museum3DApp {
     this._hasEnteredMuseum = false;
     this._interactHeld = false;
     this._mouseInteractHeld = false;
+    this._atLabyrinthDoor = () => {
+      const state = this.model.getSnapshot();
+      return isAtLabyrinthDoor(this.controller.position, state.phase);
+    };
+    this._enterLabyrinthFromDoor = () => {
+      if (!this._atLabyrinthDoor()
+        || this.directionExhibit.opened
+        || this.director.isBusy
+        || this.dialogue.isChoosing) return false;
+      // Ambient archive narration must never turn the only playable door into
+      // a dead prop. Door 4 owns E while the player is inside its real 2D zone.
+      if (this.dialogue.isPlaying) this.dialogue.clear();
+      return this.openDirection(CHAPTER05_DIRECTIONS.LABYRINTH);
+    };
+    this._door4Prompt = document.createElement('button');
+    this._door4Prompt.type = 'button';
+    this._door4Prompt.id = 'door-4-direct-interact';
+    this._door4Prompt.textContent = 'E / CLICK — ENTER DOOR 4 · THE LABYRINTH';
+    Object.assign(this._door4Prompt.style, {
+      position: 'fixed', left: '50%', bottom: '11%', zIndex: '18',
+      transform: 'translateX(-50%)', display: 'none', padding: '12px 18px',
+      color: '#f6e3ae', background: 'rgba(10, 9, 7, .9)',
+      border: '1px solid #d2ab54', font: '700 14px Georgia, serif',
+      letterSpacing: '.08em', cursor: 'pointer',
+    });
+    document.body.append(this._door4Prompt);
+    this._door4Prompt.addEventListener('click', () => {
+      this._enterLabyrinthFromDoor();
+    });
     window.addEventListener('keydown', (e) => {
       if (this.directionExhibit.opened) return;
       if (e.code === 'Space') e.preventDefault();
@@ -261,6 +293,11 @@ export class Museum3DApp {
       if (e.code === 'KeyE' || e.code === 'Enter') {
         this._interactHeld = true;
         if (e.repeat) return;
+        // The in-app browser can temporarily report pointer lock as inactive
+        // while still routing movement keys. Door 4 is a critical transition,
+        // so its real proximity check owns E before the pointer-lock guard.
+        if (this._enterLabyrinthFromDoor()) return;
+        if (this.scenes.get('lobby')?.tryBreakBlackKnifeGlass?.()) return;
         if (!this.controller.isActive && !this._simulatedLock) return;
         if (this.dialogue.isPlaying) this.dialogue.advance();
         else this.interaction.activate();
@@ -278,10 +315,13 @@ export class Museum3DApp {
     // holding the primary mouse button mirrors holding E so browser shells that
     // collapse keydown/keyup into one event can still operate the Final Archive.
     this.renderer.domElement.addEventListener('mousedown', (event) => {
-      if (event.button !== 0 || (!this.controller.isActive && !this._simulatedLock) || this.directionExhibit.opened) return;
+      if (event.button !== 0 || this.directionExhibit.opened) return;
+      if (this._enterLabyrinthFromDoor()) return;
+      if (this.scenes.get('lobby')?.tryBreakBlackKnifeGlass?.()) return;
+      if (!this.controller.isActive && !this._simulatedLock) return;
       this._mouseInteractHeld = true;
       if (this.dialogue.isPlaying) this.dialogue.advance();
-      else this.interaction.activate();
+      else this.interaction.activate({ pointer: true });
     });
     window.addEventListener('mouseup', (event) => {
       if (event.button === 0) this._mouseInteractHeld = false;
@@ -301,6 +341,9 @@ export class Museum3DApp {
     this.interaction.enabled = false;
 
     lockOverlay.addEventListener('click', () => {
+      // The entry click is the first browser-legal audio gesture. Reasserting
+      // the active cue here makes the Museum score start with the front hall.
+      this._syncChapterScore();
       this.audioGuide.resume();
       this.controller.lock();
     });
@@ -330,6 +373,20 @@ export class Museum3DApp {
     artifact.rotation.y = id === 'painted-country' ? -0.25 : id === 'echo-city' ? Math.PI + 0.15 : 0.15;
     if (id === 'echo-city') artifact.rotation.z = -0.12;
     this.carriedArtifactRoot.add(artifact);
+  }
+
+  _syncRuntimeCoordinates(snapshot) {
+    if (!this.coordinateEl) return;
+    const x = this.controller.position.x;
+    const z = this.controller.position.z;
+    const doorReady = isAtLabyrinthDoor(this.controller.position, snapshot.phase);
+    this.coordinateEl.dataset.doorReady = String(doorReady);
+    this.coordinateEl.textContent = [
+      `X ${x.toFixed(2)} · MAP-Y(Z) ${z.toFixed(2)} · ${snapshot.phase.toUpperCase()} STATE · ${(this.activeSceneName ?? 'NONE').toUpperCase()} SCENE`,
+      doorReady
+        ? 'DOOR 4 · IN RANGE · PRESS E / ENTER'
+        : 'DOOR 4 · OUT OF RANGE · X 36.45–39.55 · Z -1.92–0.95',
+    ].join('\n');
   }
 
   _syncCollapseKeyRing(snapshot) {
@@ -428,7 +485,7 @@ export class Museum3DApp {
           ? 'corridor'
           : 'lobby';
     const cue = CHAPTER5_SCORE[key];
-    music.play(cue.id, { ...cue, loop: true, outFade: key === 'collapse' ? 1.2 : 4, dialogueDuckDb: -7 });
+    music.play(cue.id, { ...cue, loop: true, outFade: key === 'collapse' ? 1.2 : 2, dialogueDuckDb: -7 });
   }
 
   // ---- route actions (the only doorways between spaces) -----------------------
@@ -535,7 +592,9 @@ export class Museum3DApp {
     // Door 4 is the last long playable stretch before the collapse. Begin the
     // Boss warm-up here so normal play has the entire Labyrinth plus collapse
     // runtime to fill the cache; _maybeStartCollapse safely reuses this job.
-    if (directionId === CHAPTER05_DIRECTIONS.LABYRINTH) preloadChapter('chapter6');
+    if (directionId === CHAPTER05_DIRECTIONS.LABYRINTH) {
+      preloadChapter(resolveFinalBossDestination().preloadChapterId);
+    }
     return this.directionExhibit.open(directionId);
   }
 
@@ -553,7 +612,7 @@ export class Museum3DApp {
     if (this.model.getSnapshot().phase !== 'corridor' || this.director.isBusy) return false;
     const result = this.model.dispatch({ type: 'labyrinthComplete' });
     if (!result.changed) return false;
-    preloadChapter('chapter6');
+    preloadChapter(resolveFinalBossDestination().preloadChapterId);
     this.getActiveScene()?.enter(this.model.getSnapshot());
     this.controller.setPose(COLLAPSE_ENTRY.x, COLLAPSE_ENTRY.z, COLLAPSE_ENTRY.yaw);
     this._syncCollapseKeyRing(this.model.getSnapshot());
@@ -565,6 +624,10 @@ export class Museum3DApp {
     const result = this.model.dispatch({ type: 'collapseJump' });
     if (!result.changed) return false;
     this._chapterComplete = true;
+    // Freeze one authoritative decision before the blackout. Stones cannot be
+    // gained in the Museum, and preloading plus navigation must agree even if
+    // storage is touched by another tab during the hold.
+    const finalBoss = resolveFinalBossDestination();
     this._interactHeld = false;
     this._mouseInteractHeld = false;
     this.audioGuide.stopCollapseScore();
@@ -579,7 +642,14 @@ export class Museum3DApp {
       completion.classList.add('visible');
     }
     if (new URLSearchParams(window.location.search).get('qa-no-redirect') !== '1') {
-      window.setTimeout(() => { window.location.assign(COLLAPSE_CHAPTER06_ROUTE); }, COLLAPSE_CHAPTER06_DELAY_MS);
+      // The route is frozen before black. The film starts the route-specific
+      // preload on its `playing` event; its completion gate then prevents a
+      // cold Boss page from opening after either ending branch.
+      await navigateAfterCinematic(finalBoss.cinematicId, finalBoss.cinematicPath, finalBoss.route, {
+        label: `MUSEUM TO ${finalBoss.title}`,
+        preloadChapterId: finalBoss.preloadChapterId,
+        requirePreloadReady: true,
+      });
     }
     return true;
   }
@@ -618,8 +688,14 @@ export class Museum3DApp {
         return;
       }
       const snapshot = this.model.getSnapshot();
+      if (this._door4Prompt) {
+        this._door4Prompt.style.display = this._atLabyrinthDoor()
+          && !this.directionExhibit.opened && !this.dialogue.isPlaying
+          ? 'block' : 'none';
+      }
       this._syncChapterScore();
       this.controller.update(dt);
+      this._syncRuntimeCoordinates(snapshot);
       const active = this.getActiveScene();
       if (active) active.update(dt, snapshot);
       this._syncEchoWorkFeedback(snapshot, dt);

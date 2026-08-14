@@ -53,6 +53,52 @@ User correction (2026-08-09): AIR LANE and NIGHT GRID plus the props, ladder,
 rail and spikes resting on them move down together by 30px. The final door
 returns the player to the completed train instead of entering the next city.
 
+User story amendment (2026-08-13): Continue the prior search for Mara inside
+the cyberpunk parkour without changing its topology. An NPC at the beginning
+confirms that Mara crossed this city and points Butch toward a letter she left
+at the final balcony. The letter uses the preceding chapter's restrained
+typewriter dialogue style and reveals that Mara could not wait and has already
+moved on. Reading it is required before the final door opens; talking to the
+NPC remains optional.
+
+## READY — Chapter 4 teammate-grid and HUE-train fusion
+
+Status: `READY` — product decision 2026-08-13
+
+Owner: `Codex`
+
+George approved one continuous Chapter 4 built around Carl's complete paper-grid
+archive level rather than three adjacent mini-games. Port Carl's latest three
+archive Color Link cards and preserve their full images, captions, notebook and
+Moon deduction. The six-color HUE halo becomes the chapter's shared color
+language: completing each archive unlocks one pair of train pigments, so all six
+are earned by investigation instead of collected again from unrelated props.
+
+The redundant Drawing Studio and Pigment Train collection phase are removed from
+normal play. After the third archive, the player enters the unfinished-train
+finale with all six earned pigments, assembles it bottom-up with the existing HUE
+interaction, and uses the archive answer `MOON` as the ignition decision before
+the existing crowd chase and physical train escape. The completed escape keeps
+the authored Chapter 4→5 handoff already wired by the final integration branch.
+
+Acceptance criteria:
+
+1. The paper grid, all three latest Color Link cards, all three archive images,
+   their complete narrative captions and the notebook remain playable.
+2. Solving/reading archive 1 unlocks verdigris + vermilion; archive 2 unlocks
+   indigo + marigold; archive 3 unlocks ochre + mulberry. Visible HUE and text
+   state agree after every unlock.
+3. Normal play no longer enters the separate Drawing Studio or recollects six
+   colors from the Pigment Train room.
+4. The train build still rejects a wrong color and an unsupported top-down
+   placement, remains recoverable, and completes only with all six parts.
+5. Boarding asks for the common archive sign. `MOON` starts the existing chase;
+   a wrong sign gives readable feedback without erasing the whole chapter.
+6. `render_game_to_text()` covers archive unlocks, available HUE pigments,
+   train construction, ignition choice, chase and completion.
+7. Focused model tests, browser cause→outcome playthroughs, screenshots, console
+   checks, asset verification, production build and whitespace validation pass.
+
 ## Awaiting product accept — Chapter 4 `THE PAINTED COUNTRY` Bay A slice
 
 Status: `AWAITING PRODUCT ACCEPT` (not `READY` — do not start)

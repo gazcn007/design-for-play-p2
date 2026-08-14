@@ -39,6 +39,7 @@ let current = null;          // { id, el, targetVol, loop, then, thenOptions }
 const registry = new Map();  // id -> { src, ...lastOptions }
 let dialogueActive = false;
 let pausedForFocus = false;
+let pausedForMenu = false;
 
 const dbToGain = (db) => 10 ** (db / 20);
 
@@ -69,6 +70,17 @@ installUnlock();
 if (typeof window !== 'undefined') {
   window.addEventListener('nightfall:settings', () => {
     if (current) fadeTo(current.el, musicTarget(current), 0.08);
+  });
+  window.addEventListener('nightfall:pause', (event) => {
+    pausedForMenu = event.detail?.paused === true;
+    if (!current) return;
+    if (pausedForMenu) {
+      current.el.pause();
+      return;
+    }
+    if (unlocked && audioFocus.isActive()) {
+      current.el.play().catch(() => {});
+    }
   });
 }
 
@@ -117,6 +129,7 @@ function play(id, options = {}) {
 
   const prev = current;
   const el = new Audio(opts.src);
+  el.dataset.nightfallAudioChannel = 'music';
   el.loop = opts.loop;
   el.volume = 0;
   el.preload = 'auto';
@@ -128,19 +141,22 @@ function play(id, options = {}) {
     dialogueDuckDb: opts.dialogueDuckDb,
     then: opts.then || null,
     thenOptions: opts.thenOptions || null,
+    onThen: opts.onThen || null,
   };
 
   if (opts.then && !opts.loop) {
     el.addEventListener('ended', () => {
       // Only chain if nothing else took over in the meantime.
       if (current && current.id === id && current.then) {
+        current.onThen?.();
         const follow = registry.get(current.then) || current.thenOptions;
         if (follow) play(current.then, follow);
       }
     });
   }
 
-  const p = audioFocus.isActive() ? el.play() : null;
+  const canPlay = audioFocus.isActive() && !pausedForMenu;
+  const p = canPlay ? el.play() : null;
   pausedForFocus = !audioFocus.isActive();
   if (p && p.catch) p.catch(() => { /* autoplay race — next gesture re-arms */ });
 
@@ -188,6 +204,7 @@ function qa() {
     unlocked,
     dialogueDucked: dialogueActive,
     audioFocus: audioFocus.isActive(),
+    menuPaused: pausedForMenu,
   };
 }
 
@@ -198,7 +215,7 @@ audioFocus.subscribe({
     current.el.pause();
   },
   resume: () => {
-    if (!current || !unlocked || !pausedForFocus) return;
+    if (!current || !unlocked || !pausedForFocus || pausedForMenu) return;
     pausedForFocus = false;
     current.el.play().catch(() => {
       pausedForFocus = true;

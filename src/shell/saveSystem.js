@@ -22,6 +22,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
   textScale: 100,
 });
 
+// A modest music-bus lift keeps the score present beneath gameplay without
+// changing the user's Music slider or the independently mixed SFX bus.
+const MUSIC_BUS_GAIN = 1.15;
+
 const checkpointById = (id) => CHECKPOINTS.find((checkpoint) => checkpoint.id === id);
 const safeParse = (value, fallback) => {
   try { return JSON.parse(value) ?? fallback; } catch { return fallback; }
@@ -44,6 +48,7 @@ export function createSaveStore(storage = globalThis.localStorage) {
       slot: index,
       checkpointId: 'prologue-start',
       unlocked: ['prologue-start'],
+      magicStones: [],
       createdAt: now,
       updatedAt: now,
       playSeconds: 0,
@@ -82,13 +87,28 @@ export function createSaveStore(storage = globalThis.localStorage) {
     return saves[index];
   };
 
+  const collectMagicStone = (id, { slot = getActiveSlot() } = {}) => {
+    const saves = readAll();
+    const save = saves[slot];
+    if (!save || typeof id !== 'string' || !id) return null;
+    saves[slot] = {
+      ...save,
+      magicStones: [...new Set([...(save.magicStones ?? []), id])],
+      updatedAt: new Date().toISOString(),
+    };
+    writeAll(saves);
+    setActiveSlot(slot);
+    globalThis.dispatchEvent?.(new CustomEvent('nightfall:magic-stone', { detail: { id, slot } }));
+    return saves[slot];
+  };
+
   const remove = (index) => {
     const saves = readAll();
     saves[index] = null;
     writeAll(saves);
   };
 
-  return { readAll, startNew, markCheckpoint, selectCheckpoint, remove, getActiveSlot, setActiveSlot };
+  return { readAll, startNew, markCheckpoint, collectMagicStone, selectCheckpoint, remove, getActiveSlot, setActiveSlot };
 }
 
 export function readSettings(storage = globalThis.localStorage) {
@@ -102,6 +122,14 @@ export function writeSettings(next, storage = globalThis.localStorage) {
   return settings;
 }
 
+export function volumeForChannel(settings = DEFAULT_SETTINGS, channel = 'master') {
+  const clamp = (value) => Math.max(0, Math.min(1, Number(value) / 100));
+  const master = clamp(settings.masterVolume);
+  if (channel === 'music') return Math.min(1, master * clamp(settings.musicVolume) * MUSIC_BUS_GAIN);
+  if (channel === 'sfx') return master * clamp(settings.sfxVolume);
+  return master;
+}
+
 export function applySettings(settings = readSettings()) {
   if (typeof document === 'undefined') return settings;
   const root = document.documentElement;
@@ -109,7 +137,7 @@ export function applySettings(settings = readSettings()) {
   root.dataset.reducedMotion = settings.reducedMotion ? 'true' : 'false';
   root.dataset.subtitles = settings.subtitles ? 'true' : 'false';
   document.querySelectorAll('audio, video').forEach((media) => {
-    media.volume = Math.max(0, Math.min(1, settings.masterVolume / 100));
+    media.volume = volumeForChannel(settings, media.dataset?.nightfallAudioChannel);
   });
   globalThis.NIGHTFALL_SETTINGS = settings;
   globalThis.dispatchEvent?.(new CustomEvent('nightfall:settings', { detail: settings }));
@@ -141,6 +169,7 @@ export function hasDismissedTitle(storage = globalThis.sessionStorage) {
 export function returnToTitle(storage = globalThis.sessionStorage) {
   storage?.removeItem('nightfall.titleDismissed.v1');
   storage?.removeItem('nightfall.pendingLaunch.v1');
+  storage?.removeItem('nightfall.hidden-router.v1');
   window.location.assign('/');
 }
 

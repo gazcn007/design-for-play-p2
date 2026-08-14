@@ -23,6 +23,19 @@
         color: #8f8f8f; font-size: 11px; letter-spacing: 0.08em;
       }
 
+      #runtime-coordinates {
+        top: 30px; left: 12px;
+        padding: 7px 9px;
+        color: #c2cad2; background: rgba(5, 8, 11, 0.82);
+        border: 1px solid rgba(151, 166, 179, 0.34);
+        font: 700 11px/1.45 "Courier New", ui-monospace, monospace;
+        letter-spacing: 0.04em; white-space: pre-line;
+      }
+      #runtime-coordinates[data-door-ready="true"] {
+        color: #ffe6a1; border-color: #d2ab54;
+        box-shadow: 0 0 18px rgba(210, 171, 84, 0.22);
+      }
+
       #reticle {
         top: 50%; left: 50%;
         width: 6px; height: 6px; margin: -3px 0 0 -3px;
@@ -203,11 +216,38 @@
         font-size: 12px; letter-spacing: 0.1em; color: #aaa18d;
       }
       #direction-exhibit.complete #direction-status { color: #9fd8de; }
+      #direction-translation {
+        position: absolute; inset: 54px 22px 22px; z-index: 3;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        padding: clamp(28px, 6vw, 84px); box-sizing: border-box;
+        background:
+          radial-gradient(circle at 50% 42%, rgba(109, 82, 50, 0.24), transparent 38%),
+          linear-gradient(180deg, #101315 0%, #070809 100%);
+        color: #e9e0ca; text-align: center;
+        opacity: 0; pointer-events: none; transition: opacity 260ms ease;
+      }
+      #direction-exhibit.translating #direction-translation { opacity: 1; pointer-events: auto; }
+      #direction-exhibit.translating #direction-frame { pointer-events: none; }
+      #direction-mode {
+        color: #d7b86d; font: bold clamp(13px, 1.4vw, 18px) Georgia, serif;
+        letter-spacing: 0.22em; text-transform: uppercase;
+      }
+      #direction-copy {
+        max-width: 760px; margin: 24px 0 30px;
+        color: #d2ccbd; font: clamp(16px, 2vw, 25px)/1.65 Georgia, serif;
+      }
+      #direction-begin {
+        border: 1px solid #b99b5c; background: #241f17; color: #f1e7cc;
+        padding: 12px 22px; font: bold 12px "Courier New", monospace;
+        letter-spacing: 0.16em; cursor: pointer;
+      }
+      #direction-begin:hover, #direction-begin:focus-visible { background: #443721; outline: 2px solid #d8be7a; }
     </style>
   </head>
   <body>
     <div id="app"></div>
     <div id="version-label" class="hud">CH05 DREAMCORE MUSEUM — ECHO CITY AUTHORITY v0.5.0</div>
+    <div id="runtime-coordinates" class="hud" aria-live="off">X 0.00 · MAP-Y(Z) 0.00 · LOADING</div>
     <div id="reticle" class="hud"></div>
     <div id="prompt" class="hud"></div>
     <div id="subtitle" class="hud"></div>
@@ -232,9 +272,14 @@
         <div id="direction-title">ARCHIVAL RECONSTRUCTION</div>
         <button id="direction-close" type="button" aria-label="Return to corridor">×</button>
         <iframe id="direction-frame" title="Chapter 5 parallel direction"></iframe>
+        <div id="direction-translation" aria-hidden="true">
+          <div id="direction-mode">GAZE RECORD</div>
+          <div id="direction-copy">The archive is translating this memory into an interaction law.</div>
+          <button id="direction-begin" type="button">BEGIN RECONSTRUCTION</button>
+        </div>
         <div id="direction-status">ESC</div>
       </div>
     </section>
-    <script type="module" src="/src/chapters/museum3d/museum3d-main.js"></script>
+    <script type="module" src="/src/chapters/museum3d/museum3d-main.js?v=central-two-world-boss-assets-20260813-5"></script>
   </body>
 </html>

@@ -247,6 +247,13 @@ export const DAWN_CAMPFIRE_REMAINS_DIALOGUE = Object.freeze([
   { speaker: 'LEV', text: 'Several people. They cleaned up enough to return, but not enough to pretend they were never here.' },
 ]);
 
+export const CAMPFIRE_SELINE_STONE_DIALOGUE = Object.freeze([
+  { speaker: 'SELINE', text: 'You inspect strange things, do you not? I found this sewn into an unclaimed coat lining.' },
+  { speaker: 'BUTCH', text: 'No name on the laundry ticket?' },
+  { speaker: 'SELINE', text: 'No ticket. The stone hums whenever the evening tram passes. I would rather you take it.' },
+  { speaker: 'BUTCH', text: 'Cold as the archive stacks. I will keep it out of the municipal ledger.' },
+]);
+
 export const CAMPFIRE_RADA_DIALOGUE = Object.freeze([
   { speaker: 'RADA', text: 'You can stand there, but if you want tea, come closer. The kettle does not throw very far.' },
   { speaker: 'BUTCH', text: 'What are you celebrating?' },

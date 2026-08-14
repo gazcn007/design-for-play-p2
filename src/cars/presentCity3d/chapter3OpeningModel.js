@@ -20,6 +20,10 @@ export const FIRST_THEORIES = Object.freeze(['market-ministry', 'code-cover', 'p
 export const GROOVE_OBSERVATIONS = Object.freeze(['rows', 'spacing', 'feed-gap']);
 export const PETAR_TOPICS = Object.freeze(['instruction', 'route', 'surface-view', 'cleaning']);
 export const SECOND_THEORIES = Object.freeze(['market-coordination', 'municipal-censorship', 'petar-knew-message', 'lev-steered-case']);
+// The removed menu branches stay valid for existing saves and QA entry
+// states, but are no longer required by the shorter playable route.
+const REQUIRED_PETAR_TOPICS = Object.freeze(['instruction', 'surface-view', 'cleaning']);
+const REQUIRED_SECOND_THEORIES = Object.freeze(['market-coordination', 'municipal-censorship', 'petar-knew-message']);
 export const CUT_INTERFACE_OBSERVATIONS = Object.freeze(['cut', 'placement', 'reconnection']);
 export const HANA_TOPICS = Object.freeze(['register', 'alone', 'departure']);
 export const DARO_TOPICS = Object.freeze(['position', 'sequence', 'limits']);
@@ -251,7 +255,7 @@ function interaction21State() {
     anaMapHelpAsked: true,
     archiveMapInspected: true,
     maintenanceOrderInspected: true,
-    petarTopics: ['instruction', 'route', 'surface-view', 'cleaning'],
+    petarTopics: [...PETAR_TOPICS],
     petarInterviewComplete: true,
     materialTimelineInspected: true,
     evidence: {
@@ -998,7 +1002,7 @@ export function createChapter3OpeningModel(options = {}) {
     },
 
     canCompletePetar() {
-      return PETAR_TOPICS.every((topic) => state.petarTopics.includes(topic));
+      return REQUIRED_PETAR_TOPICS.every((topic) => state.petarTopics.includes(topic));
     },
 
     completePetarInterview() {
@@ -1033,7 +1037,7 @@ export function createChapter3OpeningModel(options = {}) {
     },
 
     canCompleteSecondTheory() {
-      return SECOND_THEORIES.every((theory) => state.secondTheoriesTested.includes(theory));
+      return REQUIRED_SECOND_THEORIES.every((theory) => state.secondTheoriesTested.includes(theory));
     },
 
     completeSecondTheory() {

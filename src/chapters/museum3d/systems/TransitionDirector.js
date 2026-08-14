@@ -41,9 +41,23 @@ export class TransitionDirector {
       console.warn(`[TransitionDirector] illegal transition ${fromPhase} → ${toPhase}`);
       return false;
     }
+    const phaseBefore = app.model.getSnapshot().phase;
+    if (fromPhase && phaseBefore !== fromPhase) {
+      console.warn(`[TransitionDirector] scene transition expected ${fromPhase}, found ${phaseBefore}`);
+      return false;
+    }
     this._busy = true;
     try {
-      if (action) app.model.dispatch(action);
+      if (action) {
+        const result = app.model.dispatch(action);
+        const phaseAfter = app.model.getSnapshot().phase;
+        if (!result.changed || (toPhase && phaseAfter !== toPhase)) {
+          console.warn(
+            `[TransitionDirector] rejected ${action.type}; keeping ${app.activeSceneName ?? phaseBefore} active`,
+          );
+          return false;
+        }
+      }
       // Resolve assets first. Physical thresholds can then swap two resident
       // roots in the same frame without a loading flash or black full-screen
       // cover; ordinary chapter cuts keep the existing fade.

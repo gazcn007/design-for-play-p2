@@ -4,6 +4,11 @@
 
 const DIRS = [[0, -1], [0, 1], [-1, 0], [1, 0]];
 
+// Four passage swaps means eight corridor cells visibly change on every
+// non-zero layout. That is large enough to read as a moving *section* of the
+// maze rather than one door silently trading places with another.
+export const MOVING_MAZE_CHANGES_PER_STATE = 8;
+
 export function cloneWalls(walls) {
   return walls.map((row) => row.slice());
 }
@@ -64,22 +69,50 @@ export function buildSolvableMovingMazeStates(baseWalls) {
   const states = [{ id: 0, changes: [] }];
   const used = new Set();
   for (let stateId = 1; stateId <= 2; stateId += 1) {
-    const close = closable.find((cell) => !used.has(`${cell.x},${cell.y}`));
-    const open = openable.find((cell) => {
-      if (used.has(`${cell.x},${cell.y}`)) return false;
-      if (!close) return false;
-      return Math.abs(cell.x - close.x) + Math.abs(cell.y - close.y) >= 5;
-    });
-    if (!close || !open) break;
-    used.add(`${close.x},${close.y}`);
-    used.add(`${open.x},${open.y}`);
-    const changes = [
-      { ...close, solid: true },
-      { ...open, solid: false },
-    ];
     const probe = cloneWalls(baseWalls);
-    for (const change of changes) probe[change.y][change.x] = change.solid;
-    if (allTargetsReachable(probe, roomTargets)) states.push({ id: stateId, changes });
+    const changes = [];
+    const localUsed = new Set();
+    const scoreSpread = (cell) => {
+      if (!changes.length) return cell.x + cell.y;
+      return Math.min(...changes.map((other) => Math.abs(cell.x - other.x) + Math.abs(cell.y - other.y)));
+    };
+    const available = (cell) => !used.has(`${cell.x},${cell.y}`) && !localUsed.has(`${cell.x},${cell.y}`);
+
+    for (let pair = 0; pair < MOVING_MAZE_CHANGES_PER_STATE / 2; pair += 1) {
+      // Open a blocked corridor far from the previous changes first. Opening
+      // can never break connectivity and gives the following closure another
+      // route to work with.
+      const open = openable
+        .filter(available)
+        .sort((a, b) => scoreSpread(b) - scoreSpread(a) || a.y - b.y || a.x - b.x)[0];
+      if (!open) break;
+      probe[open.y][open.x] = false;
+
+      // Close only a corridor that leaves every room centre reachable in the
+      // *combined* state, not merely when tested by itself.
+      const close = closable
+        .filter(available)
+        .sort((a, b) => scoreSpread(b) - scoreSpread(a) || a.y - b.y || a.x - b.x)
+        .find((cell) => {
+          probe[cell.y][cell.x] = true;
+          const safe = allTargetsReachable(probe, roomTargets);
+          probe[cell.y][cell.x] = false;
+          return safe;
+        });
+      if (!close) {
+        probe[open.y][open.x] = true;
+        break;
+      }
+
+      probe[close.y][close.x] = true;
+      localUsed.add(`${open.x},${open.y}`);
+      localUsed.add(`${close.x},${close.y}`);
+      changes.push({ ...open, solid: false }, { ...close, solid: true });
+    }
+
+    if (changes.length !== MOVING_MAZE_CHANGES_PER_STATE) break;
+    for (const id of localUsed) used.add(id);
+    states.push({ id: stateId, changes });
   }
   return states;
 }

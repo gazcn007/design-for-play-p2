@@ -16,6 +16,17 @@ export default defineConfig({
     port: 5186,
     strictPort: true,
     open: false,
+    headers: {
+      'Cache-Control': 'no-store',
+    },
+    // This project is stored under an iCloud-managed Documents folder.
+    // Hydration metadata must not restart a stateful maze playtest dozens of
+    // times; refresh deliberately after source edits, just like the integrated
+    // production server does.
+    hmr: false,
+    watch: {
+      ignored: ['**/*'],
+    },
   },
   build: {
     target: 'es2020',

@@ -232,7 +232,7 @@ describe('Chapter 3 interactions #1 to #33', () => {
     );
     assert.deepEqual(
       openingContent.secondTheoryMenu(['market-coordination', 'petar-knew-message']).choices.map((choice) => choice.id),
-      ['second-municipal-censorship', 'second-lev-steered-case', 'second-conclude'],
+      ['second-municipal-censorship', 'second-conclude'],
     );
     assert.deepEqual(
       openingContent.cutInterfaceMenu(['cut', 'placement']).choices.map((choice) => choice.id),
@@ -675,12 +675,16 @@ describe('Chapter 3 interactions #1 to #33', () => {
       new URL('../../src/cars/presentCity3d/Chapter3OpeningRuntime.js', import.meta.url),
       'utf8',
     );
+    const hotelNavigation = readFileSync(
+      new URL('../../src/cars/presentCity3d/chapter3HotelNavigation.js', import.meta.url),
+      'utf8',
+    );
     assert.match(runtime, /const MINISTRY_FURNITURE_OBSTACLES/);
     assert.match(runtime, /function findInteriorPath\(start, requestedTarget, bounds, obstacles\)/);
     assert.match(runtime, /path = findInteriorPath\([\s\S]*MINISTRY_FURNITURE_OBSTACLES/);
     assert.match(runtime, /path = findInteriorPath\([\s\S]*ARCHIVE_FURNITURE_OBSTACLES/);
-    assert.match(runtime, /const HOTEL_LOBBY_FURNITURE_OBSTACLES/);
-    assert.match(runtime, /const HOTEL_ROOM_FURNITURE_OBSTACLES/);
+    assert.match(hotelNavigation, /const HOTEL_LOBBY_FURNITURE_OBSTACLES/);
+    assert.match(hotelNavigation, /const HOTEL_ROOM_FURNITURE_OBSTACLES/);
     assert.match(runtime, /this\.insideHotel && this\.hotelArea === 'lobby'/);
     assert.match(runtime, /HOTEL_LOBBY_FURNITURE_OBSTACLES/);
     assert.match(runtime, /HOTEL_ROOM_FURNITURE_OBSTACLES/);
@@ -692,6 +696,19 @@ describe('Chapter 3 interactions #1 to #33', () => {
     assert.match(runtime, /updateArchiveLevFollow\(dt\)/);
     assert.match(runtime, /distance <= 1\.55/);
     assert.match(runtime, /toma: \{ points: \[\[0, 0\]\], actions: \['idle', 'investigate'\], fixed: true \}/);
+  });
+
+  it('shows the hold-Tab interaction highlight tip after Olek sends the player to the Ministry', () => {
+    const runtime = readFileSync(
+      new URL('../../src/cars/presentCity3d/Chapter3OpeningRuntime.js', import.meta.url),
+      'utf8',
+    );
+    assert.match(runtime, /onComplete: \(\) => \{[\s\S]*?beginPostOlekScoreTransition\(\)[\s\S]*?showLeadCard\(POST_OLEK_INTERACTION_HINT\)/);
+    assert.match(runtime, /EXPLORATION TIP · HOLD TAB/);
+    assert.match(runtime, /Hold TAB to highlight every object and person you can interact with\./);
+    assert.match(runtime, /if \(event\.key === 'Tab'\)[\s\S]*?this\.tabHeld = true[\s\S]*?this\.updateOutlines\(\)/);
+    assert.equal([...runtime.matchAll(/showLeadCard\(POST_OLEK_INTERACTION_HINT\)/g)].length, 1,
+      'the tip has exactly one trigger: Olek dialogue completion');
   });
 
   it('guides every distant chapter destination and keeps hotel guests seated', () => {

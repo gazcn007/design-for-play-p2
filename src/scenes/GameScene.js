@@ -98,6 +98,7 @@ export default class GameScene extends Phaser.Scene {
     this.finalReminderShown = false;
     this.tutorialExitBlockedNotified = false;
     this.prologueTransitionActive = false;
+    this.prologueScoreReleased = false;
     this.departureScroll = 0;
     this.hitstopRestoreTimer = null;
     this.persistentUnderfloorState = createPersistentUnderfloorState();
@@ -1460,6 +1461,11 @@ export default class GameScene extends Phaser.Scene {
     if (this.prologueTransitionActive) return;
     this.clearHitstop();
     this.prologueTransitionActive = true;
+    // The train has reached the end of Chapter One. Release this cue before
+    // the departure animation so it cannot bleed underneath the 1→2 film.
+    this.prologueScoreReleased = true;
+    this.prologueScoreCue = null;
+    music.stop({ fade: 1.4 });
     this.departureScroll = 0;
     this.player.frozen = true;
     this.player.setVelocity(0, 0);
@@ -1498,7 +1504,7 @@ export default class GameScene extends Phaser.Scene {
       this.departureScroll = 0;
     });
 
-    this.time.delayedCall(7000, () => {
+    this.time.delayedCall(7000, async () => {
       createSaveStore().markCheckpoint('chapter-2-start');
       this.prologueTransitionActive = false;
       onComplete();
@@ -1927,10 +1933,9 @@ export default class GameScene extends Phaser.Scene {
       }
     });
 
-    // A suitcase carries both puzzle weight and story evidence. On its first
-    // encounter, let the player inspect every item before E returns to the
-    // normal carry/service verb. Other optional props still yield to nearby
-    // puzzle machinery.
+    // A suitcase carries both puzzle weight and story evidence. Its one-time
+    // first-look inspection yields E back to the normal carry/service verb as
+    // soon as the inspection panel has opened.
     const narrativeProp = this.narrativeProps?.findInteractable(p.x, p.y, p.lane);
     const narrativePreemptsPuzzle = this.narrativeProps?.shouldPreemptPuzzle(narrativeProp);
     if (narrativeProp && (!best || narrativePreemptsPuzzle)) {
@@ -2017,6 +2022,9 @@ export default class GameScene extends Phaser.Scene {
       waitingChoice: false,
     };
     this.player.frozen = true;
+    // Dialogue bypasses Player.update(), so clear the force that may have
+    // been applied on the same frame as the interaction.
+    this.player.setAcceleration(0, 0);
     this.player.setVelocity(0, 0);
     this._updateHintBar(null);
     this.updateTutorialObjectiveMarker();
@@ -2094,6 +2102,8 @@ export default class GameScene extends Phaser.Scene {
 
   updateDialogueInput() {
     const JustDown = Phaser.Input.Keyboard.JustDown;
+    this.player.setAcceleration(0, 0);
+    this.player.setVelocity(0, 0);
     if (JustDown(this.keys.choiceOne)) {
       this.selectDialogueChoice(0);
     } else if (JustDown(this.keys.choiceTwo)) {
@@ -2773,7 +2783,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   refreshPrologueScore() {
-    if (this.skipPrologue || this.activeWorldIndex !== 0) return;
+    if (this.prologueScoreReleased || this.prologueTransitionActive || this.skipPrologue || this.activeWorldIndex !== 0) return;
     const cue = this.tutorialPuzzle.stageIndex >= 3 ? 'resonance' : 'undertow';
     if (this.prologueScoreCue === cue) return;
     this.prologueScoreCue = cue;

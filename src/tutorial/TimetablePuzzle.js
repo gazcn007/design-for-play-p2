@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { LANE_NEAR, LANES } from '../constants.js';
-import { DEV_MODE, devParams } from '../devMode.js';
+import { devRoutesEnabled, devParams } from '../devMode.js';
 import { sfx } from '../sfx.js';
 import {
   causalBlocker,
@@ -7422,9 +7422,26 @@ export default class TimetablePuzzle {
   }
 
   setupQA() {
-    if (!DEV_MODE || typeof window === 'undefined') return false;
+    if (!devRoutesEnabled() || typeof window === 'undefined') return false;
     const params = devParams();
     const qa = params.get('qa');
+    // Phase I has no frozen showcase state: this is the playable first
+    // junction, with its own machine active and the later cars cleared only
+    // for routing purposes.
+    if (qa === 'phase1') {
+      this.scene.tutorialQAActive = true;
+      const puzzle = this.scene.tutorialPuzzle;
+      puzzle.stageIndex = 0;
+      puzzle.stageComplete = this.config.stages.map(() => false);
+      puzzle.briefed = true;
+      puzzle.phase = 'idle';
+      const stage = this.config.stages[0];
+      this.scene.player.resetTo(stage.startX + 92, 400, LANE_NEAR);
+      this.scene.cameras.main.setScroll(Math.max(0, stage.startX + 92 - this.scene.cameras.main.width / 2), 0);
+      this.scene.refreshTutorialStageVisuals();
+      this.refresh();
+      return true;
+    }
     // Phase II fixture route: ?qa=phase2&state=<entry|power-fail|latch-closed|
     // signal-mid|energized|complete|reset-replay>. Warps into junction-2 and
     // drives the LIVE interlock instance to the named fixture state, replays
@@ -7551,7 +7568,7 @@ export default class TimetablePuzzle {
     if (qa === 'phase4') {
       this.scene.tutorialQAActive = true;
       const requested = params.get('state') ?? 'entry';
-      const stateName = ['entry', 'fall', 'middle', 'punched', 'refusal', 'solved'].includes(requested)
+      const stateName = ['entry', 'fall', 'middle', 'punched', 'refusal', 'solved', 'magic-stone'].includes(requested)
         ? requested
         : 'entry';
       const puzzle = this.scene.tutorialPuzzle;
@@ -7602,6 +7619,13 @@ export default class TimetablePuzzle {
       this.firstWeightArt?.applySnapshot(snap);
       this.scene.refreshTutorialStageVisuals();
       this.refresh();
+      if (stateName === 'magic-stone') {
+        const suitcase = this.scene.narrativeProps?.props?.find((prop) => prop.inspectorId === 'phase-iv');
+        if (suitcase) {
+          suitcase.state.envelopeReadComplete = true;
+          this.scene.time.delayedCall(180, () => this.scene.narrativeProps?.openInspectionModal(suitcase));
+        }
+      }
       return true;
     }
     // Phase V/VI world-space narrative fixtures. Entry remains a real

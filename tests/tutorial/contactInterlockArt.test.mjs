@@ -224,7 +224,7 @@ describe('contactInterlockArt construction', () => {
     const { art } = makeArt();
     assert.equal(art._prompts.latch.y, 356); // deviceY - 74
     assert.equal(art._prompts.power.y, 352); // deviceY - 78
-    assert.equal(art._prompts.relay.y, 356); // deviceY - 74
+    assert.equal(art._prompts.relay.y, 482); // directly above the relay cabinet
     assert.equal(art._prompts.relay.x, 1195);
     assert.ok(art._prompts.latch.y < 368, 'must clear the player head (~373)');
     assert.ok(art._prompts.power.y < 556, 'must stay above the underfloor cable trough');

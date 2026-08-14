@@ -16,7 +16,232 @@ production Conductor boss, never a video or the old Chapter 6 greybox.
 - Build only the reusable world-background content pipeline.
 - Do not change movement, combat, puzzles, NPCs, level geometry, story logic, or game rules.
 
+## Current focused boss experiment (2026-08-14)
+
+- User-directed exception: in the Conductor Finale's fourth movement only, an
+  indigo Chapter 4 paper card now drops as a vertical square temporary cover
+  whenever a color sweep is called. Its paper faces either left/right or
+  front/back and is a solid movement obstacle only: sweeps pass through it.
+- Returned pigment damage is reduced from 22 to 13 for this experiment, so the
+  added spatial pressure creates a longer fourth movement.
+- Follow-up: grids are now strictly directional, solid paper walls. Waves arrive
+  every roughly 2.2–3.4 seconds; from round 3, every other wave adds one
+  perpendicular follow-up. Each landed grid blocks player movement, but never
+  blocks, weakens, or burns from a color sweep.
+- Visual follow-up: the three red lamps in Movements I–II remain above the
+  camera frame. They now use low-brightness, wide red beams over a dim red
+  ambient wash, so the whole arena reads red without three harsh pools. The
+  warm directional key, amber rim, and normal cool ambience stay off until
+  Movement III.
+- Grid follow-up: falling Indigo grids are independent of color sweeps. Each
+  wave separately chooses a laser lane and drops one or two grids somewhere on
+  the player's forward route to the Conductor; every grid can land at any yaw
+  and uses oriented wall collision, rather than only front/back or side/side.
+
 ## Work log
+
+- 2026-08-14: Replaced the old Black Knife 60-second survival scene with Mathias's current `mathbecsan/Chapter-6-final-boss` main build (commit `9a1b354`): its five-phase Conductor fight, hand-drawn spritesheets, paper ship, UI, fairness telegraphs, and battle music are now the four-stone hidden route. Winning reveals `UNSEAL THE TRUE ENDING` and correctly enters the existing true-ending page. Production browser QA covered movement, shooting, win-state, and the full handoff with no errors.
+- 2026-08-14: Rebalanced only Movement III / Echo City's poetry duel. A correct continuation now deals 25 damage, so its 200 HP segment reaches the Movement IV threshold after exactly four correct answers. No other movement's HP or damage values changed; production browser QA measured 25 damage from a correct verse with no errors.
+- 2026-08-14: Restored Echo City Butch's authored Chapter 3 skeleton animation package in the final integration: idle, walk, jump-start, airborne loop, and landing now cross-fade based on the real movement state. Production browser QA confirmed `Walk_Loop`, `Jump_Start`, and `Jump_Land` in sequence with no console or asset errors.
+- 2026-08-14: Restored the authored Echo City poetry-duel assets from the completed August 13 source build. Movement III now alternates ten seconds of combat with a fully safe, three-choice Shakespeare continuation; the prompt and each choice use the corresponding imported poetry voice file (61 MP3s total), and only the correct line damages the Conductor. Production build and browser verification confirmed the first prompt (`IF MUSIC BE THE FOOD OF LOVE—`) appears with Conductor voice playback and no console errors.
+- 2026-08-14: Rebuilt the post-film ending handoff in the final integration.
+  The ending video now holds a true black blackout while a separate, names-only
+  end-credits screen mounts in the same document, so Movement IV can never
+  flash between the film and credits. The credits list only the five team names
+  and starts the existing bittersweet orchestral/violin `Last and First Light`
+  cue through the already-unlocked shared music director.
+
+- 2026-08-14: Changed the Movement IV departure vehicle from a colored painted
+  card to a strictly black-and-white graphite-sketch paper train, including
+  charcoal panel strokes and grayscale windows, body, roof, and wheels.
+
+- 2026-08-14: Replaced the Conductor Movement IV ending's Mara/3D-tram rescue
+  with a horizontal hand-painted paper train. No Mara appears: the train enters
+  from the left, slows beside the player, exposes a slow-motion `SPACE · JUMP
+  ABOARD` window, and only completes once the jumping player reaches it. The
+  final two movements now change immediately to their authored classical cues
+  (Dvořák for III, Mussorgsky for IV), while Verdi remains only in I–II. Added
+  three high-contrast red ceiling lamps to movements I and II. Production QA
+  confirmed the no-Mara train arrival, successful jump-to-cinematic handoff,
+  correct music handoff, no asset errors, and visible red-lit opening arena.
+
+- 2026-08-14: Unified the Chapter 4 Pigment Train protagonist with the first
+  two Painted Country rooms. Reworked the Museum Black Knife Stone into a
+  1/16-scale object inside the central vitrine: the player takes a visible
+  held fire axe while its wall cabinet remains, breaks only the central
+  case's front pane from that side, then must aim and primary-click the
+  exposed stone to collect it. Only that front-side break creates floor glass
+  shards and leaves the missing pane open.
+
+- 2026-08-14: Split the Chapter 6 Conductor Finale in the hidden `1111`
+  router into four independently playable movement nodes: I Night Service, II
+  Borrowed Grid, III Echo City, and IV Painted Country. Each uses a
+  session-gated `qa=conductor-N` route, skips the boss title card, preserves
+  its matching world/form/tutorial, and starts with that movement's proper
+  remaining boss-health segment. Black Knife and True Ending now follow as
+  6.5 and 6.6. Focused flow tests (10/10), production build, and live
+  production click-through QA all passed; the four nodes reported phases
+  0–3 respectively.
+
+- 2026-08-14: Chapter 4 Drawing Studio's Pigment Stone now appears when all
+  eighteen cabinet objects have been absorbed, even if their colors are still
+  being carried in the palette. Walking into the revealed stone collects the
+  existing `chapter-4` save-slot stone and immediately updates its count.
+
+- 2026-08-14: Made the complete-preload gate universal for chapter transitions.
+  Any transition that declares its next chapter's preload profile now keeps the
+  final transition state in place until that profile is complete, instead of
+  using the former 2.2-second grace timeout. This covers every normal
+  Chapter 1→2, 2→3, 3→4, 4→5, and Museum→Chapter 6 handoff.
+
+- 2026-08-14: Removed the final-integration preview server's global `no-store`
+  policy. It had discarded every Chapter 3 model, texture, music, and module
+  fetched during the 2→3 film, forcing Echo City to download the scene again
+  after the film ended. The complete-preload gate remains in place; its assets
+  can now survive navigation for a direct handoff.
+
+- 2026-08-14: Integrated the two completed Chapter 5 route films into the final NIGHTFALL web build: `public/cinematics/5-6-conductor.mp4` and `public/cinematics/5-6-black-knife.mp4` (also copied to the current `dist/cinematics/` artifact). Museum collapse now freezes the route, holds the existing black threshold, plays the resolved film, and passes the same route-specific Boss profile to `navigateAfterCinematic`. The shared cinematic system begins that profile's preload on the video `playing` event and requires it to finish before navigating, so neither Conductor nor Black Knife opens half-loaded after its film. Focused route/collapse tests pass 17/17; both H.264/AAC films report 12.000 seconds. The standalone Museum production build was attempted but stalled after transforming 106 modules while traversing unrelated existing assets, so it was stopped rather than marked as a pass.
+
+- 2026-08-14: Added a one-time Chapter 3 exploration-tip bubble at the exact
+  handoff after Olek's completed route dialogue changes the objective to finding
+  the Transport Ministry. It tells the player to hold Tab to highlight every
+  interactable object and person, reusing the existing task-bubble and Tab scan
+  systems without interrupting movement. The hint has no load/checkpoint
+  trigger; it can appear only from Olek's dialogue completion callback.
+
+- 2026-08-14: Replaced the freestanding Museum Fire Axe evidence prop with a
+  wall-mounted red emergency cabinet, including a vertical axe, pale interior,
+  red/white `FIRE AXE` sign, and the existing nearby `E` / Enter pickup
+  interaction. The cabinet is on the east/north wall, deliberately opposite
+  the Black Knife glass case so the two interactables do not occlude each
+  other from the lobby entry view. Targeted Chapter 5 evidence, magic-stone
+  and route checks pass 7/7; visual Playwright QA is
+  `output/museum-wall-axe-v2/shot-0.png`.
+- 2026-08-14: Moved the wall-mounted fire-axe cabinet farther north along the
+  east wall after visual QA showed it overlapping the `ARCHIVE WING` sign. The
+  sign now remains fully visible and the cabinet remains legible from entry;
+  `output/museum-wall-axe-clear-sign/shot-0.png` verifies the final layout.
+
+- 2026-08-14: Integrated the approved narrative cinematic pass into the final
+  web build. `public/cinematics/1-2.mp4`, `2-3.mp4`, `3-4.mp4`, and `4-5.mp4`
+  now use the Butch-only V04 spoken narrative and burned-in subtitles while
+  preserving each film's authored picture and music/SFX bed. The supplied
+  `6181caf8...mp4` was identified by frame inspection as the 18-second Chapter
+  3→4 paper transition, not the game opening; its processed picture is now the
+  3→4 base with the V04 Butch mix. The supplied `7ff1ba2b...mp4` is the
+  45.79-second ending; its processed picture now carries the existing four
+  ending captions and production narration/audio. `start.mp4` remains the
+  approved 35-second opening because no replacement opening was supplied.
+  Pre-integration media and non-iCloud final masters are preserved under
+  `~/Codex Local Backups/NIGHTFALL/`. The five masters were copied into both
+  `public/cinematics/` and the current `dist/cinematics/` integrated artifact.
+  Route coverage passed 8/8. Chromium range-playback QA sought into all five
+  files at dialogue/story beats: every video reported 1280×720, `readyState=4`,
+  active playback, no media error and no console error; all five screenshots
+  visibly showed the intended captions. Full `assets:check` was attempted but
+  remained silent while reading unrelated pre-existing iCloud placeholders, so
+  it was stopped rather than reported as a pass. `npm run build` was also
+  attempted and reached its required `prebuild → assets:check` gate, where it
+  hit the same repository-wide hydration blocker; direct production-media QA
+  and the existing built `dist` route were used instead.
+
+- 2026-08-13: Rebalanced the Labyrinth's narrow-corridor encounters after a
+  live playtest found unavoidable two-statue sandwiches. Each Wing now grants
+  damage authority to one stable primary hunter at a time; the second statue
+  keeps the gaze rule but returns to broad patrol instead of joining the same
+  chase, and a frozen statue cannot damage Butch on contact. After any hit, all
+  statues in that Wing disengage for 2.2 seconds so the second statue cannot
+  immediately replace the first. The first forward crossing into each new Wing
+  restores lives to three and grants a short entry buffer; backtracking and
+  re-entering an already visited Wing do not farm refills. Focused Labyrinth
+  coverage passes 20/20. Browser QA forced two nearby hunters while entering
+  Restoration Wing at one life: the HUD restored three hearts, only one hunter
+  ever became damaging, and after its single hit both statues returned to
+  patrol with no console errors. The full Chapter 5 suite passes 167/168; its
+  sole unrelated failure is the pre-existing collapse design-doc wording check
+  (`four stones` versus `four world stones`).
+
+- 2026-08-13: Corrected the Museum lobby's central vitrine to hold exactly two
+  conserved assets from two different chapters: Chapter 1's Night Service train
+  paper model and Chapter 4's Indigo pigment card. Both are the exact assets
+  already used by George's production `final-boss.html` / ALL WORLDS AT ONCE,
+  not Mathias's `hidden-final-boss.html` / BLACK KNIFE; the Museum only scales,
+  places and preserves their existing final-boss paper-card treatment. The
+  west-facing plate identifies both sources, and E/Enter plays the Chapter 1
+  then Chapter 4 accession records. The pair hides when the service desk is
+  reclassified into the same case. Browser QA verified both source IDs loaded,
+  the prompt/dialogue route, the reclassified hidden state, and zero runtime
+  errors; Chapter 5 passes 165/165.
+
+- 2026-08-13: Completed Chapter 5's missing music handoff. The Dreamcore
+  Museum now starts the audible Promenade score on the player's first legal
+  front-hall click and carries that same cue through the Archive Wing doors
+  without restarting it. The Labyrinth now owns a continuous Catacombae
+  exploration bed while its existing procedural chase heartbeat/noise remains
+  layered above it. Both routes use the shared focus/settings mix, and the
+  shared score now pauses and resumes with the global ESC menu. Browser QA
+  confirmed `ch5-museum-promenade` and `ch5-labyrinth-catacombae` are actually
+  playing after a gesture, with no console errors; Chapter 5 passes 163/163.
+
+- 2026-08-13: Fixed the Museum opening lobby's Archive Wing doors. The
+  integrated page was still booting with the legacy standalone prototype state
+  (`ticket.carried = false`), so the glass doors remained solid and the real
+  route demanded an unmarked two-step ticket interaction elsewhere in the
+  room. The normal Museum entry now inherits Chapter 1's punched ticket while
+  reducer tests retain the empty isolated state. A deterministic browser entry
+  proof crossed the real lobby threshold and reached synchronized
+  `CORRIDOR STATE · CORRIDOR SCENE` at (9.50, 0.00) with no console errors;
+  Chapter 5 passes 160/160 tests. The bundled isolated browser client was also
+  attempted but could not click the pointer-lock canvas before its timeout, so
+  the maintained in-app browser supplied the completed runtime proof.
+
+- 2026-08-13: Integrated teammate PR #10 as the latest Chapter 2 authority
+  without replacing unrelated final-integration work. The cyberpunk route now
+  includes the optional rooftop mechanic, Mara's required final-balcony letter,
+  persistent narrative evidence, and the PR's full-body ladder traversal and
+  roof-transfer behavior. The integration preserves the existing Chapter 2
+  magic stone, project-owned score, save checkpoint, HUD and train return.
+  Chapter 2 model coverage passes 9/9; syntax and focused whitespace checks
+  pass. The full production build remains blocked at asset validation by local
+  cloud-placeholder reads, and unrelated Chapter 3/4/5 tests already fail on
+  the current dirty integration baseline.
+
+- 2026-08-13: Reworked the Chapter 5 Labyrinth response loop after live
+  playtest. Statues no longer become stationary props when a chase exceeds its
+  leash or after they return to a post: they continually path between distant
+  room centres across a 6–18-step patrol radius, allowing them to emerge from
+  dead ends and reopen a sneak route. Their Arcade collision circle is also
+  aligned to the plinth/feet instead of embedding in the north wall of every
+  room centre, which had silently cancelled valid AI velocity. The shield is now taught and activated
+  with Space; the first pickup explains the rule and the first nearby hunter
+  holds an explicit `[SPACE] ACTIVATE SHIELD` prompt until activation succeeds.
+  Wing III now swaps four open/closed passage pairs (eight cells) per moving
+  state instead of one pair, with connectivity proved for every state and 24
+  deterministic generation seeds. Wing IV remains the two-floor Last Gallery
+  and now explains its stair/floor/unmarked-seal rule on entry. Labyrinth
+  pre-offset focused coverage passes 15/15 and all Chapter 5 tests pass
+  158/158; the final foot-collider correction is browser-verified and has a
+  new regression assertion, while its repeat suite is pending the local
+  iCloud hydration lock clearing.
+
+- 2026-08-13: Re-edited the Dreamcore Museum as the archive of the complete
+  journey. The lobby now displays Chapter 1's punched ticket, cyan promise
+  thread and carriage relay; the corridor cases add Chapter 2 rooftop transit
+  hardware, Chapter 3 witness/oil-route evidence, Chapter 4 fold/pigment/train
+  studies, and Chapter 5's Looking Fragment/eight-key/gaze index. All five use
+  one accession-card grammar: the institution's object record, Butch's lived
+  reading, and a reconstruction law. Those laws make the genre shifts diegetic:
+  restoration, traversal, investigation, material/color physics and gaze are
+  different archival encodings of different kinds of memory. Door 4 now shows
+  that translation before the Labyrinth takes control and explains the return
+  to the Museum when the reconstruction ends.
+
+- 2026-08-13: George designated `codex/nightfall-full-integration-2026-08-13`
+  as the sole final integration baseline for all subsequent work. Audited
+  GitHub `main` and every PR: PR #8 is the merged Chapter One authority, while
+  the later main-only `Improve UI legibility and ladder safety` patch adds a
+  bounded HUD/ladder fix. Ported that fix into the integration baseline without
+  replacing its later music, save checkpoints, or authored 2→3 transition.
 
 - 2026-08-13: Repaired two production blockers reported after the full-flow
   integration. Museum Door 4 now has a visible gold interaction point and a
@@ -24,6 +249,27 @@ production Conductor boss, never a video or the old Chapter 6 greybox.
   centre reticle misses the thin hidden proxy. Echo City midnight now keeps a
   stronger blue hemisphere/fill-light floor and higher exposure so the night
   route remains readable instead of crushing to black on dim displays.
+  A live player retest showed the camera-close Door 4 position fell just
+  outside the original narrow doorway band. The final local hotfix expands the
+  complete approach zone and lets E activate its fallback directly.
+
+- 2026-08-13: Found and fixed the actual Door 4 failure shown by the live XY
+  HUD. The lobby threshold could request `enterCorridor` before the punched
+  ticket was carried; the state model rejected that action, but the transition
+  director still swapped the rendered root, producing the impossible pairing
+  `LOBBY STATE + CORRIDOR SCENE`. The lobby trigger now requires the carried
+  ticket and every scene transition aborts unless its action changes the model
+  to the declared destination phase. The HUD reports state and scene side by
+  side, local Vite responses disable browser caching, and the affected module
+  URLs were bumped so a deliberate refresh cannot revive stale transforms.
+  Browser QA proved the full boundary chain: no-ticket threshold stays in the
+  lobby; carrying the ticket enters the corridor with both labels synchronized;
+  Door 4 at (38, 0) reports IN RANGE; E/Enter opens the embedded current
+  `labyrinth.html`. Visual evidence is in the workspace-level
+  `output/door4-final-visual/`; Chapter 5 passes 156/156 tests with zero browser
+  console errors. The bundled web-game client was also attempted but stalled
+  during its isolated headless-WebGL launch, so the maintained Playwright MCP
+  supplied the completed keyboard, state, console and visual checks.
 
 - 2026-08-13: Ran a fresh chapter-by-chapter visual audit from the active
   integration worktree, with production title plus direct playable routes.
@@ -916,3 +1162,280 @@ chapter after what it is, not after the slot it currently occupies.
 - The hidden title code `1111` still enters Chapter 3 through the real 32.88-second `2-3.mp4`. During that film, the preloader now warms all 79 critical page/model/material/character/replacement/music resources with six parallel workers; live QA reached `ready`, 79/79, zero failures before the film ended.
 - After transition, live QA reported `chapter3-temporary-final-v31-integrated-v32`, 30 city model sources with no model errors, 26/26 character instances, 20/20 fitted replacement sets and no fallbacks. A warm re-entry reached initialized gameplay in about 1.76 seconds. Chapter 3 regression is 206/206 and the production build passes.
 - The Museum Labyrinth was audited, not replaced: the integrated implementation is the later full production branch with four wings, eight keys/statues, first-key wing connectors, shields/gaze pursuit and the Door 4 entry contract. Chapter 5 remains 148/148.
+
+## Final integration baseline and alternate truth ending
+
+- 2026-08-13: `codex/nightfall-full-integration-2026-08-13` is now the sole final integration baseline for subsequent local changes. GitHub audit confirmed PR #8 as the latest Chapter One authority; only the later mainline ladder-safety and HUD-legibility fixes were ported, preserving the integration branch's music, checkpoints, transition and chapter handoff.
+- Chapter 4 remains the latest three-scene route: Painted Country, Drawing Studio, then the HUE-like six-color Pigment Train chase and physical train escape. It is not replaced by the older wash/bridge prototype.
+- Added one optional magic stone offer after each of Chapters 1–5. Stones are stored per save slot and cannot be duplicated. A complete five-stone set routes the Museum collapse to a hidden true ending revealing that Mara was a Conductor-created illusion and Butch never had a sister; incomplete sets retain the existing Final Boss route.
+- Echo City's playable main-question menus are approximately 20% shorter by removing five low-priority branches. World objects, incidental conversations and environmental interactions remain intact. The midnight blue ambient/fill-light readability pass remains covered by regression tests. This explicit narrative reopening advances the integrated Chapter 3 source fingerprint from lock v32 to v33; the asset lock is unchanged.
+- Labyrinth survey map now uses a bright blue field, ivory maze walls and cyan framing for clear lower-right visibility. Statue wake ranges are longer; a chase that exceeds its leash enters a real returning state and paths back to the original patrol post instead of stopping at the boundary.
+- Focused integration, save, Chapter 3 night, collapse and Labyrinth coverage passes 73/73; whitespace validation passes.
+
+## Door 4 input authority and production-mode local run
+
+- 2026-08-13: Reproduced the Door 4 failure as a mixed-runtime problem: the old
+  `127.0.0.1:5192` process was still occupying the port after it stopped serving
+  pages, while the Museum entry graph reused an older fixed cache token. This
+  left already-open tabs displaying a newer door model over stale input code.
+- Door 4 now has one authoritative two-dimensional proximity test shared by the
+  visible prompt, keyboard/mouse entry path, and corridor fallback. The global
+  corridor-wide bypass was removed; the gold interaction point and clickable
+  prompt appear only inside the actual Door 4 zone. Incidental narration can no
+  longer consume the only entrance action, while active dialogue choices remain
+  protected. The Museum entry cache token was advanced so old and new modules
+  cannot be mixed in one tab.
+- Real in-app-browser input at the Door 4 pose opened
+  `CHAPTER 05 · THE LABYRINTH` on the first E press and mounted
+  `/labyrinth.html?embedded=1`. The required web-game client independently
+  confirmed `activeDirection: labyrinth` and `labyrinthExhibit.open: true`.
+  Chapter 5 regression is 154/154.
+- Restarted local port 5192 in Vite production mode. The integrated root now
+  shows the formal NIGHT SERVICE title terminal, not `DEV BUILD / CHAPTER
+  SELECT`; standalone Museum shows `TITLE`, not `` ` DEV MENU ``. No app bundle
+  was rebuilt and no files were uploaded or sent to iCloud.
+- 2026-08-13 normal-play Door 4 follow-up: the first fix was verified only from
+  the QA camera at `Z=0`. George's real full-door viewing position can sit just
+  beyond the former `Z=0.35` edge, where the reticle also misses the thin door
+  proxy. Added a live top-left coordinate HUD (`X`, map `Y/Z`, phase, Door 4
+  ready/out-of-range state) and expanded the physical Door 4 band to
+  `X 36.45–39.55`, `Z -1.92–0.95`. A new regression proves `X=38, Z=0.8` is a
+  valid corridor entry pose.
+- The production Vite server deliberately has HMR/watch disabled. Its transform
+  cache continued serving the old unversioned `directionDoorways.js` even after
+  the versioned HTML and App had updated, producing the observed mixed HUD/zone
+  state. Restarting port 5192 cleared that nested-module cache. Fresh real input
+  at `X=38, Z=0.36` and automated input at `Z=0.43` both opened
+  `/labyrinth.html?embedded=1` on the first E/Enter. Chapter 5 remains 154/154;
+  no console-error artifact was produced.
+
+## Four-world magic stones and hidden Black Knife route
+
+> Superseded for the final count on 2026-08-14: the Museum now contains a fifth,
+> collectible Black Knife Stone behind shattered evidence glass. The hidden
+> Black Knife route requires all five stones (the four chapter stones plus this
+> Museum stone); any incomplete set still selects the Conductor route.
+
+- 2026-08-13: Replaced the automatic post-level stone offers with four real,
+  per-save world pickups. Chapter 1 reveals the Ember Stone inside Mara's
+  Phase IV suitcase only after the unfinished envelope conversation reaches
+  its final line. Chapter 2 places the Grid Stone at chest height on the lower
+  RETURN roof. Chapter 3 mortars the Echo Stone into the old archive's street
+  recess. Chapter 4 tucks the Pigment Stone behind the loose paper panel near
+  the Drawing Studio exit. The Museum lobby contains the fifth Black Knife
+  Stone behind shattered evidence glass.
+- The Museum collapse now reads the five-stone snapshot before preloading or
+  routing. An incomplete set retains `/final-boss.html?from=chapter5` and the
+  existing Conductor finale. Exactly five stones preload and open
+  `/hidden-final-boss.html?from=chapter5`, integrating Mathias's four-phase,
+  sixty-second Black Knife survival battle; winning that battle alone exposes
+  the existing hidden truth ending.
+- The Chapter 2→3 film now keeps its loading blackout until the entire Chapter
+  3 preload job settles instead of navigating after the former 2.2-second
+  ceiling. Live Chapter 3 verification reported 30/30 model sources, 72/72
+  expected instances, all 20 replacement sets loaded and zero model errors.
+- Browser verification captured all four authored hiding places. Ordinary
+  movement collected the Chapter 2 and Chapter 4 stones; a real world-object
+  click collected the Chapter 3 stone. Current collection feedback reports
+  every pickup against the five-stone total, beginning at `MAGIC STONE 1 / 5`.
+  The required web-game client also exercised Chapter 2 pickup and the playable
+  Black Knife attack field. Core save/route/regression coverage is
+  22/22, the asset check is clean, targeted whitespace validation passes, and
+  the standalone hidden-boss production build passes. The complete 11-entry
+  production module graph also builds successfully at 301 modules; validation
+  used a temporary unsynced output directory because writing the duplicate
+  public tree back into this iCloud worktree repeatedly blocked on placeholders.
+
+## Chapter 4 archive + HUE train fusion
+
+- 2026-08-13: Replaced the older integration copy of the opening Painted Country scene with the teammate-authored complete three-archive gallery: the Nave, Listening Field and Last City retain their full image captions, notebook, paper-grid traversal and three increasingly difficult Color Link cards.
+- Each developed archive now returns two pigments to Butch's HUE halo (`green/red`, `blue/orange`, `yellow/violet`). Solving the shared `MOON` deduction transfers all six colors directly into Pigment Train, so the fused route no longer repeats the separate color-collection section.
+- The train still requires the authored bottom-up dependency order and matching HUE colors. Boarding now opens a five-sign Ignition Archive that explicitly recalls the three narrative notes. Wrong signs are recoverable and preserve the chapter; `MOON` starts the existing crowd chase and consequence.
+- Verification: Chapter 4 syntax checks and all 35 Painted Country tests pass. Live browser QA visually confirmed the sealed Nave archive card, six-color HUE train build, five-sign ignition overlay, recoverable `EYE` choice, and `MOON` transition to `people-are-coming` with the pursuing crowd. Asset verification passes. An isolated Chapter 4 production build passes (32 modules); the full production build transforms all 302 modules but copying the unrelated full `public/` tree remains slow under the iCloud-backed workspace.
+
+## Chapter 3 Echo Stone NPC side quest
+
+- 2026-08-13: Superseded the archive-wall pickup described above. The Chapter 3 Echo Stone is now the reward for a fully optional dusk-campfire conversation with Seline. She found it sewn inside an unclaimed laundry coat; players who skip the campfire can finish the chapter but cannot obtain this stone.
+- The stone is committed only after all four side-quest lines complete. Repeating the interaction after collection returns Seline's ordinary ambient dialogue and cannot duplicate the save-slot stone. Chapter 3 also now supports `E` / `Enter` to activate the nearest world interaction and advance non-choice dialogue, while preserving pointer interaction.
+- Live web-game QA proved the boundary: the first Seline line reported `collected: false`; after the fourth line the same route reported `collected: true`. The original capture predates the five-stone total; current feedback displays `MAGIC STONE 1 / 5`. The evidence screenshot remains `output/magic-stones/chapter-3-seline-complete-final-v2/shot-1.png`; no console-error artifact was produced. Focused stone/Chapter 3 coverage passes 46/46, assets verify cleanly, and the isolated Chapter 3 production build passes at 49 modules.
+
+## Chapter 4 visible archive and sign interactions
+
+- 2026-08-13: The three hanging archive frames are now explicit mouse targets in both sealed and developed states. Hovering gives a cyan outline and contextual copy; clicking from too far explains that Butch must build closer, while clicking within the existing authored read radius opens that archive's Color Link. The E-key route remains available.
+- The final wall's five images are now labeled (`EYE`, `MOON`, `HEIR`, `RAPTURE`, `OEDON`), expose a hand cursor and cyan hover outline, and accept direct clicks. Locked clicks explain which prerequisite is missing; E beside the wall reviews the narrative notes, whose shared final word remains the intended deduction.
+- **Corrected after user review:** the four-frame `butch-latest` replacement was rejected. Painted Country keeps the teammate gallery's original code-drawn brush figure; Drawing Studio and Pigment Train keep their original animated paper Butch. The archive and sign interaction work remains unchanged.
+- Verification: syntax checks pass; all 36 Painted Country tests pass; the isolated production build passes. Browser QA visually confirmed the restored teammate figure at the Chapter 4 start. Earlier real-click checks remain valid for the Listening Field frame and the wall's `MOON` plate.
+
+## Chapter 4 gallery playtest repairs
+
+- 2026-08-13: Rebuilt archive 1 as a true teaching Color Link: no torn holes, three separated pairs and three direct horizontal routes. The card now explicitly says to drag each color straight across, leaving bends and shared-hole planning for the later cards.
+- Removed the varnished gallery patch beneath `THE LAST CITY`. The door remains varnished, but the full wall beneath the third archive is ordinary drawable paper, so the taught staircase action works directly instead of requiring an unclear side route.
+- The three photorealistic New Harmony archive pictures are no longer loaded into the gallery. Each archive now develops into an in-engine graphite/pigment sketch of the recurring eye emblem on ruled paper; the long captions and shared final word `MOON` remain the narrative clue.
+- Verification: all 37 Painted Country tests pass and the isolated production build passes. Live browser input completed archive 1 using exactly three straight drags, revealed the new eye drawing and registered the archive/pigment unlock. A separate live input placed a paper block directly beneath The Last City (`painted: 1`, `canWash: true` afterward). Both scenarios reported zero console errors.
+
+## Chapter 4 instant paper placement
+
+- 2026-08-13: Fixed the intermittent-feeling paper brush. The first cell of a stroke is now applied synchronously from Phaser's pointer-down event, so a short tap cannot begin and end between update frames. Holding and dragging still uses the existing frame loop to interpolate a continuous line.
+- World painting explicitly yields to archive frames, door signs and the open Color Link viewer, preventing the new immediate path from placing paper behind an intended interaction target. Pointer-up also clears stroke state immediately.
+- Verification: all 38 Painted Country tests pass and the isolated production build passes. A browser regression using three back-to-back zero-hold clicks produced exactly three paper cells (`painted: 3`) with zero console errors; before this fix the same short click could produce zero cells.
+
+## Chapter 4 free paper placement
+
+- 2026-08-13: The follow-up playtest recording showed that quick clicks were now received, but the old support rule rejected cells that did not touch existing paper and flashed `PAINT NEEDS SOMETHING TO HOLD IT.` Removed that support requirement: any empty, unvarnished cell within the brush circle now accepts a paper block immediately.
+- Reach, character-body, archive-frame, door-sign and open-viewer input boundaries remain intact. Holding and dragging still interpolates a continuous paper path, while washing and varnished regions behave as before.
+- Verification: all 38 Painted Country tests pass, the isolated production build passes, and the required browser client reproduced a one-frame click well above the floor with `painted: 1`, `inReach: true`, and the placed cell immediately becoming washable.
+
+## Chapter 4 archive symbol deduction
+
+- 2026-08-13: Replaced the three repeated eye drawings with three different large hand-drawn marks that correspond directly to final-door choices: `EYE`, `HEIR`, and `RAPTURE`. Every archive also carries the same smaller crescent `MOON` accession seal in its lower-right corner.
+- Captions, archive titles, notebook entries, the notes comparison view, objective copy, door hint and the door's own question now teach one consistent rule: the large mark changes, so choose the small seal repeated in all three. `OEDON` remains the unused distractor.
+- Verification: all 38 Painted Country tests and the isolated production build pass. In-app browser screenshots visually confirmed the distinct eye, crowned heir and radiating rapture drawings, each with the same small moon seal. The required browser client reported the developed archive visible and solved with no console-error artifact. The final integration browser was restored to the normal Chapter 4 route afterward.
+
+## Chapter 4 restored three-stage route
+
+- 2026-08-13: Removed the gallery-to-train fusion shortcut. Normal play is again `PaintedCountry gallery → DrawingStudio canvas → PigmentTrain yard`. The gallery starts at the far-left cold end (`x=200`) and no longer imports, unlocks, renders or reports any HUE pigment ring; it carries only the solved `MOON` archive answer into later scenes.
+- Restored `THE OPEN SHEET` as Part II. Its reference and copy easels now use 7×7 grids and its free canvas uses 10×7, all with the same 20px paper-cell metric as Part I. The six required color cells are spread across the larger small-cell grid, preserving readable/clickable canvas area.
+- Part III ignores carried pigment state during normal entry, clears the studio colors, spawns Butch at `x=116` before the first pickup at `x=270`, and starts in `collect-six-colors` with every pigment uncollected (`0/6`). Explicit QA-only train routes may still prefill colors for isolated train testing.
+- Verification: all 39 Painted Country tests pass and the isolated 32-module production build passes. The required browser client confirmed Part I at `x=200` with `pigmentRingVisible: false`, Part II with `cell: 20` and the 7×7/10×7 layouts, and Part III at `x=116`, `collected: 0`, six uncollected pigments and no console-error artifact. In-app browser visual QA confirmed the small-grid easels and the third-stage spawn before Bakery, Station and Orchard pickups. The user-facing browser is restored to the normal port-5302 Part I entrance.
+
+## Chapter 4 Drawing Studio real-object pass
+
+- 2026-08-14: Replaced Part II's six large cabinet props and six isolated answer squares with eighteen miniature colored keepsakes: three objects in every one of the cabinet's six compartments. The source set now includes cups, fruit, books, clocks, plants, bottles, boxes, a telephone, vase, kettle, cushion, ribbon and jar, all rendered as small colored line drawings.
+- The reference and player easels now use 9×9 grids with 18px cells and a shared hand-drawn still-life contour. Eighteen finite color marks build a recognizable two-flower vase. Matching is by observed pigment, not by one unique prop-to-cell identity, so same-color objects function as paint rather than puzzle keys. The optional practice canvas is 12×9.
+- The Chapter 4 color stone is no longer visible near the exit. It remains hidden behind the cabinet until the still life is complete and all eighteen objects are drained; the emptied compartments then reveal the pickup. Extraction and placement holds were reduced to 0.18 seconds for immediate-feeling input.
+- The chapter order remains `teammate PaintedCountry gallery → DrawingStudio still life → PigmentTrain yard`. The train still begins at `x=116`, before all six pickups, with `0/6` colors.
+- Verification: all 39 Painted Country tests, syntax checks and whitespace validation pass. The required browser client proved a real right-hold drains the red cup and carries its pigment, the last painted cell sets `complete`, `allSourcesDrained`, `unlocked` and `visible` true, walking to the empty cabinet collects the stone, and the train QA entry remains `collect-six-colors` at `0/6`. In-app browser visual QA confirmed the full 18-object cabinet, recognizable vase/flowers, empty cabinet and revealed stone with zero console warnings/errors. A redundant isolated build attempt was stopped after the iCloud-backed workspace stalled without output; the same Chapter 4 graph had passed immediately before this source-only pass, and the live Vite runtime compiled the changed modules successfully.
+
+## Chapter 3 Toma and Copper Heron collision repair
+
+- 2026-08-13: Confirmed `codex/nightfall-full-integration-2026-08-13` at `7762415` is the newest local final-integration baseline and preserves the same-day uncommitted debug work. Older local copies remain behind this branch.
+- Toma stays at the approved `[37.68, 0.5, -15.87]`. Butch's transport approach moved from inside the Transit Ministry footprint to `[37.68, 0.5, -14.35]`, 1.52 m beside Toma on walkable pavement. Live Chapter 3 interaction-07 QA confirmed the final player position and produced no console errors.
+- Screenshot follow-up moved Lev from the isolated `[26.77, 0.5, -15.09]` staging point to `[36.6, 0.5, -14.35]`, immediately left of Butch and still outside the ministry footprint. Live interaction-07 QA confirmed the compact Lev–Butch–Toma group with zero replacement errors; the Chapter 3 final integration lock is now v35.
+- Added named actor-padded Copper Heron lobby collision footprints for the reception counter, dining table/window cabinet and staircase. Interior click paths route around the footprints, and a per-frame safety guard cancels stale walking and pushes any penetrated player back to the nearest safe edge. Overlapping dining/stair footprints are treated as a union so the player cannot bounce between boxes.
+- Live hotel QA loaded the complete lobby with zero replacement errors. Direct runtime probes confirmed reception, dining, stairs and their overlap all eject to a safe edge and report no remaining collision on the next check.
+- Advanced the explicitly reopened Chapter 3 integration lock to v34. Chapter 3 tests pass 209/209, asset verification passes, whitespace validation passes, and the full 301-module production build passes. iCloud placeholders were hydrated from the current Git objects so verification used the exact branch resources rather than the older packaged App copies.
+
+## NIGHTFALL v1.3 / Chapter 3 v35 macOS package
+
+- 2026-08-13: Packaged the accepted local final-integration state as `NIGHTFALL-v1.3-v35.app` (bundle version 1.3, build 4) without overwriting release 1.2. The app and its transferable ZIP are stored in `/Users/zhongzicheng/Codex Local Backups/NIGHTFALL/Release/`.
+- The packaged game contains all 1,002 Git-tracked public resources with no missing or mismatched blobs and no iCloud placeholders. Existing verified release assets were reused byte-for-byte where possible; 192 new or changed resources were restored from the current Git objects. The current production JavaScript build completed at 303 modules and carries the Chapter 3 v35 source lock.
+- The 805 MB Apple Silicon app is ad-hoc signed and passes deep strict signature verification. Native WKWebView smoke testing played `start.mp4` (`currentTime=1.59`, `readyState=4`, no media error), while the bundled local server returned the root, Chapter 3, title art and MP4 byte ranges correctly and shut down cleanly afterward.
+- The 689 MB ZIP passes full archive integrity testing. SHA-256: `65660a28eeaa73d24827ea38720a33d3b41599cd850f251f8c33ea5baedc517f`.
+
+## Final-boss route authority, Easter Egg entry, and intro-film package
+
+- 2026-08-14: The authoritative Museum-to-finale decision uses five stones. The Museum freezes the stone snapshot before blackout, then uses that same result for both preloading and navigation: zero through four stones route to the existing Conductor finale; all five, including the Museum Black Knife Stone, route to the Black Knife hidden boss.
+- The production title screen's invisible `1111` chapter router now has a seventh entry, `EASTER EGG · BLACK KNIFE`. It opens the hidden boss directly for testing without granting or mutating any saved stones, so it cannot accidentally unlock the hidden ending in a normal run.
+- Added a two-film generation package under `docs/boss-cutscene-generation-package/`. The Conductor and Black Knife routes have separate shot plans, generation prompts, negative prompts, delivery specs and reserved runtime filenames. Playback remains on the existing safe handoff until the two generated MP4s are delivered.
+- Verification: 27/27 focused route, stone, game-flow and Museum-collapse tests pass; the asset inventory is clean; the complete 305-module production graph builds successfully. Production browser QA shows all seven `1111` entries without clipping and confirms the seventh entry reaches `hidden-final-boss.html?easter-egg=1`. The hidden-boss runtime separately reports `entry: title-easter-egg`, `unlocked: true`, and an empty stone collection.
+
+## Chapter 3 / Chapter 6 transition-preload final audit
+
+- 2026-08-13: Chapter 3's normal Chapter 2 film route already required the complete preload job. The hidden `1111` Chapter 3 route now applies the same hard gate: after `2-3.mp4` ends, navigation waits on the entire Chapter 3 job instead of using the ordinary 2.2-second grace ceiling.
+- The Museum now awaits its one frozen, stone-resolved Boss preload at the final black threshold before navigating. Normal play still starts this job at the Labyrinth entrance and reuses it through the collapse, but direct Chapter 6 entry and cold/slow browsers can no longer open either Boss while its profile is pending.
+- A disabled-cache browser audit measured Chapter 3 at 79/79 resources, zero failures: 62 GLB world/character/replacement/animation assets, nine music files and eight page/runtime resources in about 26.4 seconds. This remains inside the approximately 32.9-second `2-3.mp4`; the hard gate covers slower cases. The Conductor route completed 23/23 with 14 GLBs and five music files in about 0.16 seconds. Black Knife completed 4/4 in about 0.01 seconds and intentionally has zero external GLBs because the fight is procedurally drawn.
+- Live entry QA showed Chapter 3's complete 30-source / 72-instance city with no model errors and the Conductor fight with `assetsReady: true`, all 14 GLBs installed and no asset errors. One parallel dev-server run produced a transient local `ERR_CONTENT_LENGTH_MISMATCH`; a sequential rerun produced no browser error, while its snapshots correctly remained on the loading shell because the standard deterministic client does not wait real network time. Focused routing/preload tests passed 27/27 immediately after the change. A later redundant build rerun was stopped after the iCloud worktree blocked for over a minute; the same 305-module build had passed directly before this audit and the changed files are control-flow-only.
+
+## Museum central journey flat-vitrine display
+
+- 2026-08-14: The lobby's central case keeps the conserved Chapter 1 Night Service train and Chapter 4 INDIGO paper assets, but now treats the case as a museum reading vitrine rather than an upright stage. Every paper artifact and the looping motion archive lies directly on the deck; the former vertical card wall and internal shelf are removed.
+- The two hero sheets, route card, pigment log and motion record are distributed across the padded tabletop. A wheelset, ticket stack, pigment vials, folded-paper study, route signal and six-color palette occupy separate gaps without covering the sheets. All eleven authored footprints remain inside a 12% glass-edge safety margin.
+- Verification: the four focused Museum display tests pass. Live browser capture `output/museum-central-display-flat/shot-0.png` confirms the flat, separated arrangement and runtime QA reports both original source assets plus the complete mixed-media item list. The capture-only server omitted unrelated public models/audio, so its expected 404 is not an exhibit-code failure. Port 5304 now serves the current flat-vitrine source for user review.
+### 2026-08-14 — Five-stone runtime consistency pass
+
+- All magic-stone progress now derives from the five-item registry, so the first pickup reports `MAGIC STONE 1 / 5` and continues through `5 / 5`.
+- The fifth pickup is the Museum lobby Black Knife Stone; browser QA confirmed the visible case and interaction target.
+- Museum routing remains frozen once resolved: `0–4 / 5` opens the Conductor finale, while exactly `5 / 5` opens the Black Knife hidden boss. The title-screen Easter Egg remains a test-only bypass.
+- Chapter 3 and both Chapter 6 destinations retain their transition-time preload completion gates. Cutscene asset work was intentionally excluded from this pass.
+- Focused magic-stone and route coverage passes 9/9.
+
+### 2026-08-14 — Prologue interaction hotfixes
+
+- Dialogue now clears player acceleration and velocity on entry and on every dialogue-input frame. This prevents a movement force from the frame that opened the first envelope from continuing through the dialogue and door.
+- Phase IV suitcase inspection is now a one-time optional interaction: closing the inspection returns `E` to the moving case, so the balancing puzzle can be carried forward even if every evidence item was not read.
+- The Chapter 1 carriage-two relay prompt moved 32px downward, below the bright panorama seam for contrast against the dark carriage wall.
+- Settings now use separate Master, Music, and SFX gains. Background/credits/cinematic music responds to Music; Phaser effects respond to SFX; Master still scales both.
+- Verification: 55 focused save, narrative, relay-art, and Phase IV logic tests passed; production Vite build completed (306 modules). The required browser QA client loaded the live Phase II state and reported no console errors, but its headless Phaser canvas screenshot rendered black despite valid runtime state, so the visual placement is additionally locked by the relay-art geometry test.
+
+### 2026-08-14 — Music-bus lift
+
+- Raised the Music bus by 15% after the Master × Music slider calculation. The lift applies consistently to streamed score, credits, and cinematics, while Master and SFX remain unchanged.
+- Verification: save/settings and game-flow tests pass 14/14; production Vite build completes at 306 modules.
+
+### 2026-08-14 — Relay prompt placement correction
+
+- The earlier 32px shift left the relay prompt in the bright upper panorama. It now uses the relay cabinet's own wall coordinate (`y=482`), directly above the cabinet and 126px below the original placement.
+- Verification: all 29 relay-art tests pass; production Vite build completes at 306 modules.
+
+### 2026-08-14 — Phase IV inspection handoff correction
+
+- The suitcase inspection now records its one-time completion as soon as the panel opens, rather than waiting for a particular close-event path. After the panel closes, E cannot reopen it and routes directly to the movable balancing case.
+- Verification: 21 focused narrative and first-weight tests pass; production Vite build completes at 306 modules.
+
+### 2026-08-14 — Envelope dialogue physics lock
+
+- Screen-recording review showed the remaining issue was the first-envelope dialogue: the Arcade physics body could still advance even though dialogue input was already blocked. Archive dialogue and inspection panels now disable the body itself, clear force and velocity, and restore it only when their lock ends; this prevents movement and door clipping throughout the conversation.
+- Verification: 21 focused narrative and first-weight tests pass; production Vite build completes at 306 modules; whitespace validation passes.
+
+### 2026-08-14 — Active preview server corrected
+
+- The user-facing Safari page was connected to the stale `127.0.0.1:5192` Vite process, not the newer final-integration runtime. It continued to serve the pre-fix relay prompt (`deviceY - 74`) and omitted the Phase IV inspection-completion path, which exactly matched the supplied screenshot and recording.
+- Restarted that same port from this workspace. Its served source now places the relay prompt at `wallY - 74` (`y=482`) and includes the one-time Phase IV handoff plus the dialogue physics lock, so the original local URL remains valid.
+- Verification: 50 relay-art, narrative, and first-weight tests pass; automated 5192 runtime state has zero reported errors. Headless Phaser screenshot capture remains black despite valid gameplay state, so on-screen confirmation should use the user-facing Safari canvas.
+
+### 2026-08-14 — Production preview mode restored
+
+- Confirmed every current hotfix file is in this final-integration workspace. The temporary 5192 restart had accidentally omitted `--mode production`, which exposed the development chapter launcher. The port now runs the same workspace in production mode; it opens the authored NIGHTFALL title menu with no Dev Menu or chapter-select route.
+- Production browser smoke check at `127.0.0.1:5192` visibly shows the title screen and reports `scene: TitleMenu`, `chapterSelect: false`.
+### 2026-08-14 — 1111 grouped test-node router
+
+- Expanded the hidden `1111` title-menu shortcut into a chapter-organized test router with 25 direct playable nodes: Chapter 1 (6), Chapter 2 (2), Chapter 3 (4), Chapter 4 (3), Chapter 5 (6), and Chapter 6 (3).
+- Each node now bypasses transition films and opens its matching playable checkpoint directly. Direct-route permissions are activated only after entering `1111` in that browser session and are cleared on the normal return-to-title flow; the production title screen remains free of the Dev Menu.
+- Added the missing Chapter 1 opening-node QA route and production support for the Chapter 4 drawing/pigment entry choices.
+- Verification: 59 focused tests passed, production Vite build passed, and the live `5192` production preview was checked with `1111`: all six chapter headers appeared, no Dev Menu appeared.
+
+### 2026-08-14 — Black Knife vitrine reachability correction
+
+- The Black Knife Stone now rests behind the lobby-entry-facing long glass pane in the central vitrine, at a normal but readable 0.22 scale with no glow, pulse, label, or other attention marker.
+- After taking the fire axe, the whole visible long pane is a valid break surface; this replaces the previous small proxy on the far side that could not be triggered from the front. The stone still requires an explicit primary click after that pane is broken.
+- Verification: source syntax, whitespace validation, and the focused Museum/Chapter 4 test set pass 8/8. Live browser capture `output/web-game/shot-2.png` visibly shows the unlit purple stone within the central vitrine and the runtime reports no console errors.
+
+### 2026-08-14 — Black Knife stone visibility correction
+
+- Root cause: the first visible-side placement reused the Chapter 4 INDIGO paper asset's coordinates, so the stone was geometrically present but fully occluded by existing evidence when the player approached the vitrine.
+- The stone and its post-break click proxy now use the open right-front deck space (`x: 1.0, z: 0.98`), separated from every existing central-display footprint. It remains unlit and unlabelled; only its spatial readability changed.
+- Restarted the exact Safari production preview address (`127.0.0.1:5192`) because this project's Vite configuration deliberately disables file watching/HMR. Focused Museum coverage passes 1/1; current runtime visual proof is `output/museum-stone-clear-position/shot-2.png`.
+
+### 2026-08-14 — Black Knife glass prompt reliability correction
+
+- Root cause: the transparent large vitrine made the centre-reticle ray interaction unreliable at the only legal standing distance. The player could hold the fire axe but never focus the invisible break proxy.
+- With the axe held, standing at the accessible long side of the central case now supplies `E — BREAK THE LONG SIDE GLASS` as a proximity fallback. Once used, the pane disappears, shards appear only there, and the stone shifts to the opening's edge; the later stone pickup still requires a centred primary click.
+- Focused evidence test and syntax/whitespace checks pass; `127.0.0.1:5192` was restarted from this workspace and the launch smoke capture is `output/museum-break-fallback/shot-2.png` with no runtime error output.
+
+### 2026-08-14 — Black Knife pointer-lock interaction fix
+
+- Root cause of the missing E prompt: the Museum interaction system clears all focus when Safari briefly reports pointer lock inactive, even during an otherwise movable local play session. The Black Knife fallback had been set correctly but was being discarded before the prompt rendered.
+- Critical fallback prompts can now remain visible through that transient pointer-lock state. The lobby also owns the legal proximity action directly on both E/Enter and primary mouse input, so breaking the long glass no longer depends on the generic raycast state. The stone remains fixed at its understated visible location; it does not move when the glass breaks.
+- Direct runtime proof at the user-reported pose (`x=1.75, z=2.36`) reports `focused: black-knife-long-side-glass`, prompt `block`, then successful break with `glassVisible: false`; source syntax and focused evidence test pass.
+
+### 2026-08-14 — Black Knife stone material correction
+
+- The fixed-position Black Knife Stone now uses a low-poly rough dark grey-brown rock material, not purple gem language. Its radius is `0.13` instead of `0.22`, reducing volume to roughly one-fifth while preserving an aimable pickup proxy.
+- Focused Museum evidence coverage passes; live launch capture `output/museum-small-stone/shot-2.png` has no runtime error output. The final production preview was restarted at `127.0.0.1:5192`.
+
+### 2026-08-14 — Conductor Movement IV paint-flow restoration
+
+- Restored the former hold-to-transfer interaction only in the false-Boss fourth movement: hold right mouse on a landed pigment to draw five animated color strands and nine droplets into the player, then hold left mouse to stream that color back into the Conductor.
+- Return now resolves through the visible stream rather than firing a separate Indigo paper card. The existing paint-fill shader and strips remain, so each successful return visibly fills upward from the Conductor's legs.
+- Verification: source syntax and Final Boss production build pass. Browser play-test confirmed both transfer states expose 5 strands and 9 droplets; a completed return dealt 13 damage (62 → 49) and raised the Conductor paint coverage to 0.58 with no browser errors. Visual captures: `output/final-boss-paint-transfer/absorbing-flow.png` and `output/final-boss-paint-transfer/returning-flow.png`.
+
+### 2026-08-14 — Black Knife final visibility and post-break prompt correction
+
+- The previous supposedly open position still shared the pigment-card/folded-paper depth band. The stone is now in the clear front strip of the central case (`x: 0.86, z: 1.08`), remains fixed before and after breaking, and keeps the same small, unlit, rough grey-brown rock material.
+- After the long pane has broken, being near the opening now reliably displays `CLICK — TAKE THE BLACK KNIFE STONE`; it is deliberately prompt-only until the centre ray actually reaches the stone proxy, so a random click cannot collect it. The pre-break side still shows `E — BREAK THE LONG SIDE GLASS`.
+- Source syntax, whitespace checks and focused Chapter 5 evidence pass. Direct production runtime proof at the reported player pose (`x: 2.78, z: 1.95`) confirms the pre-break E prompt and action, then the post-break click prompt with unpointed click rejected. Final visual capture: `output/black-knife-final-qa/shot-0.png`.
+
+### 2026-08-14 — Credits roster normalization and title-menu playback
+
+- The crew manifest now presents every teammate identically as name, route/line label, and one role title. George retains `CREATIVE & INTEGRATION LEAD`, but no one has an expanded contribution list.
+- The title-menu Credits action plays `Last and First Light` through the music channel after its click gesture and stops/resets it on exit. Production browser QA reports the credits panel visible, all five names present, roll active and `musicState: playing`; no console errors. Visual capture: `output/title-credits-final-qa/shot-0.png`.

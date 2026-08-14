@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  CHAPTER4_IGNITION_SIGN,
   EXPANSION_PHASE,
   PIGMENTS,
   TRAIN_BUILD_EXAMPLE_ORDER,
@@ -20,6 +21,13 @@ test('all six finite pigments are collected before train assembly', () => {
   assert.equal(chapter.placePart('green', 'green'), false);
   chapter.collect(PIGMENTS[5].id);
   assert.equal(chapter.snapshot().phase, EXPANSION_PHASE.BUILD);
+});
+
+test('the train yard starts before the six pickups with an empty pigment ring', () => {
+  const chapter = createChapter4Expansion();
+  assert.equal(chapter.snapshot().phase, EXPANSION_PHASE.COLLECT);
+  assert.equal(chapter.snapshot().collectedCount, 0);
+  assert.equal(chapter.snapshot().pigments.every(({ collected }) => !collected), true);
 });
 
 test('the train must start at the wheels and obey support dependencies', () => {
@@ -69,6 +77,10 @@ test('boarding ends with the pursuing crowd and has no repair phase', () => {
   reachBuild(chapter);
   TRAIN_BUILD_EXAMPLE_ORDER.forEach((id) => chapter.placePart(id, id));
   assert.equal(chapter.boardTrain(), true);
+  assert.equal(chapter.snapshot().phase, EXPANSION_PHASE.BUILD, 'the archive ignition still waits');
+  assert.deepEqual(chapter.chooseIgnition('eye'), { ok: false, reason: 'wrong-sign' });
+  assert.equal(chapter.snapshot().ignition.wrongTries, 1);
+  assert.deepEqual(chapter.chooseIgnition(CHAPTER4_IGNITION_SIGN), { ok: true, reason: 'started' });
   assert.equal(chapter.snapshot().phase, EXPANSION_PHASE.CHASE);
   assert.equal(chapter.snapshot().complete, false);
   assert.equal(chapter.revealConsequence(), true);
@@ -86,6 +98,7 @@ test('collection, placement and consequence reveal are idempotent', () => {
   TRAIN_BUILD_EXAMPLE_ORDER.forEach((id) => chapter.placePart(id, id));
   assert.equal(chapter.placePart('green', 'green'), false);
   chapter.boardTrain();
+  chapter.chooseIgnition(CHAPTER4_IGNITION_SIGN);
   assert.equal(chapter.revealConsequence(), true);
   assert.equal(chapter.revealConsequence(), false);
 });

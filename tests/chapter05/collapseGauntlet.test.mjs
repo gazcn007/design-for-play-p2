@@ -35,6 +35,7 @@ const corridorSource = fs.readFileSync(new URL('../../src/chapters/museum3d/scen
 const directorSource = fs.readFileSync(new URL('../../src/chapters/museum3d/systems/CollapseGauntletDirector.js', import.meta.url), 'utf8');
 const audioSource = fs.readFileSync(new URL('../../src/chapters/museum3d/systems/AudioGuide.js', import.meta.url), 'utf8');
 const appSource = fs.readFileSync(new URL('../../src/chapters/museum3d/Museum3DApp.js', import.meta.url), 'utf8');
+const gameFlowSource = fs.readFileSync(new URL('../../src/shell/gameFlow.js', import.meta.url), 'utf8');
 const designLock = fs.readFileSync(new URL('../../docs/CHAPTER_05_COLLAPSE_GAUNTLET_DESIGN_LOCK_V02.md', import.meta.url), 'utf8');
 
 test('the gauntlet locks the eight-key, three-hit, and telegraph tuning', () => {
@@ -85,6 +86,14 @@ test('key slotting has a visible hand animation and an oppressive layered score'
   assert.match(audioSource, /tension = \[207\.65, 220\]/);
 });
 
+test('the black threshold plays the resolved route film and starts its Boss preload with playback', () => {
+  assert.match(appSource, /navigateAfterCinematic\(finalBoss\.cinematicId, finalBoss\.cinematicPath, finalBoss\.route/);
+  assert.match(appSource, /preloadChapterId: finalBoss\.preloadChapterId/);
+  assert.match(appSource, /requirePreloadReady: true/);
+  assert.match(gameFlowSource, /video\.addEventListener\('playing', beginPreload, \{ once: true \}\)/);
+  assert.match(gameFlowSource, /if \(waitForPreload\)[\s\S]*await preloadPromise/);
+});
+
 test('large floor holes announce themselves for a full second', () => {
   const holes = COLLAPSE_SCRIPT.filter(({ kind }) => kind === 'hole');
   assert.ok(holes.length >= 3);
@@ -121,7 +130,7 @@ test('dust exists only as a short impact burst after debris lands', () => {
   assert.match(directorSource, /ambientDust: false/);
 });
 
-test('the approved final lock freezes every authored trigger and the Chapter 6 handoff', () => {
+test('the collapse lock freezes every trigger while the stones may reveal the hidden ending', () => {
   assert.deepEqual(COLLAPSE_ENTRY, { x: 14.8, z: 0, yaw: -Math.PI / 2 });
   assert.equal(COLLAPSE_DOOR_PRESSURE_X, 38.75);
   assert.deepEqual(COLLAPSE_THRESHOLD, { x: 41.25, halfWidth: 1.3, doorOpenAmount: 0.82 });
@@ -142,10 +151,13 @@ test('the approved final lock freezes every authored trigger and the Chapter 6 h
     ['z3-hole-a', 33.25, 36.65, -0.74],
     ['z3-wall-a', 35.45, 38.25, 0.76],
   ]);
-  assert.match(appSource, /window\.location\.assign\(COLLAPSE_CHAPTER06_ROUTE\)/);
+  assert.match(appSource, /const finalBoss = resolveFinalBossDestination\(\)/);
+  assert.match(appSource, /navigateAfterCinematic\(finalBoss\.cinematicId, finalBoss\.cinematicPath, finalBoss\.route/);
+  assert.match(appSource, /preloadChapterId: finalBoss\.preloadChapterId/);
+  assert.match(appSource, /requirePreloadReady: true/);
   assert.match(designLock, /Status: \*\*FINAL LOCKED\*\*/);
   assert.match(designLock, /museum-labyrinth:complete/);
-  assert.match(designLock, /redirects to `\/final-boss\.html\?from=chapter5` at 2400 ms/);
+  assert.match(designLock, /with all (four|five) it.*BLACK KNIFE/s);
 });
 
 test('Labyrinth completion grants exactly eight keys and enters collapse directly', () => {

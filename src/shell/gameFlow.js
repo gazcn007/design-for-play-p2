@@ -1,5 +1,6 @@
 import './gameFlow.css';
 import { preloadChapter } from './chapterPreloader.js';
+import { DEFAULT_SETTINGS, volumeForChannel } from './saveSystem.js';
 
 export const CINEMATICS = Object.freeze({
   opening: '/cinematics/start.mp4',
@@ -28,9 +29,17 @@ export function playCinematic({
   src,
   onComplete,
   preloadChapterId = null,
+  requirePreloadReady = false,
+  preserveBlackout = false,
   label = 'NIGHTFALL CINEMATIC',
 }) {
   if (activePlayback) return activePlayback.promise;
+  // A chapter transition owns its next chapter's readiness. Once a route has
+  // declared a preload profile, never reveal the destination until that job is
+  // complete; otherwise the player trades the film's final frame for a second
+  // loading screen. `requirePreloadReady` remains for explicit non-chapter
+  // callers, but every chapter preload is now a hard completion gate.
+  const waitForPreload = Boolean(preloadChapterId) || requirePreloadReady;
 
   const root = document.createElement('section');
   root.className = 'nf-cinematic';
@@ -43,7 +52,8 @@ export function playCinematic({
   video.pause();
   video.currentTime = 0;
   video.src = src;
-  video.volume = Math.max(0, Math.min(1, (globalThis.NIGHTFALL_SETTINGS?.masterVolume ?? 80) / 100));
+  video.dataset.nightfallAudioChannel = 'music';
+  video.volume = volumeForChannel(globalThis.NIGHTFALL_SETTINGS ?? DEFAULT_SETTINGS, 'music');
   root.prepend(video);
   document.body.append(root);
   let preloadPromise = null;
@@ -58,13 +68,27 @@ export function playCinematic({
   const finish = () => {
     if (settled) return;
     settled = true;
-    root.classList.add('is-finished');
+    // The ending credits replace this overlay in the same document. Keeping
+    // the overlay black until that screen mounts prevents the finished boss
+    // frame from flashing through between the film and the credits.
+    if (preserveBlackout) {
+      root.classList.add('is-blackout');
+      video.style.opacity = '0';
+    } else {
+      root.classList.add('is-finished');
+    }
     window.setTimeout(async () => {
       if (beginPreload()) {
-        await Promise.race([
-          preloadPromise,
-          new Promise((resolve) => window.setTimeout(resolve, 2200)),
-        ]);
+        if (waitForPreload) {
+          const status = root.querySelector('.nf-cinematic-loading');
+          if (status) status.textContent = 'PREPARING EVERY OBJECT · PLEASE WAIT';
+          await preloadPromise;
+        } else {
+          await Promise.race([
+            preloadPromise,
+            new Promise((resolve) => window.setTimeout(resolve, 2200)),
+          ]);
+        }
       }
       root.remove();
       video.removeAttribute('src');
@@ -99,7 +123,7 @@ export function playCinematic({
     resume.focus();
   });
 
-  activePlayback = { id, root, video, promise, finish, beginPreload };
+  activePlayback = { id, root, video, promise, finish, beginPreload, requirePreloadReady: waitForPreload };
   return promise;
 }
 
@@ -113,6 +137,7 @@ export function navigateAfterCinematic(id, src, route, options = {}) {
     src,
     label: options.label,
     preloadChapterId: options.preloadChapterId,
+    requirePreloadReady: options.requirePreloadReady,
     onComplete: () => window.location.assign(route),
   });
 }

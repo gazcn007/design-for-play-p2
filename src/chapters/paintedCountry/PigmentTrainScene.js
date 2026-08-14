@@ -1,12 +1,14 @@
 import Phaser from 'phaser';
 import {
   EXPANSION_PHASE,
+  CHAPTER4_IGNITION_SIGN,
   PIGMENTS,
   TRAIN_BUILD_EXAMPLE_ORDER,
   TRAIN_BUILD_RULES,
   createChapter4Expansion,
 } from './chapter4ExpansionModel.js';
-import { animatePaperButch, createPaperButch } from './paperButch.js';
+import { SIGN_ART } from './carLayout.js';
+import { drawPaintedPlayer } from './paintedPlayerFigure.js';
 import { drawPigmentHalo, haloPointToward, pigmentAtHalo } from './pigmentHalo.js';
 import { PAPER } from './paperPalette.js';
 import { buildPaperGrain, draftLine, makeRandom } from './paperSurface.js';
@@ -19,6 +21,7 @@ const FLOOR_Y = 474;
 const MOVE_SPEED = 220;
 const JUMP_VELOCITY = -620;
 const HOLD_SECONDS = 0.5;
+const TRAIN_ENTRY_X = 116;
 const SOURCE_SCALE = 0.68;
 const TRAIN_SCALE = 0.82;
 const TRAIN_ORIGIN = Object.freeze({ x: 2260, y: 468 });
@@ -61,10 +64,20 @@ export class PigmentTrainScene extends Phaser.Scene {
     if (!this.cache.audio.exists('chapter4-consequence-music')) {
       this.load.audio('chapter4-consequence-music', '/assets/music/ch4/4.2_debussy_snow_is_dancing.mp3');
     }
+    Object.entries(SIGN_ART).forEach(([sign, file]) => {
+      if (!this.textures.exists(`train-sign-${sign}`)) this.load.image(`train-sign-${sign}`, file);
+    });
   }
 
   create() {
-    this.chapter = createChapter4Expansion();
+    const qa = import.meta.env.DEV ? new URLSearchParams(window.location.search).get('qa') : null;
+    const qaUnlocked = ['fused-train', 'ignition'].includes(qa) ? PIGMENTS.map(({ id }) => id) : [];
+    // Normal play always re-collects the six world colors from left to right.
+    // Only explicit QA routes may prefill them for focused train testing.
+    const unlockedPigments = qaUnlocked;
+    this.registry.set('chapter4Pigments', []);
+    this.fusedEntry = unlockedPigments.length === PIGMENTS.length;
+    this.chapter = createChapter4Expansion({ unlockedPigments });
     this.rnd = makeRandom(0xc4104);
     this.selectedId = null;
     this.selectedPartId = null;
@@ -84,7 +97,8 @@ export class PigmentTrainScene extends Phaser.Scene {
     this.chaseCameraStartX = null;
     this.lastHint = '';
     this.chapterTransitionStarted = false;
-    this.tutorialSeen = { collect: false, selectPart: false, chooseColor: false, board: false };
+    this.ignitionOpen = false;
+    this.tutorialSeen = { collect: this.fusedEntry, selectPart: false, chooseColor: false, board: false };
 
     this.cameras.main.setBackgroundColor(PAPER.sheet);
     this.cameras.main.setBounds(0, 0, WORLD.w, WORLD.h);
@@ -95,6 +109,7 @@ export class PigmentTrainScene extends Phaser.Scene {
     this.buildTrain();
     this.buildPlayer();
     this.buildHud();
+    this.buildIgnitionChoice();
     this.buildGrain();
     this.bindInput();
     this.startMusic();
@@ -115,7 +130,7 @@ export class PigmentTrainScene extends Phaser.Scene {
     g.lineStyle(2, PAPER.graphite, 0.78);
     draftLine(g, this.rnd, 0, FLOOR_Y, WORLD.w, FLOOR_Y, { overshoot: 0, jitter: 0.8, segments: 60 });
 
-    for (let i = 0; i < PIGMENTS.length; i += 1) {
+    for (let i = 0; i < PIGMENTS.length && !this.fusedEntry; i += 1) {
       const x = SOURCE_X[i];
       g.lineStyle(1.2, PAPER.graphiteFaint, 0.55);
       draftLine(g, this.rnd, x - 116, 118, x + 116, 118, { jitter: 0.5, segments: 7 });
@@ -125,6 +140,21 @@ export class PigmentTrainScene extends Phaser.Scene {
         color: '#8d8579',
         letterSpacing: 2,
       }).setOrigin(0.5).setDepth(4);
+    }
+
+    if (this.fusedEntry) {
+      this.add.text(210, 118, 'THREE ARCHIVES  ·  SIX REMEMBERED COLORS', {
+        fontFamily: MONO,
+        fontSize: '11px',
+        color: '#2f8c9e',
+        letterSpacing: 2,
+      }).setDepth(4);
+      this.add.text(210, 142, 'THE HUE RING CARRIES THEM INTO THE UNFINISHED TRAIN.', {
+        fontFamily: MONO,
+        fontSize: '9px',
+        color: '#8d8579',
+        letterSpacing: 1.4,
+      }).setDepth(4);
     }
 
     this.yardTitle = this.add.text(2135, 86, 'THE UNFINISHED TRAIN', {
@@ -202,11 +232,11 @@ export class PigmentTrainScene extends Phaser.Scene {
   }
 
   buildPlayer() {
-    this.walker = this.add.rectangle(116, 410, 18, 62, 0xffffff, 0);
+    this.walker = this.add.rectangle(this.fusedEntry ? 2110 : TRAIN_ENTRY_X, 410, 18, 62, 0xffffff, 0);
     this.physics.add.existing(this.walker);
     this.physics.add.collider(this.walker, this.floor);
     this.walker.body.setCollideWorldBounds(false);
-    this.figure = createPaperButch(this, this.walker.x, FLOOR_Y, 28);
+    this.figure = this.add.graphics().setDepth(28);
     this.playerFacing = 1;
     this.playerAnimation = 'idle';
 
@@ -272,6 +302,71 @@ export class PigmentTrainScene extends Phaser.Scene {
       .setAlpha(0.68);
   }
 
+  buildIgnitionChoice() {
+    const depth = 140;
+    this.ignitionElements = [];
+    const add = (object) => {
+      object.setScrollFactor(0).setDepth(depth + this.ignitionElements.length * 0.01).setVisible(false);
+      this.ignitionElements.push(object);
+      return object;
+    };
+    add(this.add.rectangle(VIEW.w / 2, VIEW.h / 2, 820, 470, PAPER.sheetHigh, 0.985)
+      .setStrokeStyle(2, PAPER.graphite, 0.9));
+    add(this.add.text(VIEW.w / 2, 92, 'IGNITION ARCHIVE', {
+      fontFamily: MONO, fontSize: '18px', color: '#4a4640', letterSpacing: 3,
+    }).setOrigin(0.5));
+    add(this.add.text(VIEW.w / 2, 126,
+      'THE NAVE  ·  THE LISTENING FIELD  ·  THE LAST CITY\nALL THREE RECORDS END ON THE SAME WORD.', {
+        fontFamily: MONO, fontSize: '10px', color: '#8d8579', align: 'center',
+        lineSpacing: 7, letterSpacing: 1.4,
+      }).setOrigin(0.5));
+    add(this.add.text(VIEW.w / 2, 202, 'WHICH SIGN STARTS THE BORROWED TRAIN?', {
+      fontFamily: MONO, fontSize: '12px', color: '#4a4640', letterSpacing: 2,
+    }).setOrigin(0.5));
+
+    const signs = Object.keys(SIGN_ART);
+    signs.forEach((sign, index) => {
+      const x = 256 + index * 112;
+      const image = add(this.add.image(x, 300, `train-sign-${sign}`).setDisplaySize(66, 66));
+      image.setInteractive({ useHandCursor: true });
+      image.on('pointerdown', () => this.chooseIgnition(sign));
+      const label = sign.toUpperCase().replace('-', ' ');
+      add(this.add.text(x, 354, label, {
+        fontFamily: MONO, fontSize: '9px', color: '#5c574f', letterSpacing: 1.2,
+      }).setOrigin(0.5));
+    });
+    this.ignitionFeedback = add(this.add.text(VIEW.w / 2, 412, '', {
+      fontFamily: MONO, fontSize: '11px', color: '#b4453a', align: 'center', letterSpacing: 1.4,
+    }).setOrigin(0.5));
+  }
+
+  setIgnitionVisible(visible) {
+    this.ignitionOpen = visible;
+    this.ignitionElements.forEach((element) => element.setVisible(visible));
+  }
+
+  openIgnitionChoice() {
+    if (!this.chapter.state.boarded && !this.chapter.boardTrain()) return;
+    this.walker.body.setVelocity(0, 0);
+    this.ignitionFeedback.setText('');
+    this.setIgnitionVisible(true);
+  }
+
+  chooseIgnition(sign) {
+    if (!this.ignitionOpen) return;
+    const result = this.chapter.chooseIgnition(sign);
+    if (!result.ok) {
+      this.ignitionFeedback.setText(`${String(sign).toUpperCase()} DOES NOT MATCH THE THREE NOTES.\nTHE TRAIN WAITS.`);
+      this.cameras.main.shake(90, 0.0018);
+      return;
+    }
+    this.ignitionFeedback.setText('MOON  ·  THE ARCHIVE ENGINE ANSWERS.');
+    this.time.delayedCall(480, () => {
+      this.setIgnitionVisible(false);
+      this.beginChaseSequence();
+    });
+  }
+
   bindInput() {
     this.keys = this.input.keyboard.addKeys({ left: 'LEFT', right: 'RIGHT', up: 'UP', a: 'A', d: 'D', w: 'W', space: 'SPACE' });
     this.input.keyboard.addCapture(['LEFT', 'RIGHT', 'UP', 'SPACE']);
@@ -284,6 +379,7 @@ export class PigmentTrainScene extends Phaser.Scene {
       }
     });
     this.input.on('pointerdown', (pointer) => {
+      if (this.ignitionOpen) return;
       if (this.chapter.state.phase !== EXPANSION_PHASE.BUILD || this.chapter.state.trainBuilt) return;
       const world = this.pointerWorld(pointer);
       const haloPigment = pigmentAtHalo(this.walker.x, this.walker.y - 50, PIGMENTS, world.x, world.y);
@@ -304,7 +400,7 @@ export class PigmentTrainScene extends Phaser.Scene {
   }
 
   startMusic() {
-    this.music = this.sound.add('chapter4-consequence-music', { loop: true, volume: 0.2 });
+    this.music = this.sound.add('chapter4-consequence-music', { loop: true, volume: 0.34 });
     const play = () => {
       if (!this.music?.isPlaying) this.music?.play();
     };
@@ -318,13 +414,13 @@ export class PigmentTrainScene extends Phaser.Scene {
   applyQaState() {
     if (!import.meta.env.DEV) return;
     const qa = new URLSearchParams(window.location.search).get('qa');
-    if (!['build-train', 'ring-press', 'train-ready', 'consequence'].includes(qa)) return;
+    if (!['build-train', 'ring-press', 'train-ready', 'fused-train', 'ignition', 'consequence'].includes(qa)) return;
 
-    PIGMENTS.forEach(({ id }) => this.chapter.collect(id));
+    if (!this.fusedEntry) PIGMENTS.forEach(({ id }) => this.chapter.collect(id));
     this.walker.setPosition(2470, 410);
     this.cameras.main.stopFollow();
     this.cameras.main.centerOn(2560, 300);
-    if (qa === 'build-train') return;
+    if (['build-train', 'fused-train'].includes(qa)) return;
     if (qa === 'ring-press') {
       this.selectedPartId = 'green';
       this.selectedId = 'green';
@@ -334,8 +430,15 @@ export class PigmentTrainScene extends Phaser.Scene {
 
     TRAIN_BUILD_EXAMPLE_ORDER.forEach((id) => this.chapter.placePart(id, id));
     if (qa === 'train-ready') return;
+    if (qa === 'ignition') {
+      this.chapter.boardTrain();
+      this.time.delayedCall(250, () => this.openIgnitionChoice());
+      return;
+    }
     if (qa === 'consequence') {
-      this.time.delayedCall(350, () => this.startBoardSequence());
+      this.chapter.boardTrain();
+      this.chapter.chooseIgnition(CHAPTER4_IGNITION_SIGN);
+      this.time.delayedCall(350, () => this.beginChaseSequence());
     }
   }
 
@@ -374,7 +477,7 @@ export class PigmentTrainScene extends Phaser.Scene {
   }
 
   stepPlayer() {
-    if (this.cutscene || this.chapter.state.phase === EXPANSION_PHASE.CHASE || this.chapter.state.complete) {
+    if (this.cutscene || this.ignitionOpen || this.chapter.state.phase === EXPANSION_PHASE.CHASE || this.chapter.state.complete) {
       this.walker.body.setVelocityX(0);
       return;
     }
@@ -392,10 +495,7 @@ export class PigmentTrainScene extends Phaser.Scene {
     if (this.walker.body.velocity.x < -8) this.playerFacing = -1;
     if (this.walker.body.velocity.x > 8) this.playerFacing = 1;
     this.playerAnimation = moving ? 'walk' : 'idle';
-    this.figure.setPosition(Math.round(this.walker.x), Math.round(this.walker.y + 31));
-    const paint = Boolean(this.ringPress);
-    const wash = this.hold.key?.startsWith('source:');
-    this.playerAnimation = animatePaperButch(this.figure, time, { moving, paint, wash });
+    drawPaintedPlayer(this.figure, this.walker, this.input.activePointer);
   }
 
   trainWorldPoint(x, y) {
@@ -453,7 +553,7 @@ export class PigmentTrainScene extends Phaser.Scene {
   }
 
   stepInteraction(dt) {
-    if (this.cutscene) return this.resetHold();
+    if (this.cutscene || this.ignitionOpen) return this.resetHold();
     const pointer = this.input.activePointer;
     const { x, y } = this.pointerWorld(pointer);
     const phase = this.chapter.state.phase;
@@ -477,7 +577,7 @@ export class PigmentTrainScene extends Phaser.Scene {
       if (this.setHold('board', dt)) {
         this.tutorialSeen.board = true;
         this.resetHold();
-        this.startBoardSequence();
+        this.openIgnitionChoice();
       }
       return;
     }
@@ -485,8 +585,8 @@ export class PigmentTrainScene extends Phaser.Scene {
     this.resetHold();
   }
 
-  startBoardSequence() {
-    if (!this.chapter.boardTrain()) return;
+  beginChaseSequence() {
+    if (this.chapter.state.phase !== EXPANSION_PHASE.CHASE) return;
     this.cutscene = true;
     this.chaseBeat = 'crowd-approach';
     this.trainMoving = false;
@@ -499,7 +599,7 @@ export class PigmentTrainScene extends Phaser.Scene {
     this.cabPromptTitle.setVisible(false);
     this.cabPromptHint.setVisible(false);
     this.subtitle.setAlpha(0);
-    this.tweens.add({ targets: this.music, volume: 0.29, duration: 900 });
+    this.tweens.add({ targets: this.music, volume: 0.43, duration: 900 });
 
     this.spawnCrowd();
     this.time.delayedCall(CROWD_APPROACH_MS, () => this.beginTrainEscape());
@@ -648,7 +748,7 @@ export class PigmentTrainScene extends Phaser.Scene {
     this.trainMoving = false;
     this.chaseCameraActive = false;
     this.subtitle.setAlpha(0);
-    this.tweens.add({ targets: this.music, volume: 0.16, duration: 1200 });
+    this.tweens.add({ targets: this.music, volume: 0.28, duration: 1200 });
     this.time.delayedCall(1450, () => this.finishChapter());
   }
 
@@ -1129,7 +1229,7 @@ export class PigmentTrainScene extends Phaser.Scene {
       this.yardTitle.setText('THE UNFINISHED TRAIN');
       this.yardSubtitle.setText('COPY IT. BUILD BOTTOM-UP.');
     } else if (phase === EXPANSION_PHASE.BUILD) {
-      this.objective.setText('BOARD THE TRAIN.');
+      this.objective.setText(snapshot.boarded ? 'CHOOSE THE ARCHIVE SIGN.' : 'BOARD THE TRAIN.');
       this.counter.setText('TRAIN  6/6');
       this.controls.setText('HOLD TO BOARD');
       this.yardTitle.setText('THE PAINTED TRAIN');
@@ -1195,6 +1295,13 @@ export class PigmentTrainScene extends Phaser.Scene {
       },
       trainBuilt: snapshot.trainBuilt,
       boarded: snapshot.boarded,
+      ignition: {
+        open: this.ignitionOpen,
+        chosen: snapshot.ignition.chosen,
+        started: snapshot.ignition.started,
+        wrongTries: snapshot.ignition.wrongTries,
+        answerCarriedFromArchives: this.registry.get('chapter4ArchiveAnswer') ?? null,
+      },
       crowdVisible: this.crowd.length > 0,
       chase: {
         beat: this.chaseBeat,

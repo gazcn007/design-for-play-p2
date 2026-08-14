@@ -10,15 +10,16 @@ import { PigmentTrainScene } from './chapters/paintedCountry/PigmentTrainScene.j
 import { PAPER_CSS } from './chapters/paintedCountry/paperPalette.js';
 import { installDevMenuReturnControl } from './devMenuReturn.js';
 import { installPauseMenu } from './shell/pauseMenu.js';
+import { devRoutesEnabled } from './devMode.js';
 
 installDevMenuReturnControl();
 installPauseMenu({ checkpointId: 'chapter-4-start' });
 
-const qa = import.meta.env.DEV ? new URLSearchParams(window.location.search).get('qa') : null;
+const qa = devRoutesEnabled() ? new URLSearchParams(window.location.search).get('qa') : null;
 const allScenes = [PaintedCountryScene, DrawingStudioScene, PigmentTrainScene];
-const firstScene = ['drawing', 'drawing-ready', 'drawing-free'].includes(qa)
+const firstScene = ['drawing', 'drawing-start', 'drawing-ready', 'drawing-free', 'drawing-magic-stone'].includes(qa)
   ? DrawingStudioScene
-  : ['pigments', 'build-train', 'ring-press', 'train-ready', 'consequence'].includes(qa)
+  : ['pigments', 'build-train', 'ring-press', 'train-ready', 'fused-train', 'ignition', 'consequence'].includes(qa)
     ? PigmentTrainScene
     : PaintedCountryScene;
 const sceneOrder = [firstScene, ...allScenes.filter((scene) => scene !== firstScene)];

@@ -1,5 +1,6 @@
 import { BORROWED_GRID_CHAPTER05_CONTRACT } from '../../borrowedGrid/chapter05BorrowedGridContract.js';
 import { LABYRINTH_CHAPTER05_CONTRACT } from '../../museum/labyrinth/chapter05LabyrinthContract.js';
+import { chapterExhibit } from '../data/chapterExhibitCatalog.js';
 
 export const CHAPTER05_DIRECTIONS = Object.freeze({
   BORROWED_GRID: BORROWED_GRID_CHAPTER05_CONTRACT.id,
@@ -44,6 +45,9 @@ export const DIRECTION_DEFINITIONS = Object.freeze({
     completeMessage: BORROWED_GRID_CHAPTER05_CONTRACT.completeMessage,
     exitMessage: BORROWED_GRID_CHAPTER05_CONTRACT.exitMessage,
     artifactId: BORROWED_GRID_CHAPTER05_CONTRACT.artifactId,
+    archiveTitle: `${chapterExhibit('borrowed-grid').chapter} · ${chapterExhibit('borrowed-grid').title}`,
+    modeLabel: chapterExhibit('borrowed-grid').mode,
+    ingress: chapterExhibit('borrowed-grid').reconstructionLaw,
     available: false,
   }),
   [CHAPTER05_DIRECTIONS.ECHO_CITY]: Object.freeze({
@@ -53,6 +57,9 @@ export const DIRECTION_DEFINITIONS = Object.freeze({
     src: null,
     completeMessage: null,
     exitMessage: null,
+    archiveTitle: `${chapterExhibit('echo-city').chapter} · ${chapterExhibit('echo-city').title}`,
+    modeLabel: chapterExhibit('echo-city').mode,
+    ingress: chapterExhibit('echo-city').reconstructionLaw,
     available: false,
     standaloneSrc: '/museum-3d.html?beat=echo&standalone=1',
   }),
@@ -65,6 +72,9 @@ export const DIRECTION_DEFINITIONS = Object.freeze({
     src: '/chapter05-painted-country.html?embedded=1',
     completeMessage: 'chapter05-direction:painted-country:complete',
     exitMessage: 'chapter05-direction:painted-country:exit',
+    archiveTitle: `${chapterExhibit('painted-country').chapter} · ${chapterExhibit('painted-country').title}`,
+    modeLabel: chapterExhibit('painted-country').mode,
+    ingress: chapterExhibit('painted-country').reconstructionLaw,
     available: false,
     standaloneSrc: '/chapter05-painted-country.html',
   }),
@@ -77,6 +87,10 @@ export const DIRECTION_DEFINITIONS = Object.freeze({
     exitMessage: LABYRINTH_CHAPTER05_CONTRACT.exitMessage,
     artifactId: LABYRINTH_CHAPTER05_CONTRACT.artifactId,
     completionMode: 'eight-key-ring',
+    archiveTitle: `${chapterExhibit('labyrinth').chapter} · ${chapterExhibit('labyrinth').title}`,
+    modeLabel: chapterExhibit('labyrinth').mode,
+    ingress: chapterExhibit('labyrinth').ingress,
+    egress: chapterExhibit('labyrinth').egress,
   }),
 });
 

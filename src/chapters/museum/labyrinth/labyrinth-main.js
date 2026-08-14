@@ -1,10 +1,20 @@
 import Phaser from 'phaser';
 import { LabyrinthScene } from './LabyrinthScene.js';
-import { VIEW } from './labyrinthData.js';
+import { CELL, VIEW } from './labyrinthData.js';
 import { LABYRINTH_CHAPTER05_CONTRACT } from './chapter05LabyrinthContract.js';
 import { installDevMenuReturnControl } from '../../../devMenuReturn.js';
+import { music } from '../../../shared/musicDirector.js';
+import { CHAPTER5_SCORE } from '../../museum3d/chapter05Score.js';
 
 installDevMenuReturnControl();
+
+const labyrinthScore = CHAPTER5_SCORE.labyrinth;
+music.play(labyrinthScore.id, {
+  ...labyrinthScore,
+  loop: true,
+  outFade: 1.2,
+  dialogueDuckDb: -7,
+});
 
 const config = {
   type: Phaser.AUTO,
@@ -27,8 +37,9 @@ const config = {
 const game = new Phaser.Game(config);
 window.game = game;
 
-const embedded = new URLSearchParams(window.location.search).get('embedded') === '1';
-const qaArtifact = new URLSearchParams(window.location.search).get('qa-artifact') === '1';
+const params = new URLSearchParams(window.location.search);
+const embedded = params.get('embedded') === '1';
+const qaArtifact = params.get('qa-artifact') === '1';
 let completionSent = false;
 if (embedded) {
   document.documentElement.classList.add('embedded');
@@ -59,12 +70,53 @@ if (qaArtifact) {
   }, 50);
 }
 
+// Deterministic, query-only browser setup for encounter and Wing-transition
+// proof. It never appears in normal or embedded play.
+const qaWing = Number(params.get('qa-wing'));
+const qaLives = Number(params.get('qa-lives'));
+const qaDoubleHunter = params.get('qa-double-hunter') === '1';
+if (Number.isInteger(qaWing) && qaWing >= 0 && qaWing <= 3) {
+  const probe = window.setInterval(() => {
+    const scene = game.scene.getScene('MuseumLabyrinth');
+    if (!scene?.playerSprite || scene.state !== 'playing') return;
+    window.clearInterval(probe);
+    if (Number.isFinite(qaLives)) scene.player.lives = Math.max(1, Math.min(3, Math.round(qaLives)));
+    const wing = scene.layout.wings.find(({ id }) => id === qaWing);
+    const excluded = new Set([
+      ...scene.layout.keys.filter(({ wing: id }) => id === qaWing).map(({ cell }) => `${cell.x},${cell.y}`),
+      ...scene.layout.shields.filter(({ wing: id }) => id === qaWing).map(({ cell }) => `${cell.x},${cell.y}`),
+      ...scene.layout.statues.filter(({ wing: id }) => id === qaWing).map(({ spawnCell }) => `${spawnCell.x},${spawnCell.y}`),
+    ]);
+    let target = null;
+    for (let y = Math.floor(wing.bounds.y0 / CELL) + 1; y < Math.floor(wing.bounds.y1 / CELL); y += 2) {
+      for (let x = Math.floor(wing.bounds.x0 / CELL) + 1; x < Math.floor(wing.bounds.x1 / CELL); x += 2) {
+        if (scene.layout.walls[y]?.[x] === false && !excluded.has(`${x},${y}`)) {
+          target = { x: x * CELL + CELL / 2, y: y * CELL + CELL / 2 };
+          break;
+        }
+      }
+      if (target) break;
+    }
+    if (target) scene.playerSprite.body.reset(target.x, target.y);
+    if (qaDoubleHunter && target) {
+      const pair = scene.statues.filter((statue) => statue.wing === qaWing && (qaWing !== 3 || statue.floor === scene.activeFloor)).slice(0, 2);
+      pair.forEach((statue, index) => {
+        statue.state = 'hunting';
+        statue.path = null;
+        statue.repathAt = 0;
+        statue.sprite.body.reset(target.x + (index === 0 ? -CELL * 1.4 : CELL * 1.4), target.y);
+      });
+    }
+    window.__labyrinthQaReady = true;
+  }, 50);
+}
+
 window.render_game_to_text = () => {
   const scene = game.scene.getScene('MuseumLabyrinth');
   if (!scene || !scene.renderToText) {
-    return JSON.stringify({ chapter: 'chapter05-museum-labyrinth', booting: true });
+    return JSON.stringify({ chapter: 'chapter05-museum-labyrinth', booting: true, music: music.qa() });
   }
-  return JSON.stringify(scene.renderToText());
+  return JSON.stringify({ ...scene.renderToText(), music: music.qa() });
 };
 
 export default game;

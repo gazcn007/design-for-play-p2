@@ -477,6 +477,7 @@ export class CollapseGauntletDirector {
     record.shattered = true;
     record.glass.visible = false;
     record.light.intensity = 0;
+    if (record.supportingElements) record.supportingElements.visible = false;
     record.artifact.userData.collapseStartPosition = record.artifact.position.clone();
     record.artifact.userData.collapseStartRotation = record.artifact.rotation.clone();
     this.shatterAnimations.push({ record, age: 0 });

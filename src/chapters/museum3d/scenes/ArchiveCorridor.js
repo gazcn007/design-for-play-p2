@@ -12,6 +12,8 @@ import { addAcousticCeilingGrid, createGuidePedestal, createPublicBench, createW
 import { CHAPTER05_DIRECTIONS, isDirectionPlayable } from '../directions/directionRegistry.js';
 import { directionAtDoorway } from '../directions/directionDoorways.js';
 import { animateReturnArtifact, createReturnArtifact } from '../assets/ReturnArtifacts.js';
+import { createChapterSupportingElements } from '../assets/ChapterExhibitElements.js';
+import { chapterExhibit, exhibitDialogue } from '../data/chapterExhibitCatalog.js';
 import { CollapseGauntletDirector } from '../systems/CollapseGauntletDirector.js';
 import { COLLAPSE_STRINGS } from '../state/collapseGauntlet.js';
 
@@ -155,7 +157,9 @@ export class ArchiveCorridor {
     this.labyrinthInteractPoint.add(pointRing, pointCore);
     g.add(this.labyrinthInteractPoint);
 
-    // The whole journey is already catalogued before the Labyrinth opens.
+    // The whole journey is already catalogued before the Labyrinth opens. Keep
+    // the approved spatial order and collapse choreography; the new chapter
+    // headings make each record's origin clear without moving its fixed case.
     this.artifactNiches = new Map();
     for (const [id, x] of [
       [CHAPTER05_DIRECTIONS.LABYRINTH, 38],
@@ -165,6 +169,11 @@ export class ArchiveCorridor {
     ]) {
       this.artifactNiches.set(id, this._artifactNiche(g, { id, x }));
     }
+    label(g, 'MEMORY TRANSLATION INDEX\nTHE ARCHIVE PRESERVES EACH MEMORY AS A DIFFERENT LAW', {
+      x: 10.6, y: 2.66, z: 1.81, w: 4.3, h: 0.62,
+      fg: '#d8caa5', bg: '#171a18', font: 'bold 28px Georgia, serif',
+      rotationY: Math.PI,
+    });
 
     this.finalDoor = this._finalArchiveDoor(g);
 
@@ -286,42 +295,40 @@ export class ArchiveCorridor {
   }
 
   _artifactNiche(g, { id, x }) {
+    const exhibit = chapterExhibit(id);
     const group = new THREE.Group();
     group.name = `${id}-return-niche`;
     group.position.set(x, 0, 1.86);
     g.add(group);
-    box(group, { x: 0, y: 1.35, z: 0.07, w: 1.5, h: 1.15, d: 0.16, material: this.materials.walnutDark, name: `${id}-niche-frame` });
-    box(group, { x: 0, y: 1.35, z: -0.03, w: 1.23, h: 0.9, d: 0.08, material: emissiveMat(0x080a0b, 0.2), name: `${id}-niche-back` });
-    const glass = box(group, { x: 0, y: 1.35, z: -0.24, w: 1.28, h: 0.94, d: 0.012, material: glassMat(), name: `${id}-niche-glass` });
+    box(group, { x: 0, y: 1.42, z: 0.07, w: 2.25, h: 1.54, d: 0.16, material: this.materials.walnutDark, name: `${id}-niche-frame` });
+    box(group, { x: 0, y: 1.42, z: -0.03, w: 2.02, h: 1.30, d: 0.08, material: emissiveMat(0x080a0b, 0.2), name: `${id}-niche-back` });
+    const glass = box(group, { x: 0, y: 1.42, z: -0.24, w: 2.07, h: 1.34, d: 0.012, material: glassMat(), name: `${id}-niche-glass` });
     const artifact = createReturnArtifact(id);
-    artifact.position.set(0, 1.34, -0.17);
+    artifact.position.set(0, 1.48, -0.17);
     artifact.scale.setScalar(id === CHAPTER05_DIRECTIONS.LABYRINTH
       ? 1.1
       : id === CHAPTER05_DIRECTIONS.ECHO_CITY ? 1.3 : 1.22);
     artifact.rotation.y = Math.PI;
     artifact.visible = true;
     group.add(artifact);
+    const supportingElements = createChapterSupportingElements(id);
+    supportingElements.position.set(0, 1.40, -0.16);
+    supportingElements.scale.setScalar(0.88);
+    supportingElements.rotation.y = Math.PI;
+    group.add(supportingElements);
     const light = new THREE.PointLight(id === CHAPTER05_DIRECTIONS.BORROWED_GRID ? 0x55ddd5 : 0xffd7a1, id === CHAPTER05_DIRECTIONS.BORROWED_GRID ? 2.4 : 1.8, 3.4, 2);
     light.position.set(0, 1.6, -0.55);
     group.add(light);
-    const proxy = hitProxy(group, { x: 0, y: 1.35, z: -0.32, w: 1.5, h: 1.15, d: 0.12, name: `${id}-niche-interaction-proxy` });
-    const cards = {
-      labyrinth: ['ACC. 17-0000 — STONE FACE, UNVERIFIED SIGHT', 'It watched you the whole way through. It is still watching.'],
-      'borrowed-grid': ['ACC. 17-0002 — ILLEGAL GRID TAP, THREE DISTRICTS', "You didn't tap the grid. You taught three districts to share."],
-      'echo-city': ['ACC. 17-0003 — DOMESTIC RECORDING, LOW VALUE', 'One ordinary morning, kept on tape. The museum priced it at nothing.'],
-      'painted-country': ['ACC. 17-0004 — PAPER FOLD, WATER DAMAGE', 'Folded paper, one cyan thread. It held a country together once.'],
-    };
-    const objectLabels = {
-      labyrinth: 'THE LOOKING FRAGMENT',
-      'borrowed-grid': 'THREE-DISTRICT BYPASS COIL',
-      'echo-city': 'MARA · ORDINARY MORNING',
-      'painted-country': 'THE COMMON FOLD',
-    };
-    label(group, objectLabels[id], {
-      x: 0, y: 0.68, z: -0.255, w: 1.34, h: 0.18,
-      fg: '#eee4cb', bg: '#090b0c', font: 'bold 30px Georgia, serif',
+    const proxy = hitProxy(group, { x: 0, y: 1.42, z: -0.32, w: 2.25, h: 1.54, d: 0.12, name: `${id}-niche-interaction-proxy` });
+    label(group, `${exhibit.chapter} · ${exhibit.title}\n${exhibit.mode}`, {
+      x: 0, y: 0.54, z: -0.255, w: 2.05, h: 0.36,
+      fg: '#eee4cb', bg: '#090b0c', font: 'bold 25px Georgia, serif',
     });
-    return { group, artifact, light, glass, proxy, displayed: true, shattered: false, card: cards[id] };
+    label(group, exhibit.accession, {
+      x: 0, y: 2.31, z: -0.255, w: 1.18, h: 0.18,
+      fg: '#c9b681', bg: '#15120d', font: 'bold 26px Georgia, serif',
+    });
+    return { group, artifact, supportingElements, exhibit, light, glass, proxy, displayed: true, shattered: false };
   }
 
   _syncArtifacts() {
@@ -330,6 +337,7 @@ export class ArchiveCorridor {
       const displayed = snapshot.artifacts[id]?.displayed === true;
       niche.displayed = displayed;
       niche.artifact.visible = displayed;
+      niche.supportingElements.visible = displayed;
       if (!niche.shattered) niche.light.intensity = displayed ? (id === CHAPTER05_DIRECTIONS.BORROWED_GRID ? 2.4 : 1.8) : 0;
     }
   }
@@ -423,10 +431,7 @@ export class ArchiveCorridor {
         enabled: () => this.ctx.model.getSnapshot().phase === 'corridor',
         prompt: 'E — READ ACCESSION CARD',
         action: () => {
-          this.ctx.dialogue.play([
-            { speaker: 'ARCHIVIST', text: niche.card[0] },
-            { speaker: null, text: niche.card[1] },
-          ]);
+          this.ctx.dialogue.play(exhibitDialogue(niche.exhibit));
         },
       });
     }
@@ -512,7 +517,8 @@ export class ArchiveCorridor {
     if (this.labyrinthInteractPoint) {
       const pulse = 1 + Math.sin(performance.now() / 220) * 0.12;
       this.labyrinthInteractPoint.scale.setScalar(pulse);
-      this.labyrinthInteractPoint.visible = snapshot.phase === 'corridor';
+      this.labyrinthInteractPoint.visible = snapshot.phase === 'corridor'
+        && this._doorwayDirection === CHAPTER05_DIRECTIONS.LABYRINTH;
     }
     const time = performance.now() / 1000;
     for (const niche of this.artifactNiches.values()) {

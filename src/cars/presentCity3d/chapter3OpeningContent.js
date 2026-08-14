@@ -22,8 +22,13 @@ export const OPENING_POSITIONS = Object.freeze({
   // Keep the v28 player/Lev staging fixed so camera follow cannot move the
   // marked screen-space destination out from under Toma.
   toma: [37.68, 0.5, -15.87],
-  transportApproach: [28.27, 0.5, -16.29],
-  levTransportExterior: [26.77, 0.5, -15.09],
+  // The former approach point (28.27, -16.29) sits inside the Transport
+  // Ministry collision footprint. Keep Butch on the open east pavement,
+  // close enough that the handoff reads as a face-to-face conversation.
+  transportApproach: [37.68, 0.5, -14.35],
+  // Keep Lev in the same readable group as Butch and Toma without crossing
+  // back into the ministry's padded facade footprint.
+  levTransportExterior: [36.6, 0.5, -14.35],
   // Bosko works beside the north-east bench, well away from the two paving
   // rows he is about to point out on the south side of the clock.
   squareBosko: [17.8, 0.5, 8.2],
@@ -172,7 +177,6 @@ export function levTopicMenu(asked = []) {
     speaker: 'CHOOSE',
     text: 'What do you ask Lev?',
     choices: [
-      { id: 'lev-office', label: 'What does your office investigate?' },
       { id: 'lev-sighting', label: 'What exactly was Mara doing?' },
       { id: 'lev-oil', label: 'What happened in the square afterward?' },
       { id: 'lev-role', label: 'What do you want from me?' },
@@ -240,7 +244,6 @@ export function seamMenu(observed = [], testingAsked = false) {
       { id: 'seam-geometry', label: 'Follow the shape of the line.' },
       { id: 'seam-fuel', label: 'Check the smell without touching it.' },
       { id: 'seam-cleaning', label: 'Look at the pale marks along the edges.' },
-      { id: 'seam-testing', label: 'Ask how Lev will test it.' },
       { id: 'seam-conclude', label: 'Give Lev your conclusion. (Continue)' },
     ].filter((choice) => {
       if (choice.id === 'seam-conclude') return true;
@@ -344,7 +347,6 @@ export const EDA_APPROACH_RESPONSES = Object.freeze({
 export function edaTopicMenu(cooperation, asked = []) {
   const seen = new Set(asked);
   const choices = [
-    { id: 'eda-product', label: 'What kind of lamp oil do you sell?' },
     { id: 'eda-order', label: 'What did Mara buy?' },
     { id: 'eda-collector', label: 'Who collected it?' },
     { id: 'eda-authorization', label: 'Why is her name missing from the copy?' },
@@ -846,7 +848,6 @@ export function petarTopicMenu(asked = []) {
     text: 'What do you ask Petar?',
     choices: [
       { id: 'petar-instruction', label: 'What exactly were you ordered to do?' },
-      { id: 'petar-route', label: 'Where did you enter and leave the service channel?' },
       { id: 'petar-surface-view', label: 'What could you see from the access chamber?' },
       { id: 'petar-cleaning', label: 'How much of the oil and groove did you clean?' },
       { id: 'petar-done', label: 'State what you cut and what you knew. (Continue)' },
@@ -880,7 +881,7 @@ export const PETAR_TOPIC_RESPONSES = Object.freeze({
 });
 
 export const PETAR_BLOCKED = Object.freeze([
-  { speaker: 'LEV', text: 'Before we close this interview, establish the instruction, Petar\'s route, his view from below, and the limit of his cleaning.' },
+  { speaker: 'LEV', text: 'Before we close this interview, establish the instruction, Petar\'s view from below, and the limit of his cleaning.' },
 ]);
 
 export const PETAR_CONCLUSION = Object.freeze([
@@ -913,8 +914,7 @@ export function secondTheoryMenu(tested = []) {
       { id: 'second-market-coordination', label: 'The market arranged the oil route together.' },
       { id: 'second-municipal-censorship', label: 'The city used maintenance to censor Mara.' },
       { id: 'second-petar-knew-message', label: 'Petar knew exactly which words he was cutting.' },
-      { id: 'second-lev-steered-case', label: 'Lev already knew the answer and steered the case.' },
-      { id: 'second-conclude', label: 'State what all four failures mean. (Continue)' },
+      { id: 'second-conclude', label: 'State what the three failures mean. (Continue)' },
     ].filter((choice) => choice.id === 'second-conclude' || !seen.has(choice.id.replace('second-', ''))),
   };
 }
@@ -941,7 +941,7 @@ export const SECOND_THEORY_RESPONSES = Object.freeze({
 });
 
 export const SECOND_THEORY_BLOCKED = Object.freeze([
-  { speaker: 'LEV', text: 'Not yet. Test the market, the city, Petar and me. One surviving explanation would be enough, so none of them can be skipped.' },
+  { speaker: 'LEV', text: 'Not yet. Test the market, the city and Petar. One surviving explanation would be enough, so none of them can be skipped.' },
 ]);
 
 export const SECOND_THEORY_CONCLUSION = Object.freeze([

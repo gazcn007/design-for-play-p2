@@ -75,6 +75,16 @@ export function createInitialState() {
   };
 }
 
+// The integrated Museum follows Chapter 1, so Butch already owns the punched
+// admission ticket when this page boots. Keep createInitialState() untouched
+// for reducer/unit-test isolation and use this entry state at the real route.
+export function createMuseumEntryState() {
+  const state = createInitialState();
+  state.ticket.inspected = true;
+  state.ticket.carried = true;
+  return state;
+}
+
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }

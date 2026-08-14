@@ -32,7 +32,7 @@ const query = new URLSearchParams(window.location.search);
 const playtest = query.get('playtest');
 const openingStart = playtest === 'chapter3-time-transition'
   ? 'night-transition-qa'
-  : ['chapter3-campfire', 'chapter3-alley'].includes(playtest) ? 'dusk-campfire-qa'
+  : ['chapter3-campfire', 'chapter3-alley', 'chapter3-magic-stone'].includes(playtest) ? 'dusk-campfire-qa'
   : playtest === 'chapter3-23'
   ? 'interaction-23'
   : playtest === 'chapter3-25' ? 'interaction-25'
@@ -56,11 +56,11 @@ const openingStart = playtest === 'chapter3-time-transition'
     ? 'interaction-21'
     : playtest === 'chapter3-15'
       ? 'interaction-15'
-      : playtest === 'chapter3-14'
-        ? 'interaction-14'
-  : playtest === 'chapter3-13'
+  : playtest === 'chapter3-14'
+      ? 'interaction-14'
+      : playtest === 'chapter3-13'
     ? 'interaction-13'
-    : playtest === 'chapter3-08'
+  : playtest === 'chapter3-08'
       ? 'interaction-08'
       : playtest === 'chapter3-07'
         ? 'interaction-07'
@@ -103,8 +103,10 @@ window.render_game_to_text = () => {
   const city = JSON.parse(preview.textState());
   return JSON.stringify({
     ...city,
-    chapterVersion: 'chapter3-temporary-final-v31-integrated-v32',
-    gameplay: gameplayRuntime.textState(),
+    chapterVersion: 'chapter3-temporary-final-v31-integrated-v35',
+    gameplay: gameplayRuntime.initialized
+      ? gameplayRuntime.textState()
+      : { initialized: false, loading: true },
   });
 };
 window.advanceTime = (ms) => preview.advanceTime(ms);

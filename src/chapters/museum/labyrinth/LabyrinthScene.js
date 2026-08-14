@@ -34,6 +34,7 @@ import { ensureLabyrinthTextures, ensureRadialMask, ensureTilesetTexture, TILE_F
 import { buildLayout, worldToCell } from './mazeGenerator.js';
 import { stateWouldCrush } from './wingMechanics.js';
 import { StatueNPC } from './StatueNPC.js';
+import { applyWingEntryRules, choosePrimaryHunterId, statueCanDamage } from './labyrinthEncounterRules.js';
 import { sfx } from '../../../sfx.js';
 import { labyrinthCues } from './labyrinthCues.js';
 import * as chaseMusic from './chaseMusic.js';
@@ -72,17 +73,19 @@ export class LabyrinthScene extends Phaser.Scene {
       d: Phaser.Input.Keyboard.KeyCodes.D,
       w: Phaser.Input.Keyboard.KeyCodes.W,
       s: Phaser.Input.Keyboard.KeyCodes.S,
-      q: Phaser.Input.Keyboard.KeyCodes.Q,
+      space: Phaser.Input.Keyboard.KeyCodes.SPACE,
       e: Phaser.Input.Keyboard.KeyCodes.E,
       enter: Phaser.Input.Keyboard.KeyCodes.ENTER,
     });
     this.input.keyboard.on('keydown-R', () => this.startRun());
-    this.input.keyboard.on('keydown-Q', () => this.tryActivateShield());
+    this.input.keyboard.on('keydown-SPACE', (event) => {
+      if (!event.repeat) this.tryActivateShield();
+    });
     this.input.keyboard.on('keydown-E', () => this.tryInteract());
     this.input.keyboard.on('keydown-ENTER', () => this.tryInteract());
   }
 
-  // Q — consumes one carried shield charge (found as a collectible around
+  // Space — consumes one carried shield charge (found as a collectible around
   // the maze) to go untouchable by statues for TUNING.shieldDurationMs.
   // Exactly the tool for closing on a key or an exit gate with a hunter
   // nearby without eating a hit for it.
@@ -100,6 +103,8 @@ export class LabyrinthScene extends Phaser.Scene {
     }
     p.shieldCharges -= 1;
     p.shieldActiveUntil = this.time.now + TUNING.shieldDurationMs;
+    p.shieldTutorialPending = false;
+    p.shieldTutorialPrompt = false;
     labyrinthCues.shieldUp();
     this.cameras.main.flash(200, 47, 216, 200);
     this.setCaption(STRINGS.shieldUpNote, TUNING.shieldDurationMs);
@@ -125,6 +130,9 @@ export class LabyrinthScene extends Phaser.Scene {
     this.movingMazeState = 0;
     this.movingMazeNextAt = 0;
     this.movingMazeWarning = false;
+    this.primaryHunterId = null;
+    this.wingEntryGraceUntil = 0;
+    this.hunterReliefUntil = 0;
 
     this.player = {
       facing: { x: 0, y: -1 },
@@ -133,6 +141,9 @@ export class LabyrinthScene extends Phaser.Scene {
       invulnUntil: 0,
       shieldCharges: 0,
       shieldActiveUntil: 0,
+      shieldTutorialPending: false,
+      shieldTutorialPrompt: false,
+      shieldTutorialSeen: false,
       torchLit: true,
       torchFuelMs: TUNING.torchFuelMs,
     };
@@ -150,6 +161,7 @@ export class LabyrinthScene extends Phaser.Scene {
     // Seed silently — spawning "into" the first wing shouldn't pop a
     // transition card, only actually walking into the next one should.
     this.currentWingId = this.wingAt(this.playerSprite.x, this.playerSprite.y);
+    this.highestWingReached = this.currentWingId;
     const wing = this.layout.wings.find((w) => w.id === this.currentWingId);
     if (wing) this.wingLabel.setText(wing.name);
 
@@ -405,8 +417,13 @@ export class LabyrinthScene extends Phaser.Scene {
     this.statues = this.layout.statues.map((s, i) => {
       const img = this.statuesGroup.create(s.spawn.x, s.spawn.y, textureKey('statue'));
       img.setOrigin(0.5, 0.92);
-      img.body.setCircle(TUNING.statueRadius, (30 - TUNING.statueRadius * 2) / 2, (52 - TUNING.statueRadius * 2) / 2);
-      const statue = new StatueNPC(this.layout.walls, s.spawnCell, s.spawn, i, img);
+      // The visual anchor is at the statue's plinth/feet. Keep the collision
+      // circle there too: the old centred-frame offset put the circle about
+      // 22px above the path position, slightly inside the wall north of every
+      // room centre, so the AI could request velocity forever without moving.
+      img.body.setCircle(TUNING.statueRadius, -2, 31);
+      const patrolWalls = this.layout.floorWalls[s.floor ?? 0];
+      const statue = new StatueNPC(this.layout.walls, s.spawnCell, s.spawn, i, img, patrolWalls);
       statue.floor = s.floor ?? 0;
       statue.wing = s.wing;
       return statue;
@@ -419,7 +436,7 @@ export class LabyrinthScene extends Phaser.Scene {
     this.physics.add.collider(this.statuesGroup, this.wallLayer);
     this.physics.add.overlap(this.playerSprite, this.statuesGroup, (player, statueSprite) => {
       const statue = this.statues.find((s) => s.sprite === statueSprite);
-      if (statue) statue.justHit = true;
+      if (statue?.canDamage && statue.state === 'hunting') statue.justHit = true;
     });
     this.physics.add.overlap(this.playerSprite, this.keysGroup, (player, img) => this.onKeyOverlap(img));
     this.physics.add.overlap(this.playerSprite, this.shieldsGroup, (player, img) => this.onShieldOverlap(img));
@@ -562,7 +579,12 @@ export class LabyrinthScene extends Phaser.Scene {
     this.player.shieldCharges += 1;
     labyrinthCues.shieldFound();
     this.cameras.main.flash(160, 47, 216, 200);
-    this.setCaption(STRINGS.shieldFoundNote(this.player.shieldCharges), 1800);
+    if (!this.player.shieldTutorialSeen && !this.player.shieldTutorialPending) {
+      this.player.shieldTutorialPending = true;
+      this.setCaption(STRINGS.shieldFirstFoundNote, 3200);
+    } else {
+      this.setCaption(STRINGS.shieldFoundNote(this.player.shieldCharges), 1800);
+    }
   }
 
   onWingGateOverlap(img) {
@@ -699,14 +721,14 @@ export class LabyrinthScene extends Phaser.Scene {
 
     const container = this.add.container(0, 0).setScrollFactor(0).setDepth(101);
 
-    const panel = this.add.rectangle(x0 - 4, y0 - 4, size + 8, size + 8, PAL.void, 0.8).setOrigin(0, 0);
+    const panel = this.add.rectangle(x0 - 7, y0 - 7, size + 14, size + 14, PAL.mapBackground, 0.96).setOrigin(0, 0);
     const border = this.add.graphics();
-    border.lineStyle(1, PAL.brass, 0.7);
-    border.strokeRect(x0 - 4, y0 - 4, size + 8, size + 8);
+    border.lineStyle(2, PAL.cyan, 0.98);
+    border.strokeRect(x0 - 7, y0 - 7, size + 14, size + 14);
 
     const label = this.add
       .text(x0, y0 - 8, 'SURVEY · FLOOR I', {
-        fontFamily: FONT, fontSize: '10px', color: css(PAL.brass), letterSpacing: 4,
+        fontFamily: FONT, fontSize: '11px', color: css(PAL.cyan), fontStyle: 'bold', letterSpacing: 4,
       })
       .setOrigin(0, 1);
 
@@ -740,11 +762,11 @@ export class LabyrinthScene extends Phaser.Scene {
     const mm = this.minimap;
     if (!mm) return;
     mm.wallsBake.clear();
-    mm.wallsBake.fill(PAL.void, 1);
+    mm.wallsBake.fill(PAL.mapBackground, 1);
     for (let gy = 0; gy < GRID_H; gy += 1) {
       for (let gx = 0; gx < GRID_W; gx += 1) {
         if (!this.layout.walls[gy][gx]) continue;
-        mm.wallsBake.fill(PAL.stoneLight, 0.92, gx * CELL * mm.scale, gy * CELL * mm.scale, Math.ceil(CELL * mm.scale), Math.ceil(CELL * mm.scale));
+        mm.wallsBake.fill(PAL.mapWall, 0.96, gx * CELL * mm.scale, gy * CELL * mm.scale, Math.ceil(CELL * mm.scale), Math.ceil(CELL * mm.scale));
       }
     }
     mm.label.setText(`SURVEY · FLOOR ${this.activeFloor === 0 ? 'I' : 'II'}`);
@@ -756,7 +778,7 @@ export class LabyrinthScene extends Phaser.Scene {
     const mm = this.minimap;
     if (!mm) return;
     mm.wallsBake.fill(
-      PAL.void, 1,
+      PAL.mapBackground, 1,
       gate.cell.x * CELL * mm.scale, gate.cell.y * CELL * mm.scale,
       Math.ceil(CELL * mm.scale), Math.ceil(CELL * mm.scale),
     );
@@ -870,6 +892,20 @@ export class LabyrinthScene extends Phaser.Scene {
   onHit() {
     this.player.lives -= 1;
     this.player.invulnUntil = this.time.now + TUNING.invulnMs;
+    this.primaryHunterId = null;
+    this.hunterReliefUntil = this.time.now + TUNING.hunterReliefAfterHitMs;
+    for (const statue of this.statues) {
+      if (statue.wing !== this.currentWingId) continue;
+      statue.canDamage = false;
+      statue.justHit = false;
+      if (['hunting', 'frozen'].includes(statue.state)) {
+        statue.state = 'patrolling';
+        statue.path = null;
+        statue.pathIndex = 0;
+        statue.repathAt = 0;
+        statue.patrolGoal = null;
+      }
+    }
     labyrinthCues.statueHit();
     this.cameras.main.flash(260, 140, 20, 20);
     this.cameras.main.shake(220, 0.012);
@@ -1135,13 +1171,38 @@ export class LabyrinthScene extends Phaser.Scene {
     // Wing transitions — the "advance from scene to scene" beat.
     const wingNow = this.wingAt(this.playerSprite.x, this.playerSprite.y);
     if (wingNow !== null && wingNow !== this.currentWingId) {
-      this.currentWingId = wingNow;
+      const transition = applyWingEntryRules({
+        currentWingId: this.currentWingId,
+        targetWingId: wingNow,
+        highestWingReached: this.highestWingReached,
+        lives: this.player.lives,
+        maxLives: TUNING.lives,
+      });
+      this.currentWingId = transition.currentWingId;
+      this.highestWingReached = transition.highestWingReached;
+      this.player.lives = transition.lives;
+      this.primaryHunterId = null;
+      this.statues.forEach((statue) => {
+        statue.canDamage = false;
+        statue.justHit = false;
+      });
+      if (transition.advanced) {
+        this.wingEntryGraceUntil = time + TUNING.wingEntryGraceMs;
+        this.player.invulnUntil = Math.max(this.player.invulnUntil, this.wingEntryGraceUntil);
+      }
       const wing = this.layout.wings.find((w) => w.id === wingNow);
       if (wing) {
         this.showWingCard(STRINGS.wingCard(wing.name));
         this.wingLabel.setText(wing.id === 3 ? `${wing.name} · FLOOR ${this.activeFloor === 0 ? 'I' : 'II'}` : wing.name);
         labyrinthCues.wingEnter();
         this.cameras.main.flash(220, 233, 226, 208);
+        if (transition.advanced && wing.id === 3) {
+          this.setCaption(`${STRINGS.wingLivesRestored}\n${STRINGS.lastGalleryIntro}`, 5600);
+        } else if (transition.advanced) {
+          this.setCaption(STRINGS.wingLivesRestored, 2600);
+        } else if (wing.id === 3) {
+          this.setCaption(STRINGS.lastGalleryIntro, 5200);
+        }
       }
     }
 
@@ -1156,21 +1217,44 @@ export class LabyrinthScene extends Phaser.Scene {
     let nearestHunt = Infinity;
     let hitThisFrame = false;
     let blockedThisFrame = false;
+    const litDanger = this.currentWingId > 0 && this.player.torchLit;
+    const activeHunterRadius = litDanger
+      ? TUNING.torchAttractionRadius
+      : (this.player.torchLit ? TUNING.activationRadius : TUNING.darkActivationRadius);
+    const huntersPaused = time < Math.max(this.wingEntryGraceUntil, this.hunterReliefUntil);
+    this.primaryHunterId = huntersPaused
+      ? null
+      : choosePrimaryHunterId(this.statues, {
+        playerX: this.playerSprite.x,
+        playerY: this.playerSprite.y,
+        wingId: this.currentWingId,
+        floor: this.activeFloor,
+        previousId: this.primaryHunterId,
+        activationRadius: activeHunterRadius,
+        returnRadius: TUNING.returnRadius,
+      });
     this.statues.forEach((statue, i) => {
       const spr = this.statueSprites[i];
       if (!statue.sprite.visible || !statue.sprite.body.enable) {
         statue.sprite.body.setVelocity(0, 0);
         return;
       }
-      const litDanger = this.currentWingId > 0 && this.player.torchLit;
+      const isPrimaryHunter = statue.id === this.primaryHunterId;
       statue.update(
         time,
         { x: this.playerSprite.x, y: this.playerSprite.y, facing: this.player.facing },
         {
           activationRadius: litDanger ? TUNING.torchAttractionRadius : (this.player.torchLit ? TUNING.activationRadius : TUNING.darkActivationRadius),
           visionRange: this.player.torchLit ? TUNING.visionRange : TUNING.darkVisionRadius * 1.3,
+          allowHunt: isPrimaryHunter,
         },
       );
+      statue.canDamage = statueCanDamage({
+        isPrimaryHunter,
+        state: statue.state,
+        now: time,
+        wingGraceUntil: this.wingEntryGraceUntil,
+      });
       spr.img.setDepth(statue.y);
       spr.eye.setPosition(statue.x, statue.y - 42);
       spr.eye.setDepth(statue.y + 1);
@@ -1184,6 +1268,10 @@ export class LabyrinthScene extends Phaser.Scene {
         spr.eye.setTexture(textureKey('eye-frozen'));
         spr.eye.setBlendMode(Phaser.BlendModes.NORMAL);
         spr.eye.setAlpha(1);
+      } else if (statue.state === 'returning') {
+        spr.eye.setTexture(textureKey('eye-idle'));
+        spr.eye.setBlendMode(Phaser.BlendModes.NORMAL);
+        spr.eye.setAlpha(0.45 + 0.15 * Math.sin(time / 220 + i));
       } else {
         spr.eye.setTexture(textureKey('eye-idle'));
         spr.eye.setBlendMode(Phaser.BlendModes.NORMAL);
@@ -1195,7 +1283,7 @@ export class LabyrinthScene extends Phaser.Scene {
         if (d < nearestHunt) nearestHunt = d;
         if (d <= TUNING.chaseProximity) chasingClose = true;
       }
-      if (statue.justHit && time >= this.player.invulnUntil) {
+      if (statue.justHit && statue.canDamage && time >= this.player.invulnUntil) {
         if (shieldActive) blockedThisFrame = true;
         else hitThisFrame = true;
         statue.relocateAwayFrom(worldToCell(this.playerSprite.x, this.playerSprite.y));
@@ -1215,6 +1303,20 @@ export class LabyrinthScene extends Phaser.Scene {
     if (hitThisFrame) this.onHit();
     else if (blockedThisFrame) this.onShieldBlock();
 
+    // The first hunter encountered after the first shield pickup pauses the
+    // usual contextual hint slot on one explicit lesson. It remains visible
+    // until Space successfully activates the shield, so a glance or a missed
+    // key press cannot consume the tutorial.
+    if (
+      this.player.shieldTutorialPending
+      && this.player.shieldCharges > 0
+      && !shieldActive
+      && nearestHunt <= TUNING.shieldTutorialThreatRadius
+    ) {
+      this.player.shieldTutorialPrompt = true;
+      this.player.shieldTutorialSeen = true;
+    }
+
     this.livesText.setText(`${STRINGS.livesLabel}  ${'♥'.repeat(Math.max(0, this.player.lives))}${'♡'.repeat(Math.max(0, TUNING.lives - this.player.lives))}`);
     this.keysText.setText(STRINGS.keysLabel(this.player.keysCollected, TUNING.keysTotal));
     this.shieldText.setText(STRINGS.shieldLabel(this.player.shieldCharges) + (shieldActive ? '  ●' : ''));
@@ -1225,7 +1327,11 @@ export class LabyrinthScene extends Phaser.Scene {
       this.torchText.setText(this.player.torchLit ? `FLAME  ${'▰'.repeat(segments)}${'▱'.repeat(5 - segments)}` : 'FLAME  OUT');
     }
     const stair = this.nearestStair();
-    this.interactText.setText(stair ? STRINGS.stairHint : '');
+    this.interactText.setText(
+      this.player.shieldTutorialPrompt && !shieldActive
+        ? STRINGS.shieldTutorialPrompt
+        : (stair ? STRINGS.stairHint : ''),
+    );
     if (this.currentWingId === 3) this.wingLabel.setText(`THE LAST GALLERY · FLOOR ${this.activeFloor === 0 ? 'I' : 'II'}`);
   }
 
@@ -1267,7 +1373,13 @@ export class LabyrinthScene extends Phaser.Scene {
       keys: this.player?.keysCollected,
       keysTotal: TUNING.keysTotal,
       shields: this.player?.shieldCharges,
+      shield: this.player ? {
+        active: this.time.now < this.player.shieldActiveUntil,
+        tutorialPending: this.player.shieldTutorialPending,
+        tutorialPrompt: this.player.shieldTutorialPrompt,
+      } : null,
       wing: this.currentWingId,
+      highestWingReached: this.highestWingReached,
       floor: this.activeFloor,
       player: this.playerSprite ? { x: Math.round(this.playerSprite.x), y: Math.round(this.playerSprite.y), facing: this.player.facing } : null,
       torch: this.player ? { lit: this.player.torchLit, fuelMs: Math.round(this.player.torchFuelMs) } : null,
@@ -1279,6 +1391,9 @@ export class LabyrinthScene extends Phaser.Scene {
       },
       gatesLocked: this.layout?.gates.map((g) => g.locked),
       chasing: chaseMusic.isChasing(),
+      primaryHunterId: this.primaryHunterId,
+      damagingHunters: this.statues?.filter((statue) => statue.canDamage).map((statue) => statue.id),
+      hunterReliefMs: Math.max(0, Math.round(Math.max(this.wingEntryGraceUntil, this.hunterReliefUntil) - this.time.now)),
       artifactReady: this.artifactReady,
       artifactTaken: this.artifactTaken,
       statues: this.statues?.map((s) => s.state),

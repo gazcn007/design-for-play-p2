@@ -5,6 +5,7 @@ import {
   formatSave,
   launchCheckpoint,
   readSettings,
+  volumeForChannel,
   writeSettings,
 } from './saveSystem.js';
 import {
@@ -15,6 +16,7 @@ import {
 } from './creditsData.js';
 import { CINEMATICS, playCinematic } from './gameFlow.js';
 import { installPauseMenu } from './pauseMenu.js';
+import { activateHiddenRouter } from '../devMode.js';
 
 const store = createSaveStore();
 
@@ -41,6 +43,7 @@ export function createTitleMenu({ onStart, openCredits = false }) {
   const root = document.createElement('main');
   root.id = 'nightfall-title';
   root.innerHTML = `
+    <img class="nf-title-backdrop" src="/assets/ui/nightfall-title-background.png" alt="" aria-hidden="true" />
     <div class="nf-baked-menu-mask" aria-hidden="true"></div>
     <div class="nf-vignette"></div>
     <div class="nf-grain" aria-hidden="true"></div>
@@ -68,6 +71,7 @@ export function createTitleMenu({ onStart, openCredits = false }) {
   const dialog = root.querySelector('#nf-dialog');
   const panel = dialog.querySelector('.nf-dialog-inner');
   const creditAudio = new Audio(CREDIT_MUSIC[0].localFile);
+  creditAudio.dataset.nightfallAudioChannel = 'music';
   creditAudio.loop = true;
   creditAudio.preload = 'metadata';
   let lastFocusedAction = null;
@@ -78,7 +82,7 @@ export function createTitleMenu({ onStart, openCredits = false }) {
 
   const syncCreditVolume = (settings = readSettings()) => {
     creditAudio.volume = Math.max(0, Math.min(1,
-      (settings.masterVolume / 100) * (settings.musicVolume / 100) * 0.62));
+      volumeForChannel(settings, 'music') * 0.62));
   };
   const stopCreditsMusic = () => {
     creditAudio.pause();
@@ -154,16 +158,6 @@ export function createTitleMenu({ onStart, openCredits = false }) {
         <small>${member.stamp}</small>
         <b>${member.role}</b>
       `;
-      if (member.contributions?.length) {
-        const contributionList = document.createElement('ul');
-        contributionList.className = 'nf-credit-contributions';
-        member.contributions.forEach((contribution) => {
-          const item = document.createElement('li');
-          item.textContent = contribution;
-          contributionList.append(item);
-        });
-        row.append(contributionList);
-      }
       roster.append(row);
     });
     team.append(roster);
@@ -403,16 +397,41 @@ export function createTitleMenu({ onStart, openCredits = false }) {
     panel.querySelector('input, button')?.focus();
   };
 
+  // The 1111 router deliberately names playable test nodes, not just broad
+  // chapters.  Keep these direct: films are useful for transition testing,
+  // but slow down moment-to-moment playtests.
   const hiddenChapters = [
-    { number: 1, checkpoint: 'prologue-start', title: 'NIGHT SERVICE', detail: 'OPENING FILM → CHAPTER 1', cinematic: CINEMATICS.opening, preload: 'chapter1', launch: 'prologue-start' },
-    { number: 2, checkpoint: 'chapter-2-start', title: 'BORROWED GRID', detail: '1 → 2 FILM → CHAPTER 2', cinematic: CINEMATICS.chapter1To2, preload: 'chapter2', launch: 'chapter-2' },
-    { number: 3, checkpoint: 'chapter-3-start', title: 'ECHO CITY', detail: '2 → 3 FILM → CHAPTER 3', cinematic: CINEMATICS.chapter2To3, preload: 'chapter3', route: '/car03-3d.html' },
-    { number: 4, checkpoint: 'chapter-4-start', title: 'THE PAINTED COUNTRY', detail: '3 → 4 FILM → CHAPTER 4', cinematic: CINEMATICS.chapter3To4, preload: 'chapter4', route: '/painted-country.html' },
-    { number: 5, checkpoint: 'chapter-5-start', title: 'THE MUSEUM OF ONE ANSWER', detail: '4 → 5 FILM → CHAPTER 5', cinematic: CINEMATICS.chapter4To5, preload: 'chapter5', route: '/museum-3d.html' },
-    { number: 6, checkpoint: 'chapter-6-start', title: 'ALL WORLDS AT ONCE', detail: 'MUSEUM COLLAPSE → BLACK → FINAL BOSS', route: '/museum-3d.html?beat=collapse' },
+    { id: '1.1', group: 'CHAPTER 1 · NIGHT SERVICE', checkpoint: 'prologue-start', title: 'JUNCTION I · THE PUNCH', detail: 'First carriage and opening timetable interaction.', route: '/?qa=phase1&state=entry' },
+    { id: '1.2', group: 'CHAPTER 1 · NIGHT SERVICE', checkpoint: 'prologue-start', title: 'JUNCTION II · CONTACT INTERLOCK', detail: 'Relay case, contactor and traction circuit.', route: '/?qa=phase2&state=entry' },
+    { id: '1.3', group: 'CHAPTER 1 · NIGHT SERVICE', checkpoint: 'prologue-start', title: 'JUNCTION III · AIR CIRCUIT', detail: 'Isolate, bleed and release the local air lock.', route: '/?qa=phase3&state=entry' },
+    { id: '1.4', group: 'CHAPTER 1 · NIGHT SERVICE', checkpoint: 'prologue-start', title: 'JUNCTION IV · THE FIRST WEIGHT', detail: 'Movable case and counterweight balance.', route: '/?qa=phase4&state=entry' },
+    { id: '1.5', group: 'CHAPTER 1 · NIGHT SERVICE', checkpoint: 'prologue-start', title: 'JUNCTION V · TWO TRUE THINGS', detail: 'Suspended cases and dual evidence route.', route: '/?qa=phase5&state=entry' },
+    { id: '1.6', group: 'CHAPTER 1 · NIGHT SERVICE', checkpoint: 'prologue-start', title: 'JUNCTION VI · THE TRAIN REMEMBERS', detail: 'Final train-load replay and departure.', route: '/?qa=phase6&state=entry' },
+    { id: '2.1', group: 'CHAPTER 2 · BORROWED GRID', checkpoint: 'chapter-2-start', title: 'ROOF ROUTE · START', detail: 'Full parkour route from the first roof.', launch: 'chapter-2' },
+    { id: '2.2', group: 'CHAPTER 2 · BORROWED GRID', checkpoint: 'chapter-2-midpoint', title: 'ROOF ROUTE · MIDPOINT', detail: 'Second half after the route-extension checkpoint.', launch: 'chapter-2-midpoint' },
+    { id: '3.1', group: 'CHAPTER 3 · ECHO CITY', checkpoint: 'chapter-3-start', title: 'CITY ENTRY · DAWN', detail: 'Main Echo City investigation start.', route: '/car03-3d.html' },
+    { id: '3.2', group: 'CHAPTER 3 · ECHO CITY', checkpoint: 'chapter-3-start', title: 'DUSK CAMPFIRE', detail: 'Campfire evidence and the Echo Stone route.', route: '/car03-3d.html?playtest=chapter3-campfire' },
+    { id: '3.3', group: 'CHAPTER 3 · ECHO CITY', checkpoint: 'chapter-3-start', title: 'COPPER HERON · HOTEL', detail: 'Hotel/lobby route and character encounters.', route: '/car03-3d.html?playtest=chapter3-night-hotel' },
+    { id: '3.4', group: 'CHAPTER 3 · ECHO CITY', checkpoint: 'chapter-3-start', title: 'SUNRISE OVERLOOK', detail: 'Late-city overlook and exit setup.', route: '/car03-3d.html?playtest=chapter3-sunrise' },
+    { id: '4.1', group: 'CHAPTER 4 · THE PAINTED COUNTRY', checkpoint: 'chapter-4-start', title: 'GALLERY · THE OPEN SHEET', detail: 'First painted-country gallery route.', route: '/painted-country.html' },
+    { id: '4.2', group: 'CHAPTER 4 · THE PAINTED COUNTRY', checkpoint: 'chapter-4-start', title: 'DRAWING STUDIO · STILL LIFE', detail: 'Cabinet pigments and the canvas reconstruction.', route: '/painted-country.html?qa=drawing' },
+    { id: '4.3', group: 'CHAPTER 4 · THE PAINTED COUNTRY', checkpoint: 'chapter-4-start', title: 'PIGMENT TRAIN · YARD', detail: 'Collect-six-colors train departure route.', route: '/painted-country.html?qa=pigments' },
+    { id: '5.1', group: 'CHAPTER 5 · MUSEUM OF ONE ANSWER', checkpoint: 'chapter-5-start', title: 'MUSEUM LOBBY', detail: 'Service desk, exhibits and first direction.', route: '/museum-3d.html' },
+    { id: '5.2', group: 'CHAPTER 5 · MUSEUM OF ONE ANSWER', checkpoint: 'chapter-5-start', title: 'ARCHIVE CORRIDOR', detail: 'Choose a direction from the corridor.', route: '/museum-3d.html?beat=corridor' },
+    { id: '5.3', group: 'CHAPTER 5 · MUSEUM OF ONE ANSWER', checkpoint: 'chapter-5-start', title: 'MUSEUM ECHO CITY', detail: 'Echo-city reconstruction direction.', route: '/museum-3d.html?beat=echo&standalone=1' },
+    { id: '5.4', group: 'CHAPTER 5 · MUSEUM OF ONE ANSWER', checkpoint: 'chapter-5-start', title: 'LABYRINTH', detail: 'Eight-key statue chase.', route: '/labyrinth.html' },
+    { id: '5.5', group: 'CHAPTER 5 · MUSEUM OF ONE ANSWER', checkpoint: 'chapter-5-start', title: 'BORROWED GRID · SERVICE SHIFT', detail: 'Three-round public-power node.', route: '/borrowed-grid.html' },
+    { id: '5.6', group: 'CHAPTER 5 · MUSEUM OF ONE ANSWER', checkpoint: 'chapter-5-start', title: 'MUSEUM COLLAPSE', detail: 'Final Archive collapse and boss handoff.', route: '/museum-3d.html?beat=collapse' },
+    { id: '6.1', group: 'CHAPTER 6 · ALL WORLDS AT ONCE', checkpoint: 'chapter-6-start', title: 'CONDUCTOR I · NIGHT SERVICE', detail: 'Thrown-departures movement and suitcase memories.', route: '/final-boss.html?qa=conductor-1' },
+    { id: '6.2', group: 'CHAPTER 6 · ALL WORLDS AT ONCE', checkpoint: 'chapter-6-start', title: 'CONDUCTOR II · BORROWED GRID', detail: 'Grid runner movement, blocks and ladder strike.', route: '/final-boss.html?qa=conductor-2' },
+    { id: '6.3', group: 'CHAPTER 6 · ALL WORLDS AT ONCE', checkpoint: 'chapter-6-start', title: 'CONDUCTOR III · ECHO CITY', detail: 'Truth-dialogue movement and civic-record pressure.', route: '/final-boss.html?qa=conductor-3' },
+    { id: '6.4', group: 'CHAPTER 6 · ALL WORLDS AT ONCE', checkpoint: 'chapter-6-start', title: 'CONDUCTOR IV · PAINTED COUNTRY', detail: 'Pigment collection, paint return and Mara finale.', route: '/final-boss.html?qa=conductor-4' },
+    { id: '6.5', group: 'CHAPTER 6 · ALL WORLDS AT ONCE', checkpoint: 'chapter-6-start', title: 'BLACK KNIFE · HIDDEN FINALE', detail: 'Five-stone hidden boss direct entry.', preload: 'hiddenBoss', route: '/hidden-final-boss.html?easter-egg=1' },
+    { id: '6.6', group: 'CHAPTER 6 · ALL WORLDS AT ONCE', checkpoint: 'chapter-6-start', title: 'TRUE ENDING', detail: 'Ending presentation and credits return.', route: '/true-ending.html' },
   ];
 
   const launchHiddenChapter = (chapter) => {
+    activateHiddenRouter();
     sessionStorage.setItem('nightfall.titleDismissed.v1', '1');
     closeDialog();
     root.remove();
@@ -430,19 +449,28 @@ export function createTitleMenu({ onStart, openCredits = false }) {
       src: chapter.cinematic,
       label: `NIGHTFALL Chapter ${chapter.number} transition`,
       preloadChapterId: chapter.preload,
+      requirePreloadReady: chapter.requirePreloadReady,
       onComplete: arrive,
     });
   };
 
   const renderHiddenChapterSelect = () => {
     panel.classList.remove('nf-credits-panel');
-    panel.innerHTML = '<div class="nf-dialog-heading"><p class="nf-eyebrow">ARCHIVE ROUTING</p><h2>SELECT CHAPTER ENTRY</h2></div>';
+    panel.innerHTML = '<div class="nf-dialog-heading"><p class="nf-eyebrow">ARCHIVE ROUTING · 1111</p><h2>SELECT TEST NODE</h2><p class="nf-empty">Every entry skips transition films and opens its playable node directly.</p></div>';
+    let group = null;
     hiddenChapters.forEach((chapter) => {
+      if (chapter.group !== group) {
+        group = chapter.group;
+        const heading = document.createElement('h3');
+        heading.className = 'nf-chapter-group';
+        heading.textContent = group;
+        panel.append(heading);
+      }
       const row = document.createElement('button');
       row.type = 'button';
       row.className = 'nf-slot nf-chapter-jump';
-      row.dataset.chapter = String(chapter.number);
-      row.innerHTML = `<span class="nf-slot-index">${String(chapter.number).padStart(2, '0')}</span><span class="nf-slot-meta">CHAPTER ENTRY</span><strong>${chapter.title}</strong><small>${chapter.detail}</small><b aria-hidden="true">›</b>`;
+      row.dataset.chapter = chapter.id;
+      row.innerHTML = `<span class="nf-slot-index">${chapter.id}</span><span class="nf-slot-meta">TEST NODE</span><strong>${chapter.title}</strong><small>${chapter.detail}</small><b aria-hidden="true">›</b>`;
       row.addEventListener('click', () => launchHiddenChapter(chapter));
       panel.append(row);
     });
@@ -557,6 +585,9 @@ export function createTitleMenu({ onStart, openCredits = false }) {
     scene: root.dataset.state === 'exited' ? 'Exited' : 'TitleMenu',
     dialog: dialog.open ? panel.querySelector('h2')?.textContent ?? 'dialog' : null,
     chapterSelect: root.dataset.chapterSelect === 'open' && dialog.open,
+    chapterEntries: root.dataset.chapterSelect === 'open' && dialog.open
+      ? hiddenChapters.map(({ id, group, title, route, launch }) => ({ id, group, title, route: route ?? null, launch: launch ?? null }))
+      : [],
     credits: panel.classList.contains('nf-credits-panel')
       ? {
           visible: dialog.open,

@@ -15,6 +15,11 @@ import { mat, emissiveMat, flatMat, box, plane, label, fluorescentFixture, displ
 import { RoomReclassification } from '../systems/RoomReclassification.js';
 import { createMuseumMaterialLibrary } from '../assets/MuseumMaterials.js';
 import { loadMuseumModel } from '../assets/MuseumModelLoader.js';
+import { createLastTrainExhibitElements } from '../assets/ChapterExhibitElements.js';
+import { chapterExhibit, exhibitDialogue } from '../data/chapterExhibitCatalog.js';
+import { loadFinalBossPaperAsset } from '../assets/FinalBossPaperAssetLoader.js';
+import { createCentralJourneyDisplay } from '../assets/CentralJourneyDisplay.js';
+import { magicStoneSnapshot, offerMagicStone } from '../../../shell/magicStones.js';
 import {
   addAcousticCeilingGrid,
   createArchiveCart,
@@ -124,21 +129,54 @@ export class ServiceLobby {
     wasteBin.position.set(-7.2, 0, 4.8);
     g.add(wasteBin);
 
-    // small wall cases with accession cards
+    // Keep only the left-hand Chapter 1 ticket case. The right olive thread
+    // vitrine is removed so the central Black Knife route has clear sightlines.
+    this.lastTrainExhibit = chapterExhibit('last-train');
     const caseA = displayCase(g, { x: -5.5, z: -5.2, w: 1.6, d: 1.0, name: 'wall-case-a', collisionWorld });
-    label(caseA, 'ACC. 88-0147\nUNIDENTIFIED TOKEN', { x: 0, y: 1.15, z: 0.2, w: 0.9, h: 0.3 });
-    const caseB = displayCase(g, { x: 5.5, z: -5.2, w: 1.6, d: 1.0, name: 'wall-case-b', collisionWorld });
-    label(caseB, 'ACC. 91-0003\nTRANSFER SLIP', { x: 0, y: 1.15, z: 0.2, w: 0.9, h: 0.3 });
+    const ticketElements = createLastTrainExhibitElements();
+    ticketElements.name = 'chapter-01-ticket-case-elements';
+    ticketElements.scale.setScalar(0.82);
+    ticketElements.traverse((object) => {
+      if (/thread|spool|relay/.test(object.name)) object.visible = false;
+    });
+    caseA.add(ticketElements);
+    label(caseA, 'CHAPTER 01 · THE LAST TRAIN\nPUNCHED TICKET A-1017', {
+      x: 0, y: 0.88, z: 0.515, w: 1.34, h: 0.28,
+      fg: '#e6ddc5', bg: '#17140f', font: 'bold 25px Georgia, serif',
+    });
+    this.lastTrainTicketProxy = hitProxy(caseA, { x: 0, y: 1.35, z: 0.5, w: 1.5, h: 1.5, d: 0.2, name: 'chapter-01-ticket-case-proxy' });
+    label(g, 'ARCHIVE METHOD\nOBJECT · MEMORY · RECONSTRUCTION LAW', {
+      x: 0, y: 1.5, z: -5.82, w: 3.8, h: 0.58,
+      fg: '#d9c99d', bg: '#20231f', font: 'bold 29px Georgia, serif',
+    });
 
-    // central case — big enough to hold the entire service desk later.
+    // Central case — two paper objects from two different chapters, both taken
+    // directly from George's ALL WORLDS AT ONCE final boss. They occupy the
+    // case until the room reclassifies the service desk as evidence.
     this.centralCase = displayCase(g, {
       x: 1.5, z: 0, w: 5.4, d: 2.8, plinthH: 1.0, glassH: 1.9,
       name: 'central-case',
     });
     this.centralCaseColliderSize = { x: 1.5, z: 0, w: 5.4, d: 2.8 };
-    label(g, 'CENTRAL DISPLAY\nOBJECT PENDING CLASSIFICATION', {
-      x: 1.5, y: 0.55, z: 1.65, w: 2.2, h: 0.5,
+    this.centralOriginalDisplay = new THREE.Group();
+    this.centralOriginalDisplay.name = 'central-final-boss-two-world-display';
+    this.centralCase.add(this.centralOriginalDisplay);
+    const supportingArchive = createCentralJourneyDisplay(this.materials);
+    this.centralJourneySupportingDisplay = supportingArchive.group;
+    this._updateCentralJourneyDisplay = supportingArchive.update;
+    this.centralOriginalDisplay.add(this.centralJourneySupportingDisplay);
+    this.centralOriginalModelIds = [];
+    this.centralOriginalModelFailures = [];
+    this.centralOriginalDisplayProxy = hitProxy(this.centralCase, {
+      x: -2.76, y: 1.74, z: 0, w: 0.12, h: 1.35, d: 2.58,
+      name: 'central-original-model-display-proxy',
     });
+    this.centralNormalLabel = label(g, 'TWO WORLDS · ONE JOURNEY\n01 · NIGHT TRAIN / 04 · INDIGO', {
+      x: -1.23, y: 0.55, z: 0, w: 2.25, h: 0.5, rotationY: -Math.PI / 2,
+      font: 'bold 25px Georgia, serif',
+    });
+    this._installCentralFinalBossAssets();
+    this._buildLobbyEvidence();
 
     // guide receiver stand
     this.guideStand = new THREE.Group();
@@ -280,6 +318,88 @@ export class ServiceLobby {
     return model.group;
   }
 
+  _buildLobbyEvidence() {
+    // The axe is emergency hardware, not a freestanding gallery prop: it hangs
+    // in a red, wall-mounted fire-axe cabinet on the south wall.
+    this.fireAxeEvidence = new THREE.Group();
+    this.fireAxeEvidence.name = 'lobby-fire-axe-evidence';
+    // East/north wall: clearly separate from the Black Knife case on the
+    // south side, and not occluded by that foreground glass.
+    // Keep clear of the nearby ARCHIVE WING placard.
+    this.fireAxeEvidence.position.set(7.74, 0, -5.02);
+    this.fireAxeEvidence.rotation.y = Math.PI / 2;
+    this.root.add(this.fireAxeEvidence);
+    const cabinetRed = mat(0xa82222);
+    const cabinetInside = mat(0xf0e7d3);
+    const axeHead = mat(0xb52d27);
+    const axeHandle = mat(0x9d6a3e);
+    box(this.fireAxeEvidence, { x: 0, y: 1.28, z: 0, w: 1.02, h: 1.55, d: 0.1, material: cabinetRed, name: 'fire-axe-cabinet' });
+    box(this.fireAxeEvidence, { x: 0, y: 1.28, z: -0.062, w: 0.82, h: 1.26, d: 0.018, material: cabinetInside, name: 'fire-axe-cabinet-interior' });
+    box(this.fireAxeEvidence, { x: -0.1, y: 1.27, z: -0.09, w: 0.07, h: 1.02, d: 0.055, material: axeHandle, name: 'fire-axe-handle' });
+    box(this.fireAxeEvidence, { x: 0.04, y: 1.69, z: -0.095, w: 0.34, h: 0.13, d: 0.07, material: axeHead, name: 'fire-axe-head' });
+    box(this.fireAxeEvidence, { x: -0.1, y: 1.75, z: -0.09, w: 0.07, h: 0.2, d: 0.055, material: axeHandle, name: 'fire-axe-neck' });
+    label(this.fireAxeEvidence, 'FIRE\nAXE', { x: 0, y: 2.28, z: -0.075, w: 1.22, h: 0.46, rotationY: Math.PI, fg: '#ffffff', bg: '#b72222', font: 'bold 27px "Courier New", monospace' });
+    this.fireAxeProxy = hitProxy(this.fireAxeEvidence, { x: 0, y: 1.3, z: -0.17, w: 1.08, h: 1.72, d: 0.18, name: 'fire-axe-evidence-proxy' });
+    this.fireAxeTaken = false;
+
+    // The fifth stone is a small, ordinary rough stone inside the central
+    // vitrine. It is intentionally quiet: no glow, pulse, or floating hint.
+    this.blackKnifeCase = this.centralCase;
+    this.blackKnifeStone = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(0.13, 1),
+      new THREE.MeshStandardMaterial({ color: 0x585248, roughness: 1, metalness: 0, flatShading: true }),
+    );
+    this.blackKnifeStone.name = 'black-knife-magic-stone';
+    // Keep this in a genuinely empty strip along the accessible long side.
+    // The former coordinate shared depth with the pigment card and folded-paper
+    // study, so the stone existed but was fully hidden from the player-facing
+    // view. This spot stays quiet and normal-sized, but is not occluded by any
+    // other display asset.
+    this.blackKnifeStone.position.set(0.86, 1.22, 1.08);
+    this.blackKnifeStone.rotation.z = Math.PI / 4;
+    this.blackKnifeCase.add(this.blackKnifeStone);
+    this.blackKnifeStoneLight = new THREE.PointLight(0x6b6254, 0, 1.1, 2);
+    this.blackKnifeStoneLight.position.set(0.86, 1.26, 1.08);
+    this.blackKnifeCase.add(this.blackKnifeStoneLight);
+    this.blackKnifeStoneProxy = hitProxy(this.blackKnifeCase, { x: 0.86, y: 1.22, z: 1.46, w: 0.48, h: 0.46, d: 0.1, name: 'black-knife-stone-click-proxy' });
+    // The player can start the break from anywhere along this visible long
+    // side. The actual stone remains a quiet, normal-sized object to aim at
+    // after the pane is gone.
+    this.blackKnifeBreakProxy = hitProxy(this.blackKnifeCase, { x: 0, y: 1.65, z: 1.46, w: 5.0, h: 1.3, d: 0.1, name: 'black-knife-long-side-glass-break-proxy' });
+    this.blackKnifeLongSideGlass = this.blackKnifeCase.getObjectByName('central-case-glass-front');
+    this.blackKnifeGlassBroken = false;
+    if (magicStoneSnapshot().collected.includes('black-knife')) {
+      this.blackKnifeStone.visible = false;
+      this.blackKnifeStoneLight.intensity = 0;
+    }
+
+    this.glassShardEvidence = new THREE.Group();
+    this.glassShardEvidence.name = 'black-knife-case-glass-shards';
+    this.glassShardEvidence.position.set(0.14, 0.02, 1.62);
+    this.root.add(this.glassShardEvidence);
+    const shardMaterial = new THREE.MeshPhysicalMaterial({ color: 0xa9d8d7, transparent: true, opacity: 0.54, roughness: 0.08, metalness: 0.05, side: THREE.DoubleSide });
+    for (const [index, [x, z, scale, turn]] of [[0, [-0.42, -0.26, 0.22, 0.3]], [1, [-0.18, 0.12, 0.16, -0.7]], [2, [0.16, -0.18, 0.28, 1.1]], [3, [0.43, 0.18, 0.13, -0.2]], [4, [0.06, 0.38, 0.18, 0.65]]]) {
+      const shard = new THREE.Mesh(new THREE.CircleGeometry(scale, 3), shardMaterial);
+      shard.name = `glass-shard-${index + 1}`;
+      shard.rotation.x = -Math.PI / 2;
+      shard.rotation.z = turn;
+      shard.position.set(x, 0.008 + index * 0.002, z);
+      this.glassShardEvidence.add(shard);
+    }
+    this.glassShardEvidence.visible = false;
+
+    this.heldFireAxe = new THREE.Group();
+    this.heldFireAxe.name = 'held-fire-axe';
+    this.heldFireAxe.position.set(0.46, -0.34, -0.78);
+    this.heldFireAxe.rotation.set(-0.68, 0.3, -0.16);
+    const heldHandle = box(this.heldFireAxe, { y: 0, w: 0.045, h: 0.56, d: 0.045, material: axeHandle, name: 'held-fire-axe-handle' });
+    heldHandle.rotation.z = -0.5;
+    const heldHead = box(this.heldFireAxe, { x: 0.13, y: 0.2, w: 0.22, h: 0.1, d: 0.06, material: axeHead, name: 'held-fire-axe-head' });
+    heldHead.rotation.z = -0.5;
+    this.heldFireAxe.visible = false;
+    this.ctx.camera.add(this.heldFireAxe);
+  }
+
   async _installTelephone(placeholder, { exhibit = false } = {}) {
     try {
       const phone = await loadMuseumModel('telephone', {
@@ -311,6 +431,48 @@ export class ServiceLobby {
     } catch (error) {
       console.warn('[museum3d] archive cart model unavailable; using fallback', error);
     }
+  }
+
+  async _installCentralFinalBossAssets() {
+    const specs = [
+      {
+        id: 'chapter01-night-service-train',
+        width: 1.90,
+        position: [-0.90, 1.075, -0.58],
+        rotationX: -Math.PI / 2,
+      },
+      {
+        id: 'chapter04-indigo-pigment',
+        width: 1.00,
+        position: [-1.28, 1.079, 0.55],
+        rotationX: -Math.PI / 2,
+      },
+    ];
+    await Promise.all(specs.map(async (spec) => {
+      try {
+        const model = await loadFinalBossPaperAsset(spec.id, { width: spec.width });
+        model.position.set(...spec.position);
+        model.rotation.x = spec.rotationX;
+        this.centralOriginalDisplay.add(model);
+        this.centralOriginalModelIds.push(spec.id);
+      } catch (error) {
+        this.centralOriginalModelFailures.push(spec.id);
+        console.warn(`[museum3d] original model unavailable: ${spec.id}`, error);
+      }
+    }));
+  }
+
+  getCentralDisplayState() {
+    return {
+      visible: this.centralOriginalDisplay.visible,
+      modelIds: [...this.centralOriginalModelIds].sort(),
+      failures: [...this.centralOriginalModelFailures].sort(),
+      sourceChapters: ['chapter01', 'chapter04'],
+      sourceRuntime: 'final-boss-all-worlds-at-once',
+      usesOriginalRuntimeAssets: true,
+      paddingRatio: this.centralJourneySupportingDisplay?.userData.layout?.paddingRatio ?? null,
+      supportingItems: this.centralJourneySupportingDisplay?.userData.items?.map(({ id, medium }) => ({ id, medium })) ?? [],
+    };
   }
 
   _registerFurnitureColliders(variant) {
@@ -387,6 +549,76 @@ export class ServiceLobby {
       },
     });
 
+    interaction.register('central-original-model-display', {
+      mesh: this.centralOriginalDisplayProxy,
+      enabled: () => {
+        const s = model.getSnapshot();
+        return ['lobby', 'return'].includes(s.phase) && !s.lobby.deskReclassified;
+      },
+      prompt: 'E — INSPECT THE TWO-WORLD DISPLAY',
+      action: () => dialogue.play([
+        ...exhibitDialogue(chapterExhibit('last-train')),
+        ...exhibitDialogue(chapterExhibit('painted-country')),
+      ]),
+    });
+
+    interaction.register('fire-axe-evidence', {
+      mesh: this.fireAxeProxy,
+      enabled: () => ['lobby', 'return'].includes(model.getSnapshot().phase) && !this.fireAxeTaken,
+      prompt: 'E — TAKE THE FIRE AXE',
+      action: () => {
+        this.fireAxeTaken = true;
+        // Only the removable axe disappears; the emergency cabinet stays on
+        // the wall as evidence, now visibly empty.
+        this.fireAxeProxy.visible = false;
+        this.fireAxeEvidence.getObjectByName('fire-axe-handle').visible = false;
+        this.fireAxeEvidence.getObjectByName('fire-axe-head').visible = false;
+        this.fireAxeEvidence.getObjectByName('fire-axe-neck').visible = false;
+        this.heldFireAxe.visible = true;
+        dialogue.play([{ speaker: null, text: 'The axe is still sharp. One long side of the central vitrine can be opened from this side.' }]);
+      },
+    });
+
+    interaction.register('black-knife-long-side-glass', {
+      mesh: this.blackKnifeBreakProxy,
+      enabled: () => ['lobby', 'return'].includes(model.getSnapshot().phase)
+        && !magicStoneSnapshot().collected.includes('black-knife')
+        && this.fireAxeTaken && !this.blackKnifeGlassBroken,
+      prompt: 'E — BREAK THE LONG SIDE GLASS',
+      showWhenInactive: true,
+      action: () => this.tryBreakBlackKnifeGlass(),
+    });
+
+    interaction.register('black-knife-stone', {
+      mesh: this.blackKnifeStoneProxy,
+      enabled: () => ['lobby', 'return'].includes(model.getSnapshot().phase)
+        && this.blackKnifeGlassBroken && !magicStoneSnapshot().collected.includes('black-knife')
+        && !this._claimingBlackKnifeStone,
+      prompt: 'CLICK — TAKE THE BLACK KNIFE STONE',
+      pointerOnly: true,
+      showWhenInactive: true,
+      action: async () => {
+        this._claimingBlackKnifeStone = true;
+        const taken = await offerMagicStone('black-knife');
+        this._claimingBlackKnifeStone = false;
+        if (!taken) return;
+        this.blackKnifeStone.visible = false;
+        this.blackKnifeStoneLight.intensity = 0;
+        dialogue.play([{ speaker: null, text: 'The shard is cold in your hand. The hidden route now has a key.' }]);
+      },
+    });
+
+    for (const [id, mesh] of [
+      ['chapter-01-ticket-case', this.lastTrainTicketProxy],
+    ]) {
+      interaction.register(id, {
+        mesh,
+        enabled: () => ['lobby', 'return'].includes(model.getSnapshot().phase),
+        prompt: 'E — READ CHAPTER 01 ACCESSION CARD',
+        action: () => dialogue.play(exhibitDialogue(this.lastTrainExhibit)),
+      });
+    }
+
     interaction.register('cased-desk-phone', {
       mesh: this.casedDesk,
       enabled: () => model.getSnapshot().lobby.deskReclassified,
@@ -408,6 +640,8 @@ export class ServiceLobby {
 
   enter(snapshot) {
     const variant = this.reclassification.apply(snapshot);
+    this.centralOriginalDisplay.visible = variant === 'normal';
+    this.centralNormalLabel.visible = variant === 'normal';
     this.ticketMesh.visible = !snapshot.ticket.carried && variant === 'normal';
     if (variant === 'reclassified') {
       this.deskLampLight.intensity = 9;
@@ -432,11 +666,57 @@ export class ServiceLobby {
     return pos.x >= zone.minX && pos.x <= zone.maxX && pos.z >= zone.minZ && pos.z <= zone.maxZ;
   }
 
+  canBreakBlackKnifeGlass() {
+    const player = this.ctx.controller.position;
+    return this.fireAxeTaken
+      && !this.blackKnifeGlassBroken
+      && ['lobby', 'return'].includes(this.ctx.model.getSnapshot().phase)
+      && player.x >= -1.25 && player.x <= 4.25
+      && player.z >= 1.25 && player.z <= 3.25;
+  }
+
+  canReachBlackKnifeStone() {
+    const player = this.ctx.controller.position;
+    return this.blackKnifeGlassBroken
+      && ['lobby', 'return'].includes(this.ctx.model.getSnapshot().phase)
+      && player.x >= -0.25 && player.x <= 4.75
+      && player.z >= 1.25 && player.z <= 3.25;
+  }
+
+  tryBreakBlackKnifeGlass() {
+    if (!this.canBreakBlackKnifeGlass()) return false;
+    this.blackKnifeGlassBroken = true;
+    this.blackKnifeLongSideGlass.visible = false;
+    this.glassShardEvidence.visible = true;
+    this.ctx.dialogue.play([{ speaker: null, text: 'Only the long side pane breaks. The stone is exposed behind the missing glass.' }]);
+    return true;
+  }
+
   update(dt, snapshot) {
     const player = this.ctx.controller.position;
+    this._updateCentralJourneyDisplay?.(performance.now() / 1000);
+
+    // The case is large and its transparent surfaces make a precision
+    // centre-reticle ray unreliable at arm's length. Once the axe is held,
+    // proximity to the accessible long side intentionally supplies the break
+    // prompt; collecting the exposed stone still requires an exact click.
+    const atBlackKnifeLongSide = this.canBreakBlackKnifeGlass();
+    const atExposedStone = this.canReachBlackKnifeStone();
+    this.ctx.interaction.setFallback(
+      this.fireAxeTaken && !this.blackKnifeGlassBroken && atBlackKnifeLongSide
+        ? 'black-knife-long-side-glass'
+        : this.blackKnifeGlassBroken && atExposedStone
+          ? 'black-knife-stone'
+          : null,
+      { promptOnly: this.blackKnifeGlassBroken && atExposedStone },
+    );
 
     // corridor doorway (normal route forward)
-    if (snapshot.phase === 'lobby' && this._inZone(player, this._corridorZone)) {
+    if (
+      snapshot.phase === 'lobby'
+      && snapshot.ticket.carried
+      && this._inZone(player, this._corridorZone)
+    ) {
       this.ctx.goToCorridor();
     }
 
@@ -462,6 +742,8 @@ export class ServiceLobby {
         this._handset.position.y = 0.17 + pulse * 0.012;
       }
     }
+
+    // The stone stays still and unlit until the player deliberately notices it.
 
     this._doorHintCooldown = Math.max(0, this._doorHintCooldown - dt);
     if (

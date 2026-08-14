@@ -4,10 +4,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  Chapter05Model,
   PHASES,
   PHASE_TRANSITIONS,
   canTransition,
+  createInitialState,
 } from '../../src/chapters/museum3d/state/chapter05Model.js';
+import { TransitionDirector } from '../../src/chapters/museum3d/systems/TransitionDirector.js';
 import { PLAYER } from '../../src/chapters/museum3d/config.js';
 import { StaticCollisionWorld } from '../../src/chapters/museum3d/player/StaticCollisionWorld.js';
 import { ECHO_CITY_ENTRY } from '../../src/chapters/museum3d/scenes/EchoCityWalkingSim.js';
@@ -40,6 +43,73 @@ test('every phase has a defined transition set', () => {
   for (const phase of PHASES) {
     assert.ok(Array.isArray(PHASE_TRANSITIONS[phase]), `missing transitions for ${phase}`);
   }
+});
+
+function createTransitionHarness(initialState = createInitialState()) {
+  const calls = [];
+  const scenes = new Map([
+    ['lobby', { exit: () => calls.push('lobby.exit') }],
+    ['corridor', { enter: () => calls.push('corridor.enter') }],
+  ]);
+  const app = {
+    activeSceneName: 'lobby',
+    model: new Chapter05Model(initialState),
+    scenes,
+    controller: {
+      setPose: () => calls.push('controller.setPose'),
+      unlock: () => calls.push('controller.unlock'),
+    },
+    getActiveScene() { return scenes.get(this.activeSceneName); },
+    setActiveScene(name) {
+      this.activeSceneName = name;
+      calls.push(`scene.${name}`);
+    },
+  };
+  const director = new TransitionDirector({
+    fadeEl: { classList: { toggle() {} } },
+  });
+  return { app, calls, director };
+}
+
+test('a rejected route action never swaps the rendered scene', async () => {
+  const { app, calls, director } = createTransitionHarness();
+  const changed = await director.transition(app, 'corridor', {
+    fromPhase: 'lobby',
+    toPhase: 'corridor',
+    action: { type: 'enterCorridor' },
+    occlude: false,
+    preserveControl: true,
+  });
+
+  assert.equal(changed, false);
+  assert.equal(app.model.getSnapshot().phase, 'lobby');
+  assert.equal(app.activeSceneName, 'lobby');
+  assert.deepEqual(calls, []);
+});
+
+test('an accepted route action changes state and scene together', async () => {
+  const initial = createInitialState();
+  initial.ticket.inspected = true;
+  initial.ticket.carried = true;
+  const { app, calls, director } = createTransitionHarness(initial);
+  const changed = await director.transition(app, 'corridor', {
+    fromPhase: 'lobby',
+    toPhase: 'corridor',
+    action: { type: 'enterCorridor' },
+    spawn: { x: 9.5, z: 0, yaw: -Math.PI / 2 },
+    occlude: false,
+    preserveControl: true,
+  });
+
+  assert.equal(changed, true);
+  assert.equal(app.model.getSnapshot().phase, 'corridor');
+  assert.equal(app.activeSceneName, 'corridor');
+  assert.deepEqual(calls, [
+    'lobby.exit',
+    'scene.corridor',
+    'corridor.enter',
+    'controller.setPose',
+  ]);
 });
 
 test('Echo City entry spawn stands in front of the black museum threshold', () => {

@@ -15,10 +15,11 @@ import { CHAPTER05_DIRECTIONS, directionDefinition } from '../../src/chapters/mu
 import { Chapter05DirectionProgress } from '../../src/chapters/museum3d/state/chapter05DirectionProgress.js';
 import { EmbeddedDirectionExhibit } from '../../src/chapters/museum3d/systems/EmbeddedDirectionExhibit.js';
 import { buildLayout } from '../../src/chapters/museum/labyrinth/mazeGenerator.js';
-import { StatueNPC } from '../../src/chapters/museum/labyrinth/StatueNPC.js';
+import { StatueNPC, patrolCellsFor } from '../../src/chapters/museum/labyrinth/StatueNPC.js';
+import { applyWingEntryRules, choosePrimaryHunterId, statueCanDamage } from '../../src/chapters/museum/labyrinth/labyrinthEncounterRules.js';
 import { TEXTURE_SLOTS } from '../../src/chapters/museum/labyrinth/labyrinthAssets.js';
-import { CELL, LOCAL_H, LOCAL_W, PAL, TUNING, WINGS } from '../../src/chapters/museum/labyrinth/labyrinthData.js';
-import { cloneWalls, reachableCells } from '../../src/chapters/museum/labyrinth/wingMechanics.js';
+import { CELL, LOCAL_H, LOCAL_W, PAL, STRINGS, TUNING, WINGS } from '../../src/chapters/museum/labyrinth/labyrinthData.js';
+import { cloneWalls, MOVING_MAZE_CHANGES_PER_STATE, reachableCells } from '../../src/chapters/museum/labyrinth/wingMechanics.js';
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
 const labyrinthEntry = read('../../src/chapters/museum/labyrinth/labyrinth-main.js');
@@ -139,6 +140,9 @@ test('the labyrinth stays the full four-wing, eight-key, eight-statue maze', () 
   assert.equal(TUNING.keysTotal, 8);
   assert.equal(TUNING.statueCount, 8);
   assert.equal(TUNING.lives, 3);
+  assert.equal(TUNING.maxConcurrentHuntersPerWing, 1);
+  assert.ok(TUNING.wingEntryGraceMs >= TUNING.invulnMs);
+  assert.ok(TUNING.hunterReliefAfterHitMs > TUNING.invulnMs);
 
   const layout = buildLayout(() => 0.5);
   assert.equal(layout.keys.length, 8);
@@ -191,9 +195,113 @@ test('a carried flame wakes statues from farther away than darkness does', () =>
   const statue = makeStatue(walls, spawnCell, spawnPos);
 
   statue.update(0, player, { activationRadius: TUNING.darkActivationRadius, visionRange: 0 });
-  assert.equal(statue.state, 'idle');
+  assert.equal(statue.state, 'patrolling');
+  assert.ok(Math.hypot(statue.sprite.velocity.x, statue.sprite.velocity.y) > 0);
   statue.update(1, player, { activationRadius: TUNING.torchAttractionRadius, visionRange: 0 });
   assert.equal(statue.state, 'hunting');
+});
+
+test('a statue pursues farther and returns home instead of stopping at its chase boundary', () => {
+  const size = 31;
+  const walls = Array.from({ length: size }, () => new Array(size).fill(false));
+  const spawnCell = { x: 5, y: 5 };
+  const spawnPos = { x: 5 * CELL + CELL / 2, y: 5 * CELL + CELL / 2 };
+  const statue = makeStatue(walls, spawnCell, spawnPos);
+
+  statue.update(0, { x: spawnPos.x + 780, y: spawnPos.y, facing: { x: 1, y: 0 } }, { visionRange: 0 });
+  assert.equal(statue.state, 'hunting');
+
+  statue.sprite.x = spawnPos.x + 460;
+  statue.update(TUNING.repathMs + 1, { x: spawnPos.x + TUNING.returnRadius + 700, y: spawnPos.y, facing: { x: 1, y: 0 } }, { visionRange: 0 });
+  assert.equal(statue.state, 'returning');
+  assert.ok(statue.sprite.velocity.x < 0, 'returning statue should move back toward its post');
+
+  statue.sprite.x = spawnPos.x;
+  statue.sprite.y = spawnPos.y;
+  statue.update(TUNING.repathMs + 2, { x: spawnPos.x + TUNING.returnRadius + 700, y: spawnPos.y, facing: { x: 1, y: 0 } }, { visionRange: 0 });
+  assert.equal(statue.state, 'patrolling');
+  assert.ok(Math.hypot(statue.sprite.velocity.x, statue.sprite.velocity.y) > 0, 'it must leave its post and patrol again');
+});
+
+test('a statue patrol spans enough rooms to walk out of a dead end', () => {
+  const size = 31;
+  const walls = Array.from({ length: size }, () => new Array(size).fill(false));
+  const spawnCell = { x: 5, y: 5 };
+  const cells = patrolCellsFor(walls, spawnCell);
+  assert.ok(cells.length >= 12);
+  assert.ok(cells.some((cell) => cell.steps >= TUNING.statuePatrolMaxSteps - 1));
+});
+
+test('only one statue per wing receives the damaging chase', () => {
+  const body = { enable: true };
+  const statues = [
+    { id: 0, wing: 1, floor: 0, state: 'patrolling', x: 120, y: 100, sprite: { visible: true, body } },
+    { id: 1, wing: 1, floor: 0, state: 'patrolling', x: 180, y: 100, sprite: { visible: true, body } },
+    { id: 2, wing: 2, floor: 0, state: 'hunting', x: 105, y: 100, sprite: { visible: true, body } },
+  ];
+  const first = choosePrimaryHunterId(statues, {
+    playerX: 100, playerY: 100, wingId: 1, floor: 0,
+    activationRadius: 500, returnRadius: 700,
+  });
+  assert.equal(first, 0);
+  statues[0].state = 'hunting';
+  statues[0].x = 240;
+  const committed = choosePrimaryHunterId(statues, {
+    playerX: 100, playerY: 100, wingId: 1, floor: 0, previousId: first,
+    activationRadius: 500, returnRadius: 700,
+  });
+  assert.equal(committed, 0, 'the primary hunter stays stable instead of alternating every frame');
+  assert.equal(statueCanDamage({ isPrimaryHunter: true, state: 'frozen', now: 1000 }), false);
+  assert.equal(statueCanDamage({ isPrimaryHunter: false, state: 'hunting', now: 1000 }), false);
+  assert.equal(statueCanDamage({ isPrimaryHunter: true, state: 'hunting', now: 1000, wingGraceUntil: 1200 }), false);
+  assert.equal(statueCanDamage({ isPrimaryHunter: true, state: 'hunting', now: 1200, wingGraceUntil: 1200 }), true);
+});
+
+test('the secondary statue yields to patrol instead of joining a corridor chase', () => {
+  const size = 31;
+  const walls = Array.from({ length: size }, () => new Array(size).fill(false));
+  const spawnCell = { x: 5, y: 5 };
+  const spawnPos = { x: 5 * CELL + CELL / 2, y: 5 * CELL + CELL / 2 };
+  const statue = makeStatue(walls, spawnCell, spawnPos);
+  statue.state = 'hunting';
+  statue.update(0, { x: spawnPos.x + 100, y: spawnPos.y, facing: { x: 1, y: 0 } }, { allowHunt: false });
+  assert.equal(statue.state, 'patrolling');
+  assert.ok(Math.hypot(statue.sprite.velocity.x, statue.sprite.velocity.y) > 0);
+});
+
+test('a relocated hunter immediately loses its damage authority', () => {
+  const size = 19;
+  const walls = Array.from({ length: size }, () => new Array(size).fill(false));
+  const spawnCell = { x: 4, y: 4 };
+  const spawnPos = { x: 4 * CELL + CELL / 2, y: 4 * CELL + CELL / 2 };
+  const statue = makeStatue(walls, spawnCell, spawnPos);
+  statue.canDamage = true;
+  statue.relocateAwayFrom({ x: 10, y: 10 });
+  assert.equal(statue.canDamage, false);
+  assert.equal(statue.state, 'patrolling');
+  assert.match(labyrinthScene, /hunterReliefUntil = this\.time\.now \+ TUNING\.hunterReliefAfterHitMs/);
+});
+
+test('each newly reached wing restores three lives once, but backtracking cannot farm refills', () => {
+  const firstAdvance = applyWingEntryRules({ currentWingId: 0, targetWingId: 1, highestWingReached: 0, lives: 1, maxLives: 3 });
+  assert.deepEqual(firstAdvance, { currentWingId: 1, highestWingReached: 1, lives: 3, advanced: true, moved: true });
+  const backtrack = applyWingEntryRules({ currentWingId: 1, targetWingId: 0, highestWingReached: 1, lives: 2, maxLives: 3 });
+  assert.equal(backtrack.lives, 2);
+  assert.equal(backtrack.advanced, false);
+  const reenter = applyWingEntryRules({ currentWingId: 0, targetWingId: 1, highestWingReached: 1, lives: 2, maxLives: 3 });
+  assert.equal(reenter.lives, 2);
+  assert.equal(reenter.advanced, false);
+  const secondAdvance = applyWingEntryRules({ currentWingId: 1, targetWingId: 2, highestWingReached: 1, lives: 1, maxLives: 3 });
+  assert.equal(secondAdvance.lives, 3);
+  assert.equal(secondAdvance.advanced, true);
+  assert.match(labyrinthScene, /STRINGS\.wingLivesRestored/);
+});
+
+test('the survey map uses a bright colored field and high-contrast walls', () => {
+  assert.equal(PAL.mapBackground, 0x16445b);
+  assert.equal(PAL.mapWall, 0xf3e8bd);
+  assert.match(labyrinthScene, /PAL\.mapBackground/);
+  assert.match(labyrinthScene, /PAL\.mapWall/);
 });
 
 test('Wing III moving walls have three states and every state stays solvable', () => {
@@ -207,6 +315,11 @@ test('Wing III moving walls have three states and every state stays solvable', (
     for (let lx = 1; lx < LOCAL_W; lx += 2) targets.push({ x: x0 + lx, y: y0 + ly });
   }
   for (const state of layout.movingMaze.states) {
+    if (state.id > 0) {
+      assert.equal(state.changes.length, MOVING_MAZE_CHANGES_PER_STATE);
+      assert.equal(state.changes.filter((change) => change.solid).length, MOVING_MAZE_CHANGES_PER_STATE / 2);
+      assert.equal(state.changes.filter((change) => !change.solid).length, MOVING_MAZE_CHANGES_PER_STATE / 2);
+    }
     const walls = cloneWalls(layout.floorWalls[0]);
     for (const base of layout.movingMaze.cells) walls[base.y][base.x] = base.solid;
     for (const change of state.changes) walls[change.y][change.x] = change.solid;
@@ -248,7 +361,7 @@ test('a hit statue relocates to its post instead of vanishing', () => {
   statue.state = 'hunting';
   statue.relocateAwayFrom({ x: 10, y: 10 });
 
-  assert.equal(statue.state, 'idle');
+  assert.equal(statue.state, 'patrolling');
   assert.equal(statue.sprite.x, spawnPos.x);
   assert.equal(statue.sprite.y, spawnPos.y);
   assert.deepEqual(statue.sprite.velocity, { x: 0, y: 0 });
@@ -316,4 +429,17 @@ test('the scene keeps the locked state machine and readable statue states', () =
   assert.match(labyrinthScene, /labyrinthCues\.keyTaken\(\)/);
   assert.match(labyrinthScene, /chaseMusic\.setIntensity/);
   assert.doesNotMatch(labyrinthScene, /\.mp3/);
+});
+
+test('the first shield is taught and activated with Space', () => {
+  assert.match(STRINGS.controls, /SPACE\s+SHIELD/);
+  assert.match(STRINGS.shieldFirstFoundNote, /PRESS SPACE/);
+  assert.match(STRINGS.shieldTutorialPrompt, /SPACE/);
+  assert.match(labyrinthScene, /keydown-SPACE/);
+  assert.doesNotMatch(labyrinthScene, /keydown-Q/);
+  assert.match(labyrinthScene, /shieldTutorialThreatRadius/);
+});
+
+test('statue collision stays on its feet instead of embedding in a room wall', () => {
+  assert.match(labyrinthScene, /setCircle\(TUNING\.statueRadius, -2, 31\)/);
 });

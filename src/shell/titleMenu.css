@@ -20,9 +20,20 @@
   -webkit-font-smoothing: antialiased;
 }
 
-.nf-baked-menu-mask {
+.nf-title-backdrop {
   position: absolute;
   z-index: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  pointer-events: none;
+}
+
+.nf-baked-menu-mask {
+  position: absolute;
+  z-index: 1;
   left: 64%;
   right: 2.5%;
   top: 33%;
@@ -34,6 +45,7 @@
 
 .nf-vignette {
   position: absolute;
+  z-index: 2;
   inset: 0;
   pointer-events: none;
   background:
@@ -43,6 +55,7 @@
 
 .nf-grain {
   position: absolute;
+  z-index: 2;
   inset: 0;
   pointer-events: none;
   opacity: .12;
@@ -52,6 +65,7 @@
 
 .nf-menu {
   position: absolute;
+  z-index: 3;
   left: 66.2%;
   top: 33.5%;
   width: min(30.5vw, 500px);
@@ -60,6 +74,8 @@
   text-align: center;
   isolation: isolate;
 }
+
+.nf-build-mark { z-index: 3; }
 
 .nf-menu::before {
   content: "";
@@ -186,6 +202,8 @@
 }
 button.nf-slot { width: 100%; color: inherit; text-align: left; font: inherit; letter-spacing: inherit; }
 .nf-chapter-jump { appearance: none; }
+.nf-chapter-group { margin: 1.35rem 0 .35rem; padding-top: .9rem; border-top: 1px solid rgba(216,188,139,.2); color: var(--nf-cyan); font: 600 .62em/1 ui-monospace, monospace; letter-spacing: .14em; }
+.nf-dialog-heading + .nf-chapter-group { margin-top: .35rem; }
 .nf-slot:hover, .nf-slot:focus-visible { outline: 0; border-color: var(--nf-cyan); background: rgba(28,95,101,.1); }
 .nf-slot-index { grid-row: 1 / 4; align-self: center; color: var(--nf-cyan); font: 400 1.4em/1 Georgia, serif; }
 .nf-slot-meta { color: #756b58; font: 600 .46em/1 ui-monospace, monospace; }

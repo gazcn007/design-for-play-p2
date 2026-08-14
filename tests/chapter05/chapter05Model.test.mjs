@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   Chapter05Model,
+  createMuseumEntryState,
   createInitialState,
   reduce,
   REQUIRED_ECHO_FLAGS,
@@ -15,6 +16,13 @@ test('fresh state matches the Chapter 5 entry contract', () => {
   for (const flag of [...REQUIRED_ECHO_FLAGS, 'returnWalkStarted', 'recordFiled']) {
     assert.equal(s.echoRecord[flag], false);
   }
+});
+
+test('integrated Museum entry carries the Chapter 1 ticket through the archive doors', () => {
+  const s = createMuseumEntryState();
+  assert.equal(s.phase, 'lobby');
+  assert.deepEqual(s.ticket, { inspected: true, carried: true, returned: false });
+  assert.equal(reduce(s, { type: 'enterCorridor' }).state.phase, 'corridor');
 });
 
 function driveToEcho(model) {

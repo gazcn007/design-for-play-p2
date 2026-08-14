@@ -95,7 +95,18 @@ import { createChapter3ArchiveHall, ARCHIVE_POSITIONS } from './Chapter3ArchiveH
 import { Chapter3TimeVisualController } from './Chapter3TimeVisualController.js';
 import { Chapter3FlipClock } from './Chapter3FlipClock.js';
 import { Chapter3EvidenceViewer, CHAPTER3_DOCUMENTS } from './Chapter3EvidenceViewer.js';
-import { createChapter3HotelHall, HOTEL_POSITIONS } from './Chapter3HotelHall.js';
+import {
+  createChapter3HotelHall,
+  HOTEL_POSITIONS,
+} from './Chapter3HotelHall.js';
+import {
+  HOTEL_LOBBY_WALK_BOUNDS,
+  HOTEL_LOBBY_FURNITURE_OBSTACLES,
+  HOTEL_CORRIDOR_WALK_BOUNDS,
+  HOTEL_ROOM_WALK_BOUNDS,
+  HOTEL_ROOM_FURNITURE_OBSTACLES,
+  hotelFurnitureAt,
+} from './chapter3HotelNavigation.js';
 import { Chapter3ReplacementAssetSystem } from './Chapter3ReplacementAssetSystem.js';
 import {
   CITY_MODELS,
@@ -108,6 +119,7 @@ import {
 } from './city3dConfig.js';
 import { findPath, isWalkable } from './EchoCity3DPreview.js';
 import { music } from '../../shared/musicDirector.js';
+import { collectMagicStone, magicStoneSnapshot } from '../../shell/magicStones.js';
 
 // Chapter 3 horizontal score map. Each cue owns a narrative district/beat and
 // stays looped until the next cue is ready, so music never falls into an
@@ -133,6 +145,7 @@ import {
   HANA_BREAKFAST, HOTEL_GUEST_DIALOGUE, LEV_FINAL_BLOCKED, LEV_FINAL_CONCLUSION, LEV_FINAL_OPENING, LEV_FINAL_RESPONSES,
   ALLEY_MEN_DIALOGUE, ALLEY_RESIDENT_DIALOGUE, DAWN_CAMPFIRE_REMAINS_DIALOGUE, MORNING_LEV_GREETING, MORNING_LEV_REMINDER,
   CAMPFIRE_KETTLE_DIALOGUE, CAMPFIRE_MIRO_DIALOGUE, CAMPFIRE_RADA_DIALOGUE, CAMPFIRE_SELINE_DIALOGUE,
+  CAMPFIRE_SELINE_STONE_DIALOGUE,
   MORNING_LEV_OVERLOOK_REMINDER, MORNING_LEV_PLATFORM_REMINDER, MORNING_RESERVATION_DIALOGUE, SUNRISE_BENCH_DIALOGUE,
   MORNING_EVIDENCE_BLOCKED, MORNING_EVIDENCE_CONCLUSION, MORNING_EVIDENCE_RESPONSES, NIGHT_ATTITUDE_RESPONSES,
   NIGHT_FIRST_LINE, NIGHT_RECONNECT, NIGHT_SECOND_LINE, NIGHT_WAKE_DIALOGUE, SLEEP_DIALOGUE, daroMenu, finalTheoryMenu, levFinalMenu, morningEvidenceMenu,
@@ -143,6 +156,10 @@ const INTERACTION_RADIUS = 4.2;
 const SEARCH_HINT_AFTER_SECONDS = 90;
 const SEARCH_HINT_NEAR_TARGET_SECONDS = 60;
 const POST_OLEK_SCORE_SILENCE_SECONDS = 2.2;
+const POST_OLEK_INTERACTION_HINT = Object.freeze({
+  title: 'EXPLORATION TIP · HOLD TAB',
+  detail: 'Hold TAB to highlight every object and person you can interact with.',
+});
 const FIRE_SITE = Object.freeze({ x: 6.8, z: 5.8, approachZ: 9.1 });
 // Reading-room furniture footprints (measured from the imported kit after its
 // 0.47 rescale), pre-padded with the actor radius so click targets never land
@@ -166,22 +183,6 @@ const MINISTRY_FURNITURE_OBSTACLES = Object.freeze([
 ]);
 const MINISTRY_WALK_BOUNDS = Object.freeze({ minX: -7.9, maxX: 7.9, minZ: -3.95, maxZ: 9.75 });
 const ARCHIVE_WALK_BOUNDS = Object.freeze({ minX: -4.3, maxX: 4.3, minZ: -2.85, maxZ: 3.55 });
-// Imported Copper Heron furniture is fused, so navigation uses measured,
-// actor-padded footprints just like the ministry and archive interiors.
-const HOTEL_LOBBY_WALK_BOUNDS = Object.freeze({ minX: -3.0, maxX: 2.75, minZ: -2.85, maxZ: 3.15 });
-const HOTEL_LOBBY_FURNITURE_OBSTACLES = Object.freeze([
-  Object.freeze({ minX: -0.85, maxX: 2.65, minZ: -2.85, maxZ: -1.35 }), // reception counter
-  Object.freeze({ minX: -2.45, maxX: -0.45, minZ: -0.75, maxZ: 2.65 }), // dining table and occupied chairs
-  Object.freeze({ minX: -2.95, maxX: -1.75, minZ: -2.45, maxZ: -1.15 }), // window cabinet
-  Object.freeze({ minX: -0.95, maxX: 0.9, minZ: 1.45, maxZ: 3.15 }), // staircase and landing
-]);
-const HOTEL_CORRIDOR_WALK_BOUNDS = Object.freeze({ minX: -1.05, maxX: 1.05, minZ: -8.35, maxZ: 8.35 });
-const HOTEL_ROOM_WALK_BOUNDS = Object.freeze({ minX: -3.15, maxX: 3.15, minZ: -15.9, maxZ: -9.2 });
-const HOTEL_ROOM_FURNITURE_OBSTACLES = Object.freeze([
-  Object.freeze({ minX: -2.85, maxX: 0.9, minZ: -11.7, maxZ: -9.45 }), // evidence table and chairs
-  Object.freeze({ minX: -2.25, maxX: 1.75, minZ: -14.85, maxZ: -12.45 }), // bed
-  Object.freeze({ minX: 1.1, maxX: 2.95, minZ: -11.3, maxZ: -9.8 }), // washstand
-]);
 const DISTANT_GUIDANCE_INTERACTIONS = Object.freeze(new Set([
   'transport-entrance', 'archive-entrance', 'copper-heron-entrance',
   'sunrise-overlook-trail', 'night-burning-message',
@@ -221,15 +222,20 @@ function clampInteriorPoint(point, bounds, obstacles) {
   const result = point.clone();
   result.x = THREE.MathUtils.clamp(result.x, bounds.minX, bounds.maxX);
   result.z = THREE.MathUtils.clamp(result.z, bounds.minZ, bounds.maxZ);
-  for (const box of obstacles) {
-    if (!pointInsideInteriorObstacle(result, [box])) continue;
-    const exits = [
-      { distance: result.x - box.minX, axis: 'x', value: box.minX },
-      { distance: box.maxX - result.x, axis: 'x', value: box.maxX },
-      { distance: result.z - box.minZ, axis: 'z', value: box.minZ },
-      { distance: box.maxZ - result.z, axis: 'z', value: box.maxZ },
-    ].sort((a, b) => a.distance - b.distance);
-    result[exits[0].axis] = exits[0].value;
+  // Treat overlapping padded footprints as a union. Trying only the nearest
+  // edge of one box can bounce Butch between the dining table and stairs.
+  for (let pass = 0; pass < Math.max(1, obstacles.length * 2); pass += 1) {
+    const containing = obstacles.filter((box) => pointInsideInteriorObstacle(result, [box]));
+    if (containing.length === 0) break;
+    const candidates = containing.flatMap((box) => [
+      new THREE.Vector3(box.minX, result.y, result.z),
+      new THREE.Vector3(box.maxX, result.y, result.z),
+      new THREE.Vector3(result.x, result.y, box.minZ),
+      new THREE.Vector3(result.x, result.y, box.maxZ),
+    ]).filter((candidate) => !pointInsideInteriorObstacle(candidate, obstacles));
+    candidates.sort((a, b) => a.distanceToSquared(result) - b.distanceToSquared(result));
+    if (candidates.length === 0) break;
+    result.copy(candidates[0]);
   }
   return result;
 }
@@ -1977,6 +1983,7 @@ export class Chapter3OpeningRuntime {
     this.characterQa = new URLSearchParams(window.location.search).get('playtest') === 'chapter3-characters';
     this.alleyQa = new URLSearchParams(window.location.search).get('playtest') === 'chapter3-alley';
     this.npcLifeQa = new URLSearchParams(window.location.search).get('playtest') === 'chapter3-npc-life';
+    this.magicStoneQa = new URLSearchParams(window.location.search).get('playtest') === 'chapter3-magic-stone';
     this.characterQaAction = 'idle';
     this.characterQaElapsed = 0;
     this.characterQaActors = [];
@@ -3587,7 +3594,7 @@ export class Chapter3OpeningRuntime {
         id: 'campfire-seline', label: 'Seline, finishing her first paid week', position: this.campfireSeline.position,
         approach: [-53.0, 0.5, 37.0], outline: this.campfireSelineOutline, ambient: true,
         eligible: () => this.campfireGatheringVisible(),
-        activate: () => this.openCampfireDialogue('seline', CAMPFIRE_SELINE_DIALOGUE),
+        activate: () => this.openCampfireSelineDialogue(),
       },
       {
         id: 'campfire-kettle', label: 'Soot-black kettle and shared cups', position: this.campfireKettle.position,
@@ -3899,6 +3906,28 @@ export class Chapter3OpeningRuntime {
       this.preview.player.position.set(-8.8, 0.5, 28.8);
       this.preview.resetCamera();
     }
+    // Apply the side-quest proof framing after every story-state spawn rule.
+    if (this.magicStoneQa) {
+      // The proof route frames Seline beneath the ordinary task card; let the
+      // pointer pass through that non-interactive HUD so automated and manual
+      // QA can still click the real world-space NPC.
+      const objectiveCard = document.getElementById('objective-card');
+      if (objectiveCard) objectiveCard.style.pointerEvents = 'none';
+      const approach = [-53.0, 0.5, 37.0];
+      this.preview.player.position.set(approach[0], approach[1], approach[2]);
+      this.lev.position.set(approach[0] + 1.2, approach[1], approach[2] + 0.7);
+      this.preview.stopWalking();
+      this.preview.resetCamera();
+      const focus = this.campfireSeline.position.clone();
+      const cameraShift = focus.clone().sub(this.preview.controls.target);
+      this.preview.controls.target.copy(focus);
+      this.preview.camera.position.add(cameraShift);
+      this.preview.setCameraOverrideTarget(focus);
+      this.preview.controls.maxZoom = 4.3;
+      this.preview.camera.zoom = 4.3;
+      this.preview.camera.updateProjectionMatrix();
+      this.preview.controls.update();
+    }
     if (this.characterQa) this.stageCharacterQa();
     this.timeVisual.requestClock(initial.clock, { immediate: true });
     this.initialized = true;
@@ -4128,11 +4157,47 @@ export class Chapter3OpeningRuntime {
     return true;
   }
 
+  enforceHotelFurnitureCollision() {
+    if (!this.insideHotel || !['lobby', 'room'].includes(this.hotelArea)) return null;
+    const bounds = this.hotelArea === 'lobby' ? HOTEL_LOBBY_WALK_BOUNDS : HOTEL_ROOM_WALK_BOUNDS;
+    const obstacles = this.hotelArea === 'lobby'
+      ? HOTEL_LOBBY_FURNITURE_OBSTACLES
+      : HOTEL_ROOM_FURNITURE_OBSTACLES;
+    const blockedBy = hotelFurnitureAt(this.preview.player.position, this.hotelArea);
+    if (!blockedBy) return null;
+    const safe = clampInteriorPoint(this.preview.player.position, bounds, obstacles);
+    this.preview.player.position.copy(safe);
+    // A stale destination can immediately drive the player back through the
+    // same mesh on the next frame. Cancel it when the safety collision fires;
+    // the next click will be routed by findInteriorPath from the safe edge.
+    this.preview.stopWalking();
+    return blockedBy;
+  }
+
   handleKeyDown(event) {
     if (event.key === 'Tab') {
       event.preventDefault();
       this.tabHeld = true;
       this.updateOutlines();
+      return true;
+    }
+    if (event.code === 'KeyE' || event.key === 'Enter') {
+      event.preventDefault();
+      if (this.dialogue.active) {
+        this.dialogue.handleAdvance();
+        return true;
+      }
+      if (this.interactionLocked()) return true;
+      const nearest = this.eligibleInteractions()
+        .map((interaction) => ({
+          interaction,
+          distance: this.preview.player.position.distanceTo(interaction.position),
+        }))
+        .filter(({ distance }) => distance <= INTERACTION_RADIUS)
+        .sort((a, b) => a.distance - b.distance)[0]?.interaction;
+      if (!nearest) return false;
+      this.hoveredId = nearest.id;
+      this.handlePointerUp();
       return true;
     }
     return this.interactionLocked();
@@ -4415,6 +4480,7 @@ export class Chapter3OpeningRuntime {
         this.hoveredId = null;
         this.updateObjective();
         this.updateOutlines();
+        this.showLeadCard(POST_OLEK_INTERACTION_HINT);
       },
     });
   }
@@ -5759,12 +5825,34 @@ export class Chapter3OpeningRuntime {
     return true;
   }
 
-  openAmbientDialogue(lines) {
+  openAmbientDialogue(lines, { onComplete = null } = {}) {
     this.preview.stopWalking();
     this.dialogue.show(lines, {
       onComplete: () => {
+        onComplete?.();
         this.hoveredId = null;
         this.updateOutlines();
+      },
+    });
+  }
+
+  openCampfireSelineDialogue() {
+    if (magicStoneSnapshot().collected.includes('chapter-3')) {
+      this.openCampfireDialogue('seline', CAMPFIRE_SELINE_DIALOGUE);
+      return;
+    }
+    if (!this.campfireSpoken.has('seline')) {
+      this.campfireSpoken.add('seline');
+      this.model.advanceDialogueTime('campfire-seline', 2);
+    }
+    this.openAmbientDialogue(CAMPFIRE_SELINE_STONE_DIALOGUE, {
+      onComplete: () => {
+        collectMagicStone('chapter-3');
+        const snapshot = magicStoneSnapshot();
+        this.openAmbientDialogue([{
+          speaker: 'BUTCH',
+          text: `The Echo Stone was hidden in Seline's unclaimed coat. MAGIC STONE ${snapshot.count} / ${snapshot.total}.`,
+        }]);
       },
     });
   }
@@ -6288,6 +6376,7 @@ export class Chapter3OpeningRuntime {
 
   update(dt) {
     if (!this.initialized) return;
+    this.enforceHotelFurnitureCollision();
     if (this.insideHotel && this.hotelArea === 'lobby' && Math.abs(this.preview.camera.zoom - 5.3) > 0.01) {
       this.preview.camera.zoom = 5.3;
       this.preview.camera.updateProjectionMatrix();
@@ -6869,10 +6958,33 @@ export class Chapter3OpeningRuntime {
       flipClock: this.flipClock.snapshot(),
       evidenceViewer: this.evidenceViewer.snapshot(),
       objective: this.elements.statusElement.textContent,
+      taskBubble: (() => {
+        const bubble = document.getElementById('task-bubble');
+        return {
+          visible: bubble?.classList.contains('visible') ?? false,
+          title: bubble?.querySelector('b')?.textContent ?? '',
+          detail: bubble?.querySelector('span')?.textContent ?? '',
+        };
+      })(),
       state,
       hoveredInteraction: this.hoveredId,
       tabScanHeld: this.tabHeld,
       eligibleInteractions: this.eligibleInteractions().map((interaction) => interaction.id),
+      magicStone: {
+        id: 'chapter-3',
+        source: 'optional-campfire-seline-dialogue',
+        position: actorPosition(this.campfireSeline),
+        screen: (() => {
+          const projected = this.campfireSeline.position.clone().project(this.preview.camera);
+          const rect = this.preview.renderer.domElement.getBoundingClientRect();
+          return {
+            x: Number(((projected.x + 1) * rect.width * 0.5).toFixed(1)),
+            y: Number(((1 - projected.y) * rect.height * 0.5).toFixed(1)),
+          };
+        })(),
+        collected: magicStoneSnapshot().collected.includes('chapter-3'),
+        available: Boolean(this.campfireSeline?.visible),
+      },
       dialogue: this.dialogue.snapshot(),
       evidence: state.evidence,
       characterRig: {

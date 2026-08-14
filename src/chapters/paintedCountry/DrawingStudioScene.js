@@ -5,9 +5,9 @@ import {
   STUDIO_SOURCES,
   createDrawingStudio,
 } from './drawingStudioModel.js';
-import { animatePaperButch, createPaperButch } from './paperButch.js';
 import { drawPigmentHalo, haloPointToward } from './pigmentHalo.js';
 import { PAPER } from './paperPalette.js';
+import { drawPaintedPlayer } from './paintedPlayerFigure.js';
 import {
   buildPaperGrain,
   draftLine,
@@ -16,29 +16,41 @@ import {
   makeRandom,
   paintedFill,
 } from './paperSurface.js';
+import { collectMagicStone, magicStoneSnapshot } from '../../shell/magicStones.js';
 
 const VIEW = Object.freeze({ w: 960, h: 600 });
 const WORLD = Object.freeze({ w: 2500, h: 600 });
 const FLOOR_Y = 486;
 const MOVE_SPEED = 210;
 const JUMP_VELOCITY = -620;
-const HOLD_SECONDS = 0.72;
+const HOLD_SECONDS = 0.18;
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace';
 const DEPTH = Object.freeze({ BACK: 0, ROOM: 6, OBJECT: 14, PAINT: 18, BOARD: 23, FIGURE: 30, PROMPT: 48, GRAIN: 70 });
 
-const SOURCE_LAYOUT = Object.freeze([
-  { id: 'phone', x: 700, y: 266, kind: 'phone', scale: 0.45, rect: { x: 658, y: 224, w: 84, h: 48 } },
-  { id: 'books', x: 880, y: 266, kind: 'books', scale: 0.5, rect: { x: 838, y: 224, w: 84, h: 46 } },
-  { id: 'plant', x: 700, y: 350, kind: 'plant', scale: 0.38, rect: { x: 654, y: 292, w: 92, h: 66 } },
-  { id: 'cushion', x: 880, y: 350, kind: 'chair', scale: 0.42, rect: { x: 834, y: 296, w: 92, h: 62 } },
-  { id: 'vase', x: 700, y: 434, kind: 'vase', scale: 0.52, rect: { x: 658, y: 380, w: 84, h: 60 } },
-  { id: 'curtain', x: 880, y: 434, kind: 'curtain', scale: 0.23, rect: { x: 842, y: 396, w: 76, h: 62 } },
-]);
+const SOURCE_LAYOUT = Object.freeze(STUDIO_SOURCES.map((source, index) => {
+  const compartment = Math.floor(index / 3);
+  const row = Math.floor(compartment / 2);
+  const side = compartment % 2;
+  const slot = index % 3;
+  const x = 648 + side * 170 + slot * 55;
+  const y = 269 + row * 84;
+  return {
+    id: source.id,
+    x,
+    y,
+    kind: source.kind,
+    rect: { x: x - 22, y: y - 47, w: 44, h: 48 },
+  };
+}));
 
-const REFERENCE = Object.freeze({ x: 1070, y: 206, cell: 40, cols: 3, rows: 3 });
-const REQUIRED = Object.freeze({ x: 1270, y: 190, cell: 50, cols: 3, rows: 3 });
-const FREE = Object.freeze({ x: 1660, y: 190, cell: 48, cols: 4, rows: 3 });
+// Match Part I's 20px ruled-paper cells while keeping the easels themselves
+// large enough to read and click: more cells, not a physically tiny canvas.
+const CANVAS_CELL = 18;
+const REFERENCE = Object.freeze({ x: 1050, y: 174, cell: CANVAS_CELL, cols: 9, rows: 9 });
+const REQUIRED = Object.freeze({ x: 1290, y: 174, cell: CANVAS_CELL, cols: 9, rows: 9 });
+const FREE = Object.freeze({ x: 1630, y: 174, cell: CANVAS_CELL, cols: 12, rows: 9 });
 const EXIT_X = 2360;
+const PIGMENT_STONE = Object.freeze({ x: 790, y: 426 });
 
 const colorCss = (value) => `#${value.toString(16).padStart(6, '0')}`;
 const cellKey = (col, row) => `${col},${row}`;
@@ -75,6 +87,7 @@ export class DrawingStudioScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, WORLD.w, WORLD.h);
 
     this.buildRoom();
+    this.buildMagicStone();
     this.buildSources();
     this.buildBoards();
     this.buildPlayer();
@@ -119,8 +132,9 @@ export class DrawingStudioScene extends Phaser.Scene {
     draftLine(g, this.rnd, 0, 358, WORLD.w, 358, { overshoot: 0, jitter: 0.8, segments: 50 });
     draftLine(g, this.rnd, 0, FLOOR_Y, WORLD.w, FLOOR_Y, { overshoot: 0, jitter: 0.9, segments: 55 });
 
-    // One compact cabinet: three shelves, two small color-bearing objects per
-    // shelf. It sits beside the easels so copying never becomes a commute.
+    // Eighteen miniature keepsakes share six compartments. Their color is the
+    // finite paint supply, while their varied silhouettes make the cabinet
+    // read as a lived-in collection instead of six puzzle buttons.
     const room = this.graphics(DEPTH.ROOM);
     room.lineStyle(1.7, PAPER.graphite, 0.82);
     room.fillStyle(PAPER.sheetMid, 0.9).fillRect(610, 188, 360, 270);
@@ -133,7 +147,7 @@ export class DrawingStudioScene extends Phaser.Scene {
     this.add.text(66, 112, 'THE OPEN SHEET  ·  COLOR ROOM', {
       fontFamily: MONO, fontSize: '13px', color: '#5c574f', letterSpacing: 2.5,
     }).setDepth(DEPTH.ROOM + 1);
-    this.add.text(1055, 112, 'COPY WHAT YOU SEE.  EVERY CABINET COLOR IS EXACTLY ONE SQUARE.', {
+    this.add.text(1035, 112, 'OBSERVE THE VASE.  BORROW COLOR FROM THE SMALL OBJECTS TO PAINT IT.', {
       fontFamily: MONO, fontSize: '10px', color: '#8d8579', letterSpacing: 1.5,
     }).setDepth(DEPTH.ROOM + 1);
 
@@ -146,17 +160,65 @@ export class DrawingStudioScene extends Phaser.Scene {
     this.sourceArt = new Map();
     SOURCE_LAYOUT.forEach((layout) => {
       const art = this.graphics(DEPTH.PAINT);
-      art.setScale(layout.scale).setPosition(layout.x * (1 - layout.scale), layout.y * (1 - layout.scale));
       this.sourceArt.set(layout.id, art);
     });
     this.sourceFocusArt = this.graphics(DEPTH.PAINT + 2);
     this.suctionArt = this.graphics(DEPTH.PROMPT - 2);
   }
 
+  buildMagicStone() {
+    this.pigmentStoneCollected = magicStoneSnapshot().collected.includes('chapter-4');
+    this.magicStoneArt = this.graphics(DEPTH.OBJECT + 3);
+    this.magicStoneLabel = this.add.text(PIGMENT_STONE.x - 2, PIGMENT_STONE.y - 48, 'COLOR STONE', {
+      fontFamily: MONO, fontSize: '8px', color: '#8d8579', letterSpacing: 1.2,
+    }).setOrigin(0.5).setDepth(DEPTH.OBJECT + 4).setVisible(false);
+    this.redrawMagicStone();
+  }
+
+  redrawMagicStone(time = 0) {
+    const g = this.magicStoneArt;
+    g.clear();
+    const unlocked = this.studio?.allSourcesExtracted();
+    this.magicStoneLabel?.setVisible(Boolean(unlocked && !this.pigmentStoneCollected));
+    if (this.pigmentStoneCollected || !unlocked) return;
+    const { x, y } = PIGMENT_STONE;
+    g.fillStyle(PAPER.graphite, 0.52).fillRect(x - 33, y - 25, 66, 36);
+    g.fillStyle(PAPER.cyan, 0.13 + Math.sin(time / 420) * 0.04).fillCircle(x, y - 5, 30);
+    g.fillStyle(0x7fdfe9, 1);
+    g.lineStyle(1.8, PAPER.graphite, 0.82);
+    g.beginPath();
+    g.moveTo(x, y - 28);
+    g.lineTo(x + 14, y - 12);
+    g.lineTo(x + 9, y + 13);
+    g.lineTo(x, y + 22);
+    g.lineTo(x - 9, y + 13);
+    g.lineTo(x - 14, y - 12);
+    g.closePath();
+    g.fillPath();
+    g.strokePath();
+    g.fillStyle(PAPER.sheetHigh, 0.96);
+    g.fillTriangle(x - 40, y - 34, x + 34, y - 31, x + 30, y + 5);
+    g.lineStyle(1.5, PAPER.graphiteSoft, 0.78);
+    draftLine(g, this.rnd, x - 40, y - 34, x + 34, y - 31, { overshoot: 5 });
+    draftLine(g, this.rnd, x + 34, y - 31, x + 30, y + 5, { overshoot: 3 });
+  }
+
+  tryCollectMagicStone() {
+    if (this.pigmentStoneCollected || !this.studio.allSourcesExtracted()
+      || Math.abs(this.walker.x - PIGMENT_STONE.x) > 48) return;
+    collectMagicStone('chapter-4');
+    this.pigmentStoneCollected = true;
+    this.magicStoneArt.clear();
+    this.magicStoneLabel.setVisible(false);
+    const snapshot = magicStoneSnapshot();
+    this.localFeedback(`PIGMENT STONE FOUND\n${snapshot.count} / ${snapshot.total}`, PAPER.cyan);
+    this.cameras.main.flash(240, 118, 225, 235);
+  }
+
   buildBoards() {
     const g = this.graphics(DEPTH.BOARD - 2);
-    this.drawEasel(g, REFERENCE, 'REFERENCE  ·  VASE + FLOWERS', 0.86);
-    this.drawEasel(g, REQUIRED, 'YOUR COPY', 1);
+    this.drawEasel(g, REFERENCE, 'STILL LIFE  ·  VASE + FLOWERS', 0.86);
+    this.drawEasel(g, REQUIRED, 'YOUR PAINTING', 1);
     this.drawEasel(g, FREE, 'YOUR OWN DRAWING', 1);
     this.referenceArt = this.graphics(DEPTH.BOARD);
     this.requiredArt = this.graphics(DEPTH.BOARD);
@@ -184,7 +246,7 @@ export class DrawingStudioScene extends Phaser.Scene {
     this.physics.add.existing(this.walker);
     this.physics.add.collider(this.walker, this.floor);
     this.walker.body.setCollideWorldBounds(true);
-    this.figure = createPaperButch(this, this.walker.x, FLOOR_Y, DEPTH.FIGURE);
+    this.figure = this.add.graphics().setDepth(DEPTH.FIGURE);
     this.heldArt = this.graphics(DEPTH.FIGURE + 1);
     this.cameras.main.startFollow(this.walker, true, 0.1, 0.12);
     this.cameras.main.setDeadzone(280, 190);
@@ -222,7 +284,7 @@ export class DrawingStudioScene extends Phaser.Scene {
   }
 
   startMusic() {
-    this.music = this.sound.add('chapter4-drawing-music', { loop: true, volume: 0.24 });
+    this.music = this.sound.add('chapter4-drawing-music', { loop: true, volume: 0.38 });
     const play = () => { if (!this.music?.isPlaying) this.music?.play(); };
     if (this.sound.locked) this.sound.once('unlocked', play);
     else play();
@@ -234,7 +296,23 @@ export class DrawingStudioScene extends Phaser.Scene {
   applyQaState() {
     if (!import.meta.env.DEV) return;
     const qa = new URLSearchParams(window.location.search).get('qa');
-    if (!['drawing-ready', 'drawing-free'].includes(qa)) return;
+    if (!['drawing-start', 'drawing-ready', 'drawing-free', 'drawing-magic-stone'].includes(qa)) return;
+    if (qa === 'drawing-start') {
+      this.walker.setPosition(500, 414);
+      return;
+    }
+    if (qa === 'drawing-magic-stone') {
+      // Visual QA must be able to inspect the reveal even if this browser's
+      // persistent save already collected the optional Chapter 4 stone.
+      this.pigmentStoneCollected = false;
+      STUDIO_SOURCES.forEach((source) => {
+        this.studio.extract(source.id);
+        this.studio.placeRequired(source.targetCell);
+      });
+      this.walker.setPosition(PIGMENT_STONE.x - 94, 414);
+      this.studio.drainEvents();
+      return;
+    }
     if (qa === 'drawing-free') {
       STUDIO_SOURCES.forEach((source) => {
         this.studio.extract(source.id);
@@ -262,6 +340,7 @@ export class DrawingStudioScene extends Phaser.Scene {
     this.redrawSources();
     this.redrawBoards();
     this.redrawDoor();
+    this.redrawMagicStone();
   }
 
   paintPatch(g, x, y, w, h, color, live) {
@@ -282,66 +361,60 @@ export class DrawingStudioScene extends Phaser.Scene {
       const pigment = this.studio.pigment(item.pigment);
       const live = !item.drained;
       g.clear();
+      if (!live) {
+        g.fillStyle(PAPER.graphiteFaint, 0.11).fillEllipse(layout.x, layout.y - 2, 29, 5);
+        return;
+      }
       const suctionProgress = this.hold.key === `source:${layout.id}`
         ? Phaser.Math.Clamp(this.hold.progress / HOLD_SECONDS, 0, 1)
         : 0;
-      g.setAlpha(live ? 1 - suctionProgress * 0.58 : 1);
-      g.lineStyle(1.9, PAPER.graphite, live ? 0.88 : 0.56);
+      g.setAlpha(1 - suctionProgress * 0.72);
+      g.lineStyle(1.35, PAPER.graphite, 0.86);
+      g.fillStyle(pigment.color, 0.84);
       const { x, y } = layout;
-      if (layout.kind === 'phone') {
-        this.paintPatch(g, x - 48, y - 42, 96, 42, pigment.color, live);
-        this.paintPatch(g, x - 54, y - 70, 108, 22, pigment.color, live);
-        draftRect(g, this.rnd, x - 48, y - 42, 96, 42, { overshoot: 4 });
-        draftLine(g, this.rnd, x - 54, y - 68, x + 54, y - 68, { overshoot: 4 });
-        draftLine(g, this.rnd, x - 52, y - 67, x - 36, y - 45, { overshoot: 2 });
-        draftLine(g, this.rnd, x + 52, y - 67, x + 36, y - 45, { overshoot: 2 });
-        g.strokeCircle(x, y - 21, 14);
-      } else if (layout.kind === 'lamp') {
-        this.paintPatch(g, x - 43, y - 92, 86, 50, pigment.color, live);
-        draftLine(g, this.rnd, x - 43, y - 42, x - 27, y - 92, { overshoot: 3 });
-        draftLine(g, this.rnd, x - 27, y - 92, x + 27, y - 92, { overshoot: 3 });
-        draftLine(g, this.rnd, x + 27, y - 92, x + 43, y - 42, { overshoot: 3 });
-        draftLine(g, this.rnd, x - 43, y - 42, x + 43, y - 42, { overshoot: 3 });
-        draftLine(g, this.rnd, x, y - 42, x, y, { overshoot: 3 });
-        draftLine(g, this.rnd, x - 31, y, x + 31, y, { overshoot: 3 });
-      } else if (layout.kind === 'books') {
-        [0, 1, 2].forEach((i) => {
-          this.paintPatch(g, x - 51 + i * 6, y - 22 - i * 19, 100 - i * 12, 17, pigment.color, live);
-          draftRect(g, this.rnd, x - 51 + i * 6, y - 22 - i * 19, 100 - i * 12, 17, { overshoot: 3, jitter: 0.6 });
-        });
-      } else if (layout.kind === 'flowers') {
-        draftLine(g, this.rnd, x, y - 5, x, y - 94, { overshoot: 3 });
-        [-32, 0, 32].forEach((dx, i) => {
-          if (live) g.fillStyle(pigment.color, 0.8).fillCircle(x + dx, y - 93 - (i % 2) * 15, 17);
-          g.strokeCircle(x + dx, y - 93 - (i % 2) * 15, 17);
-          draftLine(g, this.rnd, x, y - 30, x + dx, y - 78 - (i % 2) * 15, { overshoot: 2 });
-        });
-        draftLine(g, this.rnd, x - 32, y, x + 32, y, { overshoot: 3 });
-      } else if (layout.kind === 'plant') {
-        this.paintPatch(g, x - 43, y - 58, 86, 58, pigment.color, live);
-        draftRect(g, this.rnd, x - 43, y - 58, 86, 58, { overshoot: 4 });
-        [-28, -10, 12, 30].forEach((dx, i) => {
-          draftLine(g, this.rnd, x, y - 58, x + dx, y - 142 + (i % 2) * 22, { overshoot: 2 });
-          if (live) g.fillStyle(pigment.color, 0.76).fillEllipse(x + dx, y - 148 + (i % 2) * 22, 35, 20);
-          g.strokeEllipse(x + dx, y - 148 + (i % 2) * 22, 35, 20);
-        });
-      } else if (layout.kind === 'chair') {
-        this.paintPatch(g, x - 52, y - 52, 104, 45, pigment.color, live);
-        draftRect(g, this.rnd, x - 52, y - 52, 104, 45, { overshoot: 5 });
-        draftLine(g, this.rnd, x - 52, y - 52, x - 52, y - 118, { overshoot: 4 });
-        draftLine(g, this.rnd, x + 52, y - 52, x + 52, y - 118, { overshoot: 4 });
-        draftLine(g, this.rnd, x - 52, y - 118, x + 52, y - 118, { overshoot: 4 });
-      } else if (layout.kind === 'vase') {
-        if (live) g.fillStyle(pigment.color, 0.78).fillEllipse(x, y - 47, 82, 94);
-        g.strokeEllipse(x, y - 47, 82, 94);
-        draftLine(g, this.rnd, x - 22, y - 96, x + 22, y - 96, { overshoot: 3 });
-        draftLine(g, this.rnd, x - 34, y - 8, x + 34, y - 8, { overshoot: 3 });
-      } else {
-        this.paintPatch(g, x - 62, y - 144, 124, 245, pigment.color, live);
-        draftRect(g, this.rnd, x - 62, y - 144, 124, 245, { overshoot: 6 });
-        for (let yy = y - 120; yy < y + 90; yy += 34) {
-          draftLine(g, this.rnd, x - 58, yy, x + 58, yy + 18, { overshoot: 0, jitter: 1.2, segments: 6 });
+      if (layout.kind === 'cup') {
+        g.fillRoundedRect(x - 12, y - 25, 23, 22, 3).strokeRoundedRect(x - 12, y - 25, 23, 22, 3);
+        g.strokeCircle(x + 13, y - 15, 7);
+      } else if (layout.kind === 'ball' || layout.kind === 'clock') {
+        g.fillCircle(x, y - 17, 13).strokeCircle(x, y - 17, 13);
+        if (layout.kind === 'clock') {
+          g.lineBetween(x, y - 17, x, y - 25);
+          g.lineBetween(x, y - 17, x + 7, y - 14);
         }
+      } else if (layout.kind === 'book' || layout.kind === 'box' || layout.kind === 'cushion') {
+        const h = layout.kind === 'book' ? 12 : 22;
+        g.fillRoundedRect(x - 16, y - h - 3, 32, h, 3).strokeRoundedRect(x - 16, y - h - 3, 32, h, 3);
+        if (layout.kind === 'book') g.lineBetween(x - 11, y - 12, x + 11, y - 12);
+      } else if (layout.kind === 'spool' || layout.kind === 'tin' || layout.kind === 'jar') {
+        g.fillRect(x - 11, y - 27, 22, 24).strokeRect(x - 11, y - 27, 22, 24);
+        g.strokeEllipse(x, y - 27, 22, 6);
+        g.strokeEllipse(x, y - 3, 22, 6);
+      } else if (layout.kind === 'bottle') {
+        g.fillRoundedRect(x - 9, y - 28, 18, 25, 5).strokeRoundedRect(x - 9, y - 28, 18, 25, 5);
+        g.fillRect(x - 4, y - 37, 8, 10).strokeRect(x - 4, y - 37, 8, 10);
+      } else if (layout.kind === 'plant' || layout.kind === 'leaf') {
+        g.fillStyle(pigment.color, 0.76);
+        g.fillEllipse(x - 7, y - 27, 16, 10).strokeEllipse(x - 7, y - 27, 16, 10);
+        g.fillEllipse(x + 8, y - 34, 17, 11).strokeEllipse(x + 8, y - 34, 17, 11);
+        g.lineBetween(x, y - 4, x, y - 31);
+        if (layout.kind === 'plant') g.fillRect(x - 10, y - 13, 20, 10).strokeRect(x - 10, y - 13, 20, 10);
+      } else if (layout.kind === 'phone') {
+        g.fillRoundedRect(x - 15, y - 22, 30, 19, 4).strokeRoundedRect(x - 15, y - 22, 30, 19, 4);
+        g.strokeCircle(x, y - 12, 6);
+        g.lineBetween(x - 16, y - 27, x + 16, y - 27);
+      } else if (layout.kind === 'vase' || layout.kind === 'kettle') {
+        g.fillEllipse(x, y - 17, 27, 29).strokeEllipse(x, y - 17, 27, 29);
+        g.lineBetween(x - 7, y - 33, x + 7, y - 33);
+        if (layout.kind === 'kettle') {
+          g.lineBetween(x + 13, y - 22, x + 20, y - 28);
+          g.strokeCircle(x - 13, y - 20, 7);
+        }
+      } else if (layout.kind === 'ribbon') {
+        g.fillTriangle(x, y - 17, x - 18, y - 29, x - 14, y - 9);
+        g.fillTriangle(x, y - 17, x + 18, y - 29, x + 14, y - 9);
+        g.strokeTriangle(x, y - 17, x - 18, y - 29, x - 14, y - 9);
+        g.strokeTriangle(x, y - 17, x + 18, y - 29, x + 14, y - 9);
+        g.fillCircle(x, y - 17, 6).strokeCircle(x, y - 17, 6);
       }
     });
   }
@@ -394,7 +467,7 @@ export class DrawingStudioScene extends Phaser.Scene {
     const pointer = this.input.activePointer;
     const world = this.pointerWorld(pointer);
     const pointed = this.sourceAt(world.x, world.y);
-    const available = pointed && !this.studio.source(pointed.id).drained && !this.studio.state.held;
+    const available = pointed && !this.studio.source(pointed.id).drained;
     this.hoverSourceId = available ? pointed.id : null;
 
     if (available && pointer.rightButtonDown()) {
@@ -414,7 +487,7 @@ export class DrawingStudioScene extends Phaser.Scene {
       this.selected = { board: boardHit.name, cell: boardHit.cell };
       const snapshot = this.studio.snapshot();
       const occupied = this.occupiedSourceId(boardHit.name, boardHit.cell, snapshot);
-      if (occupied && !snapshot.held && pointer.rightButtonDown()) {
+      if (occupied && pointer.rightButtonDown()) {
         if (this.setHold(`lift:${boardHit.name}:${boardHit.cell}`, dt)) {
           const lifted = boardHit.name === 'required'
             ? this.studio.liftRequired(boardHit.cell)
@@ -426,7 +499,7 @@ export class DrawingStudioScene extends Phaser.Scene {
         }
         return;
       }
-      if (!occupied && snapshot.held && pointer.leftButtonDown()) {
+      if (!occupied && snapshot.palette.length && pointer.leftButtonDown()) {
         if (this.setHold(`fill:${boardHit.name}:${boardHit.cell}`, dt)) {
           const placed = boardHit.name === 'required'
             ? this.studio.placeRequired(boardHit.cell)
@@ -547,6 +620,35 @@ export class DrawingStudioScene extends Phaser.Scene {
     }
   }
 
+  drawStillLifeGuide(g, board, alpha = 0.34) {
+    const cx = (col) => board.x + (col + 0.5) * board.cell;
+    const cy = (row) => board.y + (row + 0.5) * board.cell;
+    g.lineStyle(1.45, PAPER.graphite, alpha);
+
+    // Two flower heads, then four stems converging into one visible vase.
+    [[2, 2], [6, 2]].forEach(([col, row]) => {
+      g.strokeCircle(cx(col), cy(row), board.cell * 1.12);
+      g.strokeCircle(cx(col), cy(row), board.cell * 0.42);
+    });
+    [[2, 2], [6, 2], [3, 3], [5, 3]].forEach(([col, row]) => {
+      draftLine(g, this.rnd, cx(col), cy(row) + 5, cx(4), cy(5), {
+        overshoot: 0, jitter: 0.55, segments: 6,
+      });
+    });
+    g.strokeEllipse(cx(3), cy(3), board.cell * 1.35, board.cell * 0.62);
+    g.strokeEllipse(cx(6), cy(3), board.cell * 1.35, board.cell * 0.62);
+
+    g.beginPath();
+    g.moveTo(cx(3) - 5, cy(5) - 8);
+    g.lineTo(cx(5) + 5, cy(5) - 8);
+    g.lineTo(cx(5) + 13, cy(7) + 5);
+    g.lineTo(cx(4), cy(8) + 8);
+    g.lineTo(cx(3) - 13, cy(7) + 5);
+    g.closePath();
+    g.strokePath();
+    g.strokeEllipse(cx(4), cy(5) - 8, board.cell * 2.7, 8);
+  }
+
   fillCell(g, board, key, pigmentId, alpha = 0.82) {
     const [col, row] = key.split(',').map(Number);
     const pigment = this.studio.pigment(pigmentId);
@@ -569,6 +671,8 @@ export class DrawingStudioScene extends Phaser.Scene {
     this.freeArt.clear();
     this.selectionArt.clear();
     this.frameArt.clear();
+    this.drawStillLifeGuide(this.referenceArt, REFERENCE, 0.5);
+    this.drawStillLifeGuide(this.requiredArt, REQUIRED, 0.24);
     this.drawGrid(this.referenceArt, REFERENCE);
     this.drawGrid(this.requiredArt, REQUIRED);
     this.drawGrid(this.freeArt, FREE);
@@ -636,7 +740,9 @@ export class DrawingStudioScene extends Phaser.Scene {
       const item = this.studio.source(interaction.id);
       const pigment = this.studio.pigment(item.pigment);
       return {
-        text: this.tutorialSeen.extract ? `RIGHT-HOLD TO LIFT\n${pigment.name}` : 'POINT AT AN OBJECT\nRIGHT-HOLD TO DRAW OUT COLOR',
+        text: this.tutorialSeen.extract
+          ? `${item.object}\nRIGHT-HOLD TO ADD ${pigment.name}`
+          : 'POINT AT A SMALL OBJECT\nRIGHT-HOLD TO ADD ITS COLOR TO YOUR PALETTE',
         color: pigment.color,
         x: interaction.x,
         y: interaction.y - 115,
@@ -657,7 +763,7 @@ export class DrawingStudioScene extends Phaser.Scene {
     const occupied = interaction.board === 'required'
       ? snapshot.required[this.selected.cell]
       : snapshot.free[this.selected.cell];
-    if (occupied && !snapshot.held) {
+    if (occupied && snapshot.palette.length === 0) {
       const pigment = this.studio.pigment(this.studio.source(occupied).pigment);
       return {
         text: this.tutorialSeen.lift ? `RIGHT-HOLD TO LIFT\n${pigment.name}` : 'RIGHT-HOLD THIS SQUARE\nTO LIFT THE COLOR BACK OUT',
@@ -666,12 +772,10 @@ export class DrawingStudioScene extends Phaser.Scene {
         y: interaction.y - 22,
       };
     }
-    if (snapshot.held && !occupied) {
-      const held = this.studio.source(snapshot.held);
-      const pigment = this.studio.pigment(held.pigment);
+    if (snapshot.palette.length && !occupied) {
       return {
-        text: this.tutorialSeen.fill ? `LEFT-HOLD TO PAINT\n${pigment.name}` : 'LEFT-HOLD THIS SQUARE\nTO PAINT IT',
-        color: pigment.color,
+        text: this.tutorialSeen.fill ? 'LEFT-HOLD TO PAINT\nTHE MATCHING COLOR' : 'LEFT-HOLD THIS SQUARE\nTO PAINT THE MATCHING COLOR',
+        color: PAPER.cyan,
         x: interaction.x,
         y: interaction.y - 22,
       };
@@ -706,7 +810,7 @@ export class DrawingStudioScene extends Phaser.Scene {
       } else if (event.type === 'copy-complete') {
         this.frameReveal = 0;
         this.tweens.add({ targets: this, frameReveal: 1, duration: 720, ease: 'Back.easeOut' });
-        this.localFeedback('CORRECT  ·  THE COPY\nHAS BEEN FRAMED', PAPER.bookCloth);
+        this.localFeedback('THE STILL LIFE IS COMPLETE.\nSOMETHING SHINES BEHIND THE EMPTY SHELF.', PAPER.bookCloth);
       } else if (event.type === 'copy-opened-again') {
         this.frameReveal = 0;
         this.localFeedback('THE FRAME OPENS.\nTHE EXIT CLOSES.', PAPER.fault);
@@ -725,7 +829,7 @@ export class DrawingStudioScene extends Phaser.Scene {
   drawHeld(time) {
     this.heldArt.clear();
     const snapshot = this.studio.snapshot();
-    const heldSource = snapshot.held ? this.studio.source(snapshot.held) : null;
+    const paletteSources = snapshot.palette.map((id) => this.studio.source(id)).filter(Boolean);
     let progressId = null;
     if (this.hold.key?.startsWith('source:')) {
       const sourceId = this.hold.key.slice('source:'.length);
@@ -735,13 +839,13 @@ export class DrawingStudioScene extends Phaser.Scene {
       const sourceId = this.occupiedSourceId(boardName, cell, snapshot);
       progressId = sourceId ? this.studio.source(sourceId)?.pigment : null;
     }
-    if (!heldSource && !progressId) return;
+    if (!paletteSources.length && !progressId) return;
     drawPigmentHalo(this.heldArt, {
       x: this.walker.x,
       y: this.walker.y - 50,
       pigments: STUDIO_PIGMENTS,
-      activeIds: heldSource ? [heldSource.pigment] : [],
-      selectedId: heldSource?.pigment ?? null,
+      activeIds: paletteSources.map((source) => source.pigment),
+      selectedId: null,
       progressId,
       progress: this.hold.progress / HOLD_SECONDS,
       time,
@@ -765,11 +869,8 @@ export class DrawingStudioScene extends Phaser.Scene {
     if (this.walker.body.velocity.x < -8) this.playerFacing = -1;
     if (this.walker.body.velocity.x > 8) this.playerFacing = 1;
     this.playerAnimation = moving ? 'walk' : 'idle';
-    this.figure.setPosition(Math.round(this.walker.x), Math.round(this.walker.y + 31));
     const pointer = this.input.activePointer;
-    const paint = pointer?.leftButtonDown?.() ?? false;
-    const wash = pointer?.rightButtonDown?.() ?? false;
-    this.playerAnimation = animatePaperButch(this.figure, time, { moving, paint, wash });
+    drawPaintedPlayer(this.figure, this.walker, pointer);
   }
 
   seedStrokes() {
@@ -789,6 +890,9 @@ export class DrawingStudioScene extends Phaser.Scene {
   goToTrain() {
     this.transitioning = true;
     this.registry.set('chapter4Drawing', this.seedStrokes());
+    // Part III always begins before the six world colors. The studio teaches
+    // the ring, but its finite room colors do not skip the train-yard pickups.
+    this.registry.set('chapter4Pigments', []);
     this.tweens.add({ targets: this.music, volume: 0, duration: 420 });
     this.cameras.main.fadeOut(420, 247, 244, 236);
     this.time.delayedCall(450, () => this.scene.start('PigmentTrain'));
@@ -796,10 +900,11 @@ export class DrawingStudioScene extends Phaser.Scene {
 
   objectiveText() {
     const snapshot = this.studio.snapshot();
-    if (snapshot.complete) return 'the copied vase is framed; the exit is open unless a color is lifted out';
-    if (Object.keys(snapshot.free).length) return 'a room color is on the free canvas; lift it back to finish the vase';
-    if (snapshot.held) return 'choose a square on either canvas and place the held color';
-    return 'point at one small cabinet object and right-hold to draw out its color';
+    if (snapshot.complete && !this.pigmentStoneCollected) return 'the vase is finished; return to the empty cabinet for the revealed color stone';
+    if (snapshot.complete) return 'the vase is framed and the color stone is collected; continue to the train';
+    if (Object.keys(snapshot.free).length) return 'a borrowed color is on the practice canvas; lift it back to finish the vase';
+    if (snapshot.palette.length) return 'the carried palette will match a collected color to each outlined square';
+    return `borrow colors from the miniature objects and paint the still life (${Object.keys(snapshot.required).length} / ${REQUIRED_CELLS.length})`;
   }
 
   update(time, delta) {
@@ -807,6 +912,8 @@ export class DrawingStudioScene extends Phaser.Scene {
     this.stepPlayer();
     this.stepSuction(dt);
     this.updateFigure(time);
+    this.tryCollectMagicStone();
+    this.redrawMagicStone(time);
     this.drawHeld(time);
     this.drawSuction();
     this.currentInteraction = this.interactionForPlayer();
@@ -835,6 +942,20 @@ export class DrawingStudioScene extends Phaser.Scene {
         suctionProgress: Number((this.hold.progress / HOLD_SECONDS).toFixed(2)),
       },
       tutorialSeen: { ...this.tutorialSeen },
+      canvasGrid: {
+        cell: CANVAS_CELL,
+        reference: { cols: REFERENCE.cols, rows: REFERENCE.rows },
+        copy: { cols: REQUIRED.cols, rows: REQUIRED.rows },
+        free: { cols: FREE.cols, rows: FREE.rows },
+      },
+      magicStone: {
+        id: 'chapter-4',
+        x: PIGMENT_STONE.x,
+        y: PIGMENT_STONE.y,
+        collected: this.pigmentStoneCollected,
+        unlocked: snapshot.allSourcesExtracted,
+        visible: snapshot.allSourcesExtracted && !this.pigmentStoneCollected,
+      },
       ...snapshot,
       music: { playing: Boolean(this.music?.isPlaying), volume: Number((this.music?.volume ?? 0).toFixed(2)) },
     };

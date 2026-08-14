@@ -13,6 +13,8 @@ export const PIGMENTS = Object.freeze([
   { id: 'violet', name: 'MULBERRY', color: 0x84658f, source: 'FAMILY QUILT', part: 'ROOF' },
 ]);
 
+export const CHAPTER4_IGNITION_SIGN = 'moon';
+
 // Part I teaches weight and support. Part II teaches copying color. Part III
 // combines both lessons: colors must match the reference, and unsupported
 // pieces cannot float into the finished train.
@@ -27,16 +29,22 @@ export const TRAIN_BUILD_RULES = Object.freeze({
 
 export const TRAIN_BUILD_EXAMPLE_ORDER = Object.freeze(['green', 'red', 'blue', 'yellow', 'orange', 'violet']);
 
-export function createChapter4Expansion() {
+export function createChapter4Expansion({ unlockedPigments = [] } = {}) {
+  const initiallyUnlocked = new Set(unlockedPigments);
   const state = {
-    phase: EXPANSION_PHASE.COLLECT,
+    phase: PIGMENTS.every(({ id }) => initiallyUnlocked.has(id)) ? EXPANSION_PHASE.BUILD : EXPANSION_PHASE.COLLECT,
     trainBuilt: false,
     boarded: false,
     complete: false,
     consequenceRevealed: false,
     failedAttempts: 0,
     lastFailure: null,
-    pigments: PIGMENTS.map((pigment) => ({ ...pigment, collected: false, built: false })),
+    pigments: PIGMENTS.map((pigment) => ({
+      ...pigment,
+      collected: initiallyUnlocked.has(pigment.id),
+      built: false,
+    })),
+    ignition: { chosen: null, started: false, wrongTries: 0 },
     events: [],
   };
 
@@ -46,17 +54,23 @@ export function createChapter4Expansion() {
   const builtCount = () => state.pigments.filter((item) => item.built).length;
   const builtIds = () => new Set(state.pigments.filter((item) => item.built).map((item) => item.id));
 
-  function collect(id) {
-    if (state.phase !== EXPANSION_PHASE.COLLECT) return false;
+  function unlockPigment(id) {
     const item = pigment(id);
     if (!item || item.collected) return false;
     item.collected = true;
-    emit('pigment-taken', { id, source: item.source, part: item.part });
+    emit('pigment-unlocked', { id, source: item.source, part: item.part });
     if (collectedCount() === state.pigments.length) {
       state.phase = EXPANSION_PHASE.BUILD;
-      emit('all-pigments-taken');
+      emit('all-pigments-unlocked');
     }
     return true;
+  }
+
+  function collect(id) {
+    if (state.phase !== EXPANSION_PHASE.COLLECT) return false;
+    const changed = unlockPigment(id);
+    if (changed) emit('pigment-taken', { id });
+    return changed;
   }
 
   function failBuild(reason, partId, pigmentId, missing = []) {
@@ -91,9 +105,22 @@ export function createChapter4Expansion() {
   function boardTrain() {
     if (state.phase !== EXPANSION_PHASE.BUILD || !state.trainBuilt || state.boarded) return false;
     state.boarded = true;
-    state.phase = EXPANSION_PHASE.CHASE;
     emit('train-boarded');
     return true;
+  }
+
+  function chooseIgnition(sign) {
+    if (!state.boarded || state.ignition.started) return { ok: false, reason: 'not-ready' };
+    state.ignition.chosen = sign;
+    if (sign !== CHAPTER4_IGNITION_SIGN) {
+      state.ignition.wrongTries += 1;
+      emit('ignition-refused', { sign, tries: state.ignition.wrongTries });
+      return { ok: false, reason: 'wrong-sign' };
+    }
+    state.ignition.started = true;
+    state.phase = EXPANSION_PHASE.CHASE;
+    emit('ignition-started', { sign });
+    return { ok: true, reason: 'started' };
   }
 
   function revealConsequence() {
@@ -108,14 +135,17 @@ export function createChapter4Expansion() {
     state,
     pigment,
     collect,
+    unlockPigment,
     placePart,
     boardTrain,
+    chooseIgnition,
     revealConsequence,
     snapshot() {
       return {
         phase: state.phase,
         trainBuilt: state.trainBuilt,
         boarded: state.boarded,
+        ignition: { ...state.ignition },
         complete: state.complete,
         consequenceRevealed: state.consequenceRevealed,
         failedAttempts: state.failedAttempts,
