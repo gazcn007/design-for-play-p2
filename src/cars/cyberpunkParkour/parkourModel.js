@@ -176,7 +176,19 @@ export function createParkourState() {
     lastFailure: null,
     checkpointReached: false,
     goalComplete: false,
+    narrative: {
+      npcTalked: false,
+      letterRead: false,
+    },
   };
+}
+
+export function recordNarrativeInteraction(state, interaction) {
+  if (!state?.narrative) return false;
+  if (interaction === 'npc') state.narrative.npcTalked = true;
+  else if (interaction === 'letter') state.narrative.letterRead = true;
+  else return false;
+  return true;
 }
 
 export function movableById(state, id) {
@@ -249,7 +261,8 @@ export function recordCarRide(state, id) {
 
 export function canCompleteGoal(state) {
   return ROUTE_REQUIREMENTS.movables.every((id) => state.movedMovables.includes(id))
-    && ROUTE_REQUIREMENTS.flyingCars.every((id) => state.riddenCars.includes(id));
+    && ROUTE_REQUIREMENTS.flyingCars.every((id) => state.riddenCars.includes(id))
+    && state.narrative?.letterRead === true;
 }
 
 export function canActivateCheckpoint(state) {
@@ -282,6 +295,7 @@ export function completeGoal(state) {
 
 export function resetParkourState(state, failure = 'manual') {
   const resetCount = state.resetCount + 1;
+  const narrative = { ...state.narrative };
   const restoreCheckpoint = failure !== 'manual' && state.checkpointReached;
   const checkpointMovables = restoreCheckpoint
     ? state.movables
@@ -292,6 +306,7 @@ export function resetParkourState(state, failure = 'manual') {
   Object.assign(state, fresh, {
     resetCount,
     lastFailure: failure,
+    narrative,
   });
   if (restoreCheckpoint) {
     checkpointMovables.forEach((saved) => {
@@ -337,5 +352,6 @@ export function parkourSnapshot(state) {
     checkpointReached: state.checkpointReached,
     goalReady: canCompleteGoal(state),
     goalComplete: state.goalComplete,
+    narrative: { ...state.narrative },
   };
 }

@@ -16,6 +16,7 @@ import {
   parkourSnapshot,
   previewDrag,
   recordCarRide,
+  recordNarrativeInteraction,
   resetParkourState,
   stepFlyingCars,
 } from './parkourModel.js';
@@ -35,6 +36,31 @@ const MIDPOINT_X = 4230;
 const MIDPOINT_ROOF_Y = 120;
 const FINAL_GOAL_X = 8040;
 const FINAL_GOAL_ROOF_Y = 180;
+const STORY_NPC_X = 126;
+const STORY_NPC_GROUND_Y = 540;
+const MARA_LETTER_X = 7890;
+const MARA_LETTER_Y = 146;
+
+const PARKOUR_STORY = Object.freeze({
+  npc: {
+    speaker: 'ROOFTOP MECHANIC',
+    role: 'night transit / maintenance shift',
+    lines: [
+      'Mara came through three nights ago. She asked which roofs still connected to the old transit balcony.',
+      'I showed her the maintenance ladders. She moved them herself and crossed before the patrol cars changed shift.',
+      'She left a letter at the final door. She said the person looking for her would know the name.',
+    ],
+  },
+  letter: {
+    speaker: 'MARA',
+    role: 'letter / left at the final balcony',
+    lines: [
+      'Butch— I made it through this city, but I could not wait here.',
+      'The train opened the next door before dawn. I went on.',
+      'If you are following me, keep moving. I will leave another mark where I can. — Mara',
+    ],
+  },
+});
 
 const PLATFORM_DEFS = [
   { x: 0, y: 540, w: 460, h: 180, accent: CYAN, sign: 'START' },
@@ -100,6 +126,7 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     this.activeLadderPlatform = null;
     this.currentRideId = null;
     this.lastRideId = null;
+    this.narrativeDialogue = null;
     this.dragViews = new Map();
     this.carViews = new Map();
     this.nextAreaLoader = new WorldAssetLoader(this);
@@ -119,19 +146,18 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     this.buildFlyingCars();
     this.buildMidpointCheckpoint();
     this.buildGoal();
+    this.buildNarrativeWorld();
     this.buildHud();
+    this.buildNarrativePanel();
 
     this.player = new Player(this, 70, 490, LANE_NEAR);
     this.player.clearTint().setTint(0xd7eaff).setDepth(50);
     this.player.body.setMaxVelocity(300, 1500);
 
-    this.platformCollider = this.physics.add.collider(
-      this.player,
-      this.fixedSolids,
-      null,
-      (_player, platform) => !this.climbing || platform !== this.activeLadderPlatform,
-      this,
-    );
+    // Roof and wall collision stays live while climbing. A ladder sits outside
+    // its building, so the player can traverse the visible ladder width while
+    // the attached wall still prevents an invalid sideways clip.
+    this.platformCollider = this.physics.add.collider(this.player, this.fixedSolids);
     this.physics.add.collider(this.player, this.blockGroup);
     this.physics.add.collider(this.player, this.carGroup);
     this.physics.add.overlap(this.player, this.hazardGroup, (_player, hazard) => {
@@ -152,6 +178,7 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     this.events.once('shutdown', () => {
       this.input.off('pointermove', this.onPointerMove, this);
       this.input.off('pointerup', this.onPointerUp, this);
+      this.narrativeTypeTimer?.remove(false);
       this.nextAreaLoader?.destroy();
     });
   }
@@ -525,6 +552,74 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     this.physics.add.existing(this.goalZone, true);
   }
 
+  buildNarrativeWorld() {
+    const npc = this.add.container(STORY_NPC_X, STORY_NPC_GROUND_Y).setDepth(45).setScale(1.08);
+    // A clean human silhouette built from broad shapes that remain readable at
+    // gameplay scale. The continuous visor, temple port, chest light and limb
+    // seams reveal the mechanic's synthetic construction without visual noise.
+    const shadow = this.add.ellipse(0, 0, 34, 7, 0x03060a, 0.65);
+    const backLeg = this.add.rectangle(-7, -9, 9, 20, 0x2b3b45, 1)
+      .setStrokeStyle(1, 0x82949e, 0.85);
+    const frontLeg = this.add.rectangle(7, -9, 9, 20, 0x354852, 1)
+      .setStrokeStyle(1, 0x9aabb4, 0.85);
+    const backBoot = this.add.rectangle(-9, -1, 14, 5, 0x101920, 1);
+    const frontBoot = this.add.rectangle(9, -1, 14, 5, 0x142029, 1);
+    const backArm = this.add.rectangle(-18, -33, 8, 31, 0x40545f, 1)
+      .setStrokeStyle(1, 0x8fa2ad, 0.8);
+    const frontArm = this.add.rectangle(18, -33, 8, 31, 0x4a606b, 1)
+      .setStrokeStyle(1, 0xa4b5bd, 0.8);
+    const backHand = this.add.circle(-18, -16, 4, 0x75868d, 1)
+      .setStrokeStyle(1, CYAN, 0.7);
+    const frontHand = this.add.circle(18, -16, 4, 0x87979d, 1)
+      .setStrokeStyle(1, CYAN, 0.7);
+    const shoulders = this.add.rectangle(0, -47, 34, 10, 0x526875, 1)
+      .setStrokeStyle(1.5, 0xa8bac3, 0.95);
+    const coat = this.add.rectangle(0, -32, 28, 34, 0x526875, 1)
+      .setStrokeStyle(1.5, 0xa8bac3, 0.95);
+    const waist = this.add.rectangle(0, -16, 30, 6, 0x31444f, 1)
+      .setStrokeStyle(1, 0x8fa4ae, 0.8);
+    const coatPanel = this.add.rectangle(0, -32, 1.5, 27, 0x1b2a33, 0.95);
+    const collar = this.add.rectangle(0, -48, 18, 5, 0x17232b, 1);
+    const neck = this.add.rectangle(0, -53, 9, 8, 0x78868a, 1)
+      .setStrokeStyle(1, 0xa7b2b4, 0.8);
+    const head = this.add.ellipse(0, -67, 25, 28, 0xb5aaa0, 1)
+      .setStrokeStyle(1.5, 0xd2d0c9, 0.95);
+    const hairCap = this.add.ellipse(0, -78, 23, 11, 0x17232b, 1);
+    const hairFringe = this.add.rectangle(-7, -74, 8, 7, 0x17232b, 1);
+    const visor = this.add.rectangle(0, -68, 15, 3, 0x07151c, 1)
+      .setStrokeStyle(1, CYAN, 1);
+    const faceSeam = this.add.rectangle(0, -60, 12, 1, 0x60757d, 0.8);
+    const templePort = this.add.circle(12, -66, 2.5, 0x10212a, 1).setStrokeStyle(1, CYAN, 1);
+    const chestLight = this.add.rectangle(6, -37, 6, 6, 0x07131d, 1)
+      .setStrokeStyle(1, CYAN, 1);
+    npc.add([
+      shadow, backLeg, frontLeg, backBoot, frontBoot, backArm, frontArm,
+      backHand, frontHand, shoulders, coat, waist, coatPanel, collar, neck,
+      head, hairCap, hairFringe, visor, faceSeam, templePort, chestLight,
+    ]);
+    this.add.text(STORY_NPC_X, STORY_NPC_GROUND_Y - 91, 'E  TALK', {
+      fontFamily: MONO,
+      fontSize: '12px',
+      color: '#edf1f4',
+      backgroundColor: '#05070ce8',
+      padding: { x: 7, y: 4 },
+    }).setOrigin(0.5).setDepth(46);
+
+    const letter = this.add.container(MARA_LETTER_X, MARA_LETTER_Y).setDepth(45);
+    const page = this.add.rectangle(0, 0, 34, 25, 0xd8d1bc, 1)
+      .setStrokeStyle(2, 0x75d4cd, 0.9).setAngle(-5);
+    const fold = this.add.triangle(9, -7, 0, 0, 8, 0, 8, 7, 0x879da0, 0.9).setAngle(-5);
+    const thread = this.add.rectangle(-3, 1, 25, 2, CYAN, 0.8).setAngle(-5);
+    letter.add([page, fold, thread]);
+    this.add.text(MARA_LETTER_X, MARA_LETTER_Y - 38, 'E  READ LETTER', {
+      fontFamily: MONO,
+      fontSize: '12px',
+      color: '#edf1f4',
+      backgroundColor: '#05070ce8',
+      padding: { x: 7, y: 4 },
+    }).setOrigin(0.5).setDepth(46);
+  }
+
   buildHud() {
     this.add.text(22, 18, 'CHAPTER ONE  //  CYBERPUNK PARKOUR', {
       fontFamily: MONO,
@@ -542,7 +637,7 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
       padding: { x: 11, y: 8 },
     }).setOrigin(1, 0).setScrollFactor(0).setDepth(100);
     this.controlsText = this.add.text(GAME_W / 2, GAME_H - 22,
-      'A / D  MOVE     SPACE  JUMP     W / S  CLIMB     CLICK + DRAG  PLACE     R  RESET', {
+      'A / D  MOVE     SPACE  JUMP     W / S  CLIMB     E  INTERACT     CLICK + DRAG  PLACE     R  RESET', {
         fontFamily: MONO,
         fontSize: '13px',
         color: '#d5dce3',
@@ -558,11 +653,34 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     }).setOrigin(0.5).setScrollFactor(0).setDepth(100).setAlpha(0);
   }
 
+  buildNarrativePanel() {
+    this.narrativePanel = this.add.rectangle(28, 34, 720, 178, 0x05070c, 0.96)
+      .setOrigin(0).setScrollFactor(0).setDepth(200).setVisible(false)
+      .setStrokeStyle(1, 0x687481, 0.95);
+    this.narrativeSpeaker = this.add.text(48, 50, '', {
+      fontFamily: MONO, fontSize: '16px', color: '#e8edf1', letterSpacing: 2,
+    }).setScrollFactor(0).setDepth(201).setVisible(false);
+    this.narrativeRole = this.add.text(48, 76, '', {
+      fontFamily: MONO, fontSize: '12px', color: '#a6b1bc', letterSpacing: 1,
+    }).setScrollFactor(0).setDepth(201).setVisible(false);
+    this.narrativeText = this.add.text(48, 101, '', {
+      fontFamily: MONO,
+      fontSize: '17px',
+      color: '#edf1f4',
+      lineSpacing: 6,
+      wordWrap: { width: 670 },
+    }).setScrollFactor(0).setDepth(201).setVisible(false);
+    this.narrativeHint = this.add.text(728, 187, '', {
+      fontFamily: MONO, fontSize: '12px', color: '#b0bbc5',
+    }).setOrigin(1, 0).setScrollFactor(0).setDepth(201).setVisible(false);
+  }
+
   setupInput() {
     this.keys = this.input.keyboard.addKeys({
       left: 'LEFT', right: 'RIGHT', a: 'A', d: 'D',
       up: 'UP', down: 'DOWN', w: 'W', s: 'S',
       jump: 'SPACE', restart: 'R',
+      interact: 'E',
     });
     this.input.keyboard.addCapture(['SPACE', 'UP', 'DOWN', 'LEFT', 'RIGHT']);
   }
@@ -637,6 +755,11 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
 
   update(_time, delta) {
     this.neonHaze.tilePositionX += delta * 0.012;
+    if (this.narrativeDialogue) {
+      this.updateNarrativeDialogueInput();
+      return;
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.keys.interact) && this.tryOpenNearbyNarrative()) return;
     if (Phaser.Input.Keyboard.JustDown(this.keys.restart)) {
       this.resetParkour('manual');
       return;
@@ -654,6 +777,106 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     if (this.player.y > 665) this.failAndReset('fall');
   }
 
+  tryOpenNearbyNarrative() {
+    if (this.finished || this.state.activeDragId || this.climbing) return false;
+    const nearNpc = Math.abs(this.player.x - STORY_NPC_X) <= 72
+      && Math.abs(this.player.y - (STORY_NPC_GROUND_Y - 45)) <= 90;
+    const nearLetter = Math.abs(this.player.x - MARA_LETTER_X) <= 72
+      && Math.abs(this.player.y - MARA_LETTER_Y) <= 80;
+    if (nearNpc) this.openNarrativeDialogue('npc');
+    else if (nearLetter) this.openNarrativeDialogue('letter');
+    else return false;
+    return true;
+  }
+
+  openNarrativeDialogue(kind) {
+    const script = PARKOUR_STORY[kind];
+    if (!script) return;
+    recordNarrativeInteraction(this.state, kind);
+    this.narrativeDialogue = {
+      kind,
+      script,
+      lineIndex: 0,
+      typing: false,
+      playerAnchor: { x: this.player.x, y: this.player.y },
+    };
+    this.player.frozen = true;
+    this.player.setAcceleration(0, 0);
+    this.player.setVelocity(0, 0);
+    this.player.body.setAllowGravity(false);
+    this.player.body.moves = false;
+    this.showNarrativeLine();
+  }
+
+  showNarrativeLine() {
+    const dialogue = this.narrativeDialogue;
+    if (!dialogue) return;
+    this.narrativeTypeTimer?.remove(false);
+    const line = dialogue.script.lines[dialogue.lineIndex];
+    dialogue.typing = true;
+    dialogue.typedCount = 0;
+    this.narrativePanel.setVisible(true).setAlpha(0).setScale(0.98);
+    this.narrativeSpeaker.setText(dialogue.script.speaker).setVisible(true);
+    this.narrativeRole.setText(dialogue.script.role).setVisible(true);
+    this.narrativeText.setText('').setVisible(true);
+    this.narrativeHint.setText(
+      dialogue.lineIndex === dialogue.script.lines.length - 1
+        ? 'E  CONTINUE'
+        : `${dialogue.lineIndex + 1} / ${dialogue.script.lines.length}   E`,
+    ).setVisible(true);
+    this.tweens.add({ targets: this.narrativePanel, alpha: 0.9, scale: 1, duration: 150, ease: 'Quad.easeOut' });
+    this.narrativeTypeTimer = this.time.addEvent({
+      delay: 18,
+      loop: true,
+      callback: () => {
+        if (!this.narrativeDialogue) return;
+        dialogue.typedCount += 1;
+        this.narrativeText.setText(line.slice(0, dialogue.typedCount));
+        if (dialogue.typedCount >= line.length) this.finishNarrativeTyping();
+      },
+    });
+  }
+
+  finishNarrativeTyping() {
+    const dialogue = this.narrativeDialogue;
+    if (!dialogue?.typing) return;
+    this.narrativeTypeTimer?.remove(false);
+    this.narrativeTypeTimer = null;
+    dialogue.typing = false;
+    this.narrativeText.setText(dialogue.script.lines[dialogue.lineIndex]);
+  }
+
+  updateNarrativeDialogueInput() {
+    if (!Phaser.Input.Keyboard.JustDown(this.keys.interact)) return;
+    if (this.narrativeDialogue.typing) {
+      this.finishNarrativeTyping();
+      return;
+    }
+    if (this.narrativeDialogue.lineIndex < this.narrativeDialogue.script.lines.length - 1) {
+      this.narrativeDialogue.lineIndex += 1;
+      this.showNarrativeLine();
+      return;
+    }
+    this.closeNarrativeDialogue();
+  }
+
+  closeNarrativeDialogue() {
+    const anchor = this.narrativeDialogue?.playerAnchor;
+    this.narrativeTypeTimer?.remove(false);
+    this.narrativeTypeTimer = null;
+    this.narrativePanel.setVisible(false);
+    this.narrativeSpeaker.setVisible(false);
+    this.narrativeRole.setVisible(false);
+    this.narrativeText.setVisible(false);
+    this.narrativeHint.setVisible(false);
+    this.narrativeDialogue = null;
+    this.player.body.moves = true;
+    this.player.body.setAllowGravity(true);
+    this.player.body.setGravityY(0);
+    if (anchor) this.player.body.reset(anchor.x, anchor.y);
+    this.player.frozen = false;
+  }
+
   updatePlayer(delta) {
     const left = this.keys.left.isDown || this.keys.a.isDown;
     const right = this.keys.right.isDown || this.keys.d.isDown;
@@ -665,21 +888,37 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
       this.activeLadder = ladder;
       this.activeLadderPlatform = this.findLadderPlatform(ladder);
     }
-    if (this.climbing && !ladder) {
-      this.stopClimbing();
-    }
-    // Lateral input always releases the ladder immediately. The normal
-    // building collider is restored before physics advances, so moving toward
-    // the wall is blocked while moving away drops the player naturally.
-    if (this.climbing && (left || right)) {
+    // Remaining on a ladder is based on the player's whole physics body, not
+    // a single lateral key press or their centre point. The player may shift
+    // freely across its visible width and releases only after the last edge of
+    // their body clears the ladder artwork.
+    if (this.climbing && !this.playerOverlapsLadder(this.activeLadder)) {
       this.stopClimbing();
     }
 
-    if (this.climbing && ladder) {
-      const roofY = this.activeLadderPlatform?.body?.top
-        ?? ladder.y - ladder.height / 2;
+    if (this.climbing && this.activeLadder) {
+      const activeLadder = this.activeLadder;
+      const platform = this.activeLadderPlatform;
+      const roofY = platform?.body?.top
+        ?? activeLadder.y - activeLadder.height / 2;
       const distanceToTop = this.player.body.bottom - roofY;
       const canDismount = distanceToTop <= 0.5;
+      const horizontalVelocity = left === right ? 0 : left ? -120 : 120;
+      if (canDismount && horizontalVelocity !== 0) {
+        // Keep the player's feet on the roof line during the short lateral
+        // transfer. Ladder attachment ends only after the full character body
+        // leaves the visible ladder, at which point the roof collider resumes.
+        const verticalCorrection = roofY - this.player.body.bottom;
+        this.player.body.position.y += verticalCorrection;
+        this.player.body.prev.y += verticalCorrection;
+        this.player.body.updateCenter();
+        this.player.body.setGravityY(-GRAVITY);
+        this.player.setAcceleration(0, 0);
+        this.player.setVelocity(horizontalVelocity, 0);
+        this.player.updateVisualAnimation(false);
+        this.player.applyScale();
+        return;
+      }
       // The visible ladder ends at the roof. Stop upward travel as soon as the
       // player's feet reach that line; W may remain held while the player
       // chooses a dismount direction, but it can no longer lift them into the
@@ -689,8 +928,8 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
       const velocityY = down ? 145 : up && !canDismount ? -upwardSpeed : 0;
       this.player.body.setGravityY(-GRAVITY);
       this.player.setAcceleration(0, 0);
-      this.player.setVelocity(0, velocityY);
-      const bottom = ladder.y + ladder.height / 2;
+      this.player.setVelocity(horizontalVelocity, velocityY);
+      const bottom = activeLadder.y + activeLadder.height / 2;
       // Ladder tops do not snap the player to an authored position. Horizontal
       // input remains live, so the player steps naturally onto either roof.
       if (this.player.y >= bottom + 12) {
@@ -731,13 +970,20 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     const halfPlayerHeight = (this.player.body?.height ?? 46) / 2;
     return ladders.find((movable) => {
       const ladderTop = movable.y - movable.height / 2;
-      return Math.abs(this.player.x - movable.x) <= movable.width / 2 + 18
+      return this.playerOverlapsLadder(movable)
         // Only the player's own height extends beyond the visible ladder: the
         // centre may rise until their feet meet its top, plus a small tolerance
         // for a single physics step and continuous sideways dismounting.
         && this.player.y >= ladderTop - halfPlayerHeight - 8
         && this.player.y <= movable.y + movable.height / 2 + 28;
     }) ?? null;
+  }
+
+  playerOverlapsLadder(ladder) {
+    if (!ladder || !this.player?.body) return false;
+    const ladderLeft = ladder.x - ladder.width / 2;
+    const ladderRight = ladder.x + ladder.width / 2;
+    return this.player.body.right > ladderLeft && this.player.body.left < ladderRight;
   }
 
   findLadderPlatform(ladder) {
@@ -886,7 +1132,10 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
   tryCompleteGoal() {
     if (this.finished) return;
     if (!canCompleteGoal(this.state)) {
-      this.showFeedback('ROUTE DATA INCOMPLETE', '#ffbf26');
+      this.showFeedback(
+        this.state.narrative.letterRead ? 'ROUTE DATA INCOMPLETE' : 'READ MARA\'S LETTER BEFORE LEAVING',
+        '#ffbf26',
+      );
       return;
     }
     completeGoal(this.state);
@@ -1006,6 +1255,13 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
     } else if (qa === 'parkour-high-spikes') {
       seedMidpoint();
       this.player.body.reset(7005, 30);
+    } else if (qa === 'parkour-story-npc') {
+      this.player.body.reset(STORY_NPC_X - 34, STORY_NPC_GROUND_Y - 50);
+    } else if (qa === 'parkour-story-letter') {
+      seedMovables(this.state.movables.map(({ id }) => id));
+      this.state.flyingCars.forEach(({ id }) => recordCarRide(this.state, id));
+      this.state.checkpointReached = true;
+      this.player.body.reset(MARA_LETTER_X - 28, MARA_LETTER_Y - 18);
     } else if (qa === 'parkour-reset') {
       const ladder = movableById(this.state, 'ladder-a');
       beginDrag(this.state, ladder.id);
@@ -1017,11 +1273,13 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
       seedMovables(this.state.movables.map(({ id }) => id));
       this.state.flyingCars.forEach(({ id }) => recordCarRide(this.state, id));
       this.state.checkpointReached = true;
+      recordNarrativeInteraction(this.state, 'letter');
       this.player.body.reset(FINAL_GOAL_X - 140, FINAL_GOAL_ROOF_Y - 50);
     } else if (qa === 'parkour-goal') {
       seedMovables(this.state.movables.map(({ id }) => id));
       this.state.flyingCars.forEach(({ id }) => recordCarRide(this.state, id));
       this.state.checkpointReached = true;
+      recordNarrativeInteraction(this.state, 'letter');
       // Leave the final ten metres live: browser QA walks through the actual
       // goal overlap instead of directly mutating completion state.
       this.player.body.reset(FINAL_GOAL_X - 40, FINAL_GOAL_ROOF_Y - 50);
@@ -1060,7 +1318,15 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
         bodyEnabled: Boolean(this.player.body?.enable),
         platformCollisionActive: Boolean(this.platformCollider?.active),
         ladderPlatform: this.activeLadderPlatform?.getData('parkourPlatform')?.sign ?? null,
+        bodyLeft: Math.round(this.player.body?.left ?? this.player.x),
+        bodyRight: Math.round(this.player.body?.right ?? this.player.x),
         bodyBottom: Math.round(this.player.body?.bottom ?? this.player.y),
+        ladderLeft: this.activeLadder
+          ? Math.round(this.activeLadder.x - this.activeLadder.width / 2)
+          : null,
+        ladderRight: this.activeLadder
+          ? Math.round(this.activeLadder.x + this.activeLadder.width / 2)
+          : null,
         ladderTop: this.activeLadder
           ? Math.round(this.activeLadder.y - this.activeLadder.height / 2)
           : null,
@@ -1090,6 +1356,18 @@ export default class CyberpunkParkourScene extends Phaser.Scene {
         visualSegments: Math.ceil(hazard.w / 24),
       })),
       ...snapshot,
+      narrative: {
+        npcTalked: snapshot.narrative.npcTalked,
+        letterRead: snapshot.narrative.letterRead,
+        active: this.narrativeDialogue?.kind ?? null,
+        speaker: this.narrativeDialogue?.script.speaker ?? null,
+        line: this.narrativeDialogue ? this.narrativeDialogue.lineIndex + 1 : null,
+        total: this.narrativeDialogue?.script.lines.length ?? null,
+        text: this.narrativeDialogue
+          ? this.narrativeDialogue.script.lines[this.narrativeDialogue.lineIndex]
+          : null,
+        typing: Boolean(this.narrativeDialogue?.typing),
+      },
       camera: {
         centerX: Math.round(this.cameras.main.midPoint.x),
         centerY: Math.round(this.cameras.main.midPoint.y),

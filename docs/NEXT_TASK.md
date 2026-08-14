@@ -53,6 +53,14 @@ User correction (2026-08-09): AIR LANE and NIGHT GRID plus the props, ladder,
 rail and spikes resting on them move down together by 30px. The final door
 returns the player to the completed train instead of entering the next city.
 
+User story amendment (2026-08-13): Continue the prior search for Mara inside
+the cyberpunk parkour without changing its topology. An NPC at the beginning
+confirms that Mara crossed this city and points Butch toward a letter she left
+at the final balcony. The letter uses the preceding chapter's restrained
+typewriter dialogue style and reveals that Mara could not wait and has already
+moved on. Reading it is required before the final door opens; talking to the
+NPC remains optional.
+
 ## Awaiting product accept — Chapter 4 `THE PAINTED COUNTRY` Bay A slice
 
 Status: `AWAITING PRODUCT ACCEPT` (not `READY` — do not start)
