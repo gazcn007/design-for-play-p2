@@ -1097,13 +1097,13 @@ class SpectacleBattle {
     this.scene.fog.color.setHex(fogColors[index]);
     this.rim.color.setHex(phase.color);
     this.redCeilingLights.visible = index < 2;
-    // Movements I–II are lit only by the three red ceiling beams. Disable the
-    // warm key and amber rim that were turning the arena orange; later worlds
-    // keep their authored neutral/cyan lighting.
-    this.hemi.visible = index >= 2;
+    // Keep the original readable key/fill lighting in I–II, then layer the
+    // red ceiling wash over it. Removing all neutral fill made painted props
+    // collapse to black and erased the worlds' authored colours.
+    this.hemi.visible = true;
     this.redWash.visible = index < 2;
-    this.key.visible = index >= 2;
-    this.rim.visible = index >= 2;
+    this.key.visible = true;
+    this.rim.visible = true;
     this.key.color.setHex(index === 3 ? 0xffedcf : index === 2 ? 0xd5efff : 0xffe7c0);
     this.puppet.root.visible = index !== 2;
     this.butchRoot.visible = index === 2;
@@ -2198,10 +2198,33 @@ class SpectacleBattle {
     if (this.player.hp <= 0) this.respawnPlayer();
   }
 
+  respawnClearance([x, z]) {
+    // A recovery point must be clear of both the lasting collapsed-floor debris
+    // and any still-active impact area. This is deliberately broader than the
+    // player collision radius, so an invulnerability timer is a grace period,
+    // never the only thing preventing an immediate repeat hit.
+    const clearances = [];
+    (this.activeHoles || []).forEach((hole) => {
+      clearances.push(Math.hypot(x - hole.x, z - hole.z) - hole.radius - 0.42);
+    });
+    (this.hazards || []).forEach((hazard) => {
+      if (hazard.type === 'paper-train') return;
+      if (!hazard.struck && !hazard.landed) return;
+      if (!['suitcase-rain', 'cyber-block', 'cyber-ladder', 'echo-hole', 'pigment', 'laser', 'paint-sweep', 'cyber-ring'].includes(hazard.type)) return;
+      if (hazard.type === 'laser' || hazard.type === 'paint-sweep') {
+        clearances.push(hazard.vertical ? Math.abs(x - hazard.offset) - 1.2 : Math.abs(z - hazard.offset) - 1.2);
+      } else if (hazard.type === 'cyber-ring') {
+        clearances.push(Math.abs(Math.hypot(x - hazard.x, z - hazard.z) - hazard.radius) - 0.72);
+      } else {
+        clearances.push(Math.hypot(x - hazard.x, z - hazard.z) - 2.35);
+      }
+    });
+    return clearances.length ? Math.min(...clearances) : 99;
+  }
+
   findSafeRespawn() {
     const candidates = [[0, 5.2], [-7.5, 5.2], [7.5, 5.2], [-10, 2.8], [10, 2.8], [0, 2.5]];
-    const holes = this.activeHoles || [];
-    const clearance = ([x, z]) => holes.length ? Math.min(...holes.map((hole) => Math.hypot(x - hole.x, z - hole.z) - hole.radius)) : 99;
+    const clearance = (point) => this.respawnClearance(point);
     const safeAuthored = candidates.find((point) => clearance(point) >= 1.65);
     if (safeAuthored) return safeAuthored;
     const search = [];
@@ -2215,8 +2238,8 @@ class SpectacleBattle {
   respawnPlayer() {
     const p = this.player;
     const restartCyberTutorial = this.phase === 1 && this.cyberOnboarding?.active;
-    this.clearHazards();
     const [x, z] = this.findSafeRespawn();
+    this.clearHazards();
     p.hp = p.maxHp;
     p.x = x; p.y = 0; p.z = z; p.vy = 0; p.grounded = true;
     p.ammo = 0; p.ladder = false; p.color = 0;
@@ -2295,9 +2318,17 @@ class SpectacleBattle {
     p.z = resolved.z;
     const hole = this.activeHoles?.find((entry) => Math.hypot(p.x - entry.x, p.z - entry.z) < entry.radius * 0.82);
     if (hole && p.y <= 0.15 && p.respawnInv <= 0) {
+      const respawnsBefore = p.respawns;
       p.y = -0.8;
       this.takeHit();
-      p.x = 0; p.z = 6.4; p.y = 0; p.vy = 0;
+      // A non-lethal collapse used to put the player back at the fixed opening
+      // spot, which can itself be covered by rubble or an active strike. Use
+      // the same danger-aware search as a full death; a full respawn has
+      // already placed the player safely, so do not overwrite it.
+      if (p.respawns === respawnsBefore) {
+        const [safeX, safeZ] = this.findSafeRespawn();
+        p.x = safeX; p.z = safeZ; p.y = 0; p.vy = 0;
+      }
     }
     p.vy -= 22 * dt;
     p.y += p.vy * dt;

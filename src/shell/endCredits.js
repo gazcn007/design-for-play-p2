@@ -7,6 +7,10 @@ import { music } from '../shared/musicDirector.js';
 // register. This mounts in the current document so the music system keeps the
 // player gesture it already earned during gameplay.
 export function showEndCredits() {
+  // The title menu owns the complete, scrollable credit register. Reuse it at
+  // the real ending instead of mounting the former names-only end card.
+  window.location.assign('/?credits=1');
+  return;
   document.querySelector('#nightfall-end-credits')?.remove();
   const root = document.createElement('main');
   root.id = 'nightfall-end-credits';

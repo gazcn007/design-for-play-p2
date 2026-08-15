@@ -306,6 +306,38 @@ for (const [name, query] of states) {
     if (!recovered) {
       throw new Error(`Recovery ladder did not return the player to the prior route: ${JSON.stringify(snapshot.parkour.player)}`);
     }
+    if (name === 'recovery') {
+      // The first return ladder is deliberately forgiving: Space at its top
+      // takes the player to the authored safe roof, even without A/D input.
+      await evaluate("window.game.scene.getScene('CyberpunkParkour').player.body.reset(1210, 350)");
+      await delay(80);
+      await keyEvent('keyDown', 'w', 'KeyW', 87);
+      for (const deadline = Date.now() + 5000; Date.now() < deadline;) {
+        await delay(25);
+        const candidate = JSON.parse(await evaluate('window.render_game_to_text()'));
+        if (candidate.parkour.player.y <= 150) break;
+      }
+      await keyEvent('keyUp', 'w', 'KeyW', 87);
+      await keyEvent('keyDown', ' ', 'Space', 32);
+      await delay(80);
+      await keyEvent('keyUp', ' ', 'Space', 32);
+      let spaceDismounted = null;
+      for (const deadline = Date.now() + 2000; Date.now() < deadline;) {
+        await delay(25);
+        const candidate = JSON.parse(await evaluate('window.render_game_to_text()'));
+        if (candidate.parkour.player.state !== 'climbing') {
+          spaceDismounted = candidate;
+          break;
+        }
+      }
+      if (!spaceDismounted
+        || spaceDismounted.parkour.player.x < 800
+        || spaceDismounted.parkour.player.x > 1190
+        || spaceDismounted.parkour.player.y > 200) {
+        throw new Error(`Space did not safely dismount the first recovery ladder: ${JSON.stringify(spaceDismounted?.parkour.player)}`);
+      }
+      evidence['recovery-space-dismount'] = spaceDismounted;
+    }
   } else if (name === 'spikes') {
     const spikes = snapshot.parkour.hazards.find(({ label }) => label === 'spikes');
     if (spikes.width !== 96 || spikes.visualSegments !== 4) {

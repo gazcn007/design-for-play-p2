@@ -19,11 +19,12 @@ import { StatueNPC, patrolCellsFor } from '../../src/chapters/museum/labyrinth/S
 import { applyWingEntryRules, choosePrimaryHunterId, statueCanDamage } from '../../src/chapters/museum/labyrinth/labyrinthEncounterRules.js';
 import { TEXTURE_SLOTS } from '../../src/chapters/museum/labyrinth/labyrinthAssets.js';
 import { CELL, LOCAL_H, LOCAL_W, PAL, STRINGS, TUNING, WINGS } from '../../src/chapters/museum/labyrinth/labyrinthData.js';
-import { cloneWalls, MOVING_MAZE_CHANGES_PER_STATE, reachableCells } from '../../src/chapters/museum/labyrinth/wingMechanics.js';
+import { cloneWalls, MOVING_MAZE_CHANGES_PER_STATE, playerCanReachTargets, reachableCells } from '../../src/chapters/museum/labyrinth/wingMechanics.js';
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
 const labyrinthEntry = read('../../src/chapters/museum/labyrinth/labyrinth-main.js');
 const labyrinthScene = read('../../src/chapters/museum/labyrinth/LabyrinthScene.js');
+const pauseMenu = read('../../src/shell/pauseMenu.js');
 const labyrinthCues = read('../../src/chapters/museum/labyrinth/labyrinthCues.js');
 const chaseMusic = read('../../src/chapters/museum/labyrinth/chaseMusic.js');
 const museumVite = read('../../vite.museum3d.config.js');
@@ -76,6 +77,23 @@ test('Door 4 exposes one formal Chapter 5 route, message, and artifact contract'
   assert.match(labyrinthEntry, /LABYRINTH_CHAPTER05_CONTRACT\.exitMessage/);
   assert.match(museumVite, /LABYRINTH_CHAPTER05_CONTRACT\.entryHtml/);
   assert.match(labyrinthVite, /LABYRINTH_CHAPTER05_CONTRACT\.entryHtml/);
+});
+
+test('the embedded Labyrinth pauses on ESC and production starts with all three lives', () => {
+  assert.match(labyrinthEntry, /installPauseMenu\(\{ checkpointId: 'chapter-5-start', allowEmbedded: true \}\)/);
+  assert.match(pauseMenu, /\(!allowEmbedded && window\.top !== window\)/);
+  assert.match(labyrinthEntry, /const qaEnabled = devRoutesEnabled\(\)/);
+  assert.match(labyrinthEntry, /params\.has\('qa-lives'\)/);
+  assert.match(labyrinthScene, /lives: TUNING\.lives/);
+  assert.match(labyrinthScene, /const spawnGraceUntil = this\.time\.now \+ TUNING\.wingEntryGraceMs/);
+  assert.match(labyrinthScene, /this\.player\.invulnUntil = spawnGraceUntil/);
+});
+
+test('Chapter 3 uses Escape as a quick return to the chapter list', () => {
+  const chapter3Entry = read('../../src/car03-3d-main.js');
+  assert.match(chapter3Entry, /window\.location\.assign\('\/'\)/);
+  assert.match(pauseMenu, /onEscape = null/);
+  assert.match(pauseMenu, /if \(onEscape\(\) !== false\) return/);
 });
 
 test('Door 4 completion grants the corridor route while the Looking Fragment stays pre-displayed', () => {
@@ -158,6 +176,19 @@ test('the labyrinth stays the full four-wing, eight-key, eight-statue maze', () 
     && point.y >= wing.bounds.y0 && point.y <= wing.bounds.y1;
   assert.ok(inWing(layout.spawn, layout.wings[0]));
   assert.ok(inWing(layout.exit, layout.wings[3]));
+});
+
+test('a full loss returns to the current wing entrance without erasing route progress', () => {
+  const layout = buildLayout(() => 0.5);
+  assert.equal(layout.wingStarts.length, 4);
+  for (const start of layout.wingStarts) {
+    assert.equal(layout.floorWalls[start.floor][start.cell.y][start.cell.x], false);
+  }
+  assert.match(labyrinthScene, /restartCurrentWing\(\)/);
+  assert.match(labyrinthScene, /this\.layout\.wingStarts\[wingId\]/);
+  assert.match(labyrinthScene, /this\.player\.lives = TUNING\.lives/);
+  assert.match(labyrinthScene, /if \(statue\.wing === wingId\) statue\.resetToSpawn\(\)/);
+  assert.equal(STRINGS.gameOverSub, "RETURN TO THIS WING'S ENTRANCE   ·   [R] CONTINUE");
 });
 
 test('a statue freezes under the player gaze and hunts once unseen', () => {
@@ -325,6 +356,9 @@ test('Wing III moving walls have three states and every state stays solvable', (
     for (const change of state.changes) walls[change.y][change.x] = change.solid;
     const seen = reachableCells(walls, targets[0]);
     assert.ok(targets.every((cell) => seen.has(`${cell.x},${cell.y}`)), `state ${state.id} disconnected a room`);
+    for (const playerCell of targets) {
+      assert.ok(playerCanReachTargets(walls, playerCell, targets), `state ${state.id} could strand the player`);
+    }
   }
 });
 
@@ -345,7 +379,8 @@ test('Wing IV is a reachable two-floor hunt with an unmarked final fragment', ()
     }
     if (floor === 1) assert.ok(seen.has(`${layout.exit.cell.x},${layout.exit.cell.y}`));
   }
-  assert.doesNotMatch(labyrinthScene, /toMini\(this\.layout\.exit/);
+  assert.match(labyrinthScene, /toMini\(this\.layout\.exit/);
+  assert.match(labyrinthScene, /ESCAPE \$\{arrows\[idx\]\}/);
   assert.match(labyrinthScene, /const x0 = VIEW\.w - size - 18/);
 });
 

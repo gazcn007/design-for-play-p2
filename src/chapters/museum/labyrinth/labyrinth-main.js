@@ -3,10 +3,16 @@ import { LabyrinthScene } from './LabyrinthScene.js';
 import { CELL, VIEW } from './labyrinthData.js';
 import { LABYRINTH_CHAPTER05_CONTRACT } from './chapter05LabyrinthContract.js';
 import { installDevMenuReturnControl } from '../../../devMenuReturn.js';
+import { installPauseMenu } from '../../../shell/pauseMenu.js';
 import { music } from '../../../shared/musicDirector.js';
 import { CHAPTER5_SCORE } from '../../museum3d/chapter05Score.js';
+import { devRoutesEnabled } from '../../../devMode.js';
 
 installDevMenuReturnControl();
+// The Labyrinth is commonly embedded inside the Museum. Opt in explicitly so
+// its own ESC handler pauses the Phaser scene before the iframe's old exit
+// listener can consume the key.
+installPauseMenu({ checkpointId: 'chapter-5-start', allowEmbedded: true });
 
 const labyrinthScore = CHAPTER5_SCORE.labyrinth;
 music.play(labyrinthScore.id, {
@@ -72,9 +78,12 @@ if (qaArtifact) {
 
 // Deterministic, query-only browser setup for encounter and Wing-transition
 // proof. It never appears in normal or embedded play.
-const qaWing = Number(params.get('qa-wing'));
-const qaLives = Number(params.get('qa-lives'));
-const qaDoubleHunter = params.get('qa-double-hunter') === '1';
+const qaEnabled = devRoutesEnabled();
+// Number(null) is 0. Treat a missing QA parameter as absent, not as a hidden
+// request for Wing 0 with one life.
+const qaWing = qaEnabled && params.has('qa-wing') ? Number(params.get('qa-wing')) : Number.NaN;
+const qaLives = qaEnabled && params.has('qa-lives') ? Number(params.get('qa-lives')) : Number.NaN;
+const qaDoubleHunter = qaEnabled && params.get('qa-double-hunter') === '1';
 if (Number.isInteger(qaWing) && qaWing >= 0 && qaWing <= 3) {
   const probe = window.setInterval(() => {
     const scene = game.scene.getScene('MuseumLabyrinth');

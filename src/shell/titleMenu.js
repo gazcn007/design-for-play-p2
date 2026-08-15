@@ -411,7 +411,10 @@ export function createTitleMenu({ onStart, openCredits = false }) {
     { id: '2.2', group: 'CHAPTER 2 · BORROWED GRID', checkpoint: 'chapter-2-midpoint', title: 'ROOF ROUTE · MIDPOINT', detail: 'Second half after the route-extension checkpoint.', launch: 'chapter-2-midpoint' },
     { id: '3.1', group: 'CHAPTER 3 · ECHO CITY', checkpoint: 'chapter-3-start', title: 'CITY ENTRY · DAWN', detail: 'Main Echo City investigation start.', route: '/car03-3d.html' },
     { id: '3.2', group: 'CHAPTER 3 · ECHO CITY', checkpoint: 'chapter-3-start', title: 'DUSK CAMPFIRE', detail: 'Campfire evidence and the Echo Stone route.', route: '/car03-3d.html?playtest=chapter3-campfire' },
-    { id: '3.3', group: 'CHAPTER 3 · ECHO CITY', checkpoint: 'chapter-3-start', title: 'COPPER HERON · HOTEL', detail: 'Hotel/lobby route and character encounters.', route: '/car03-3d.html?playtest=chapter3-night-hotel' },
+    // This node is the beginning of the Copper Heron sequence, not the
+    // already-asleep nightmare checkpoint.  Starting in the latter leaves
+    // Butch deliberately posed on the bed and skips the hotel interactions.
+    { id: '3.3', group: 'CHAPTER 3 · ECHO CITY', checkpoint: 'chapter-3-start', title: 'COPPER HERON · HOTEL', detail: 'Hotel lobby, check-in, and character encounters.', route: '/car03-3d.html?playtest=chapter3-25' },
     { id: '3.4', group: 'CHAPTER 3 · ECHO CITY', checkpoint: 'chapter-3-start', title: 'SUNRISE OVERLOOK', detail: 'Late-city overlook and exit setup.', route: '/car03-3d.html?playtest=chapter3-sunrise' },
     { id: '4.1', group: 'CHAPTER 4 · THE PAINTED COUNTRY', checkpoint: 'chapter-4-start', title: 'GALLERY · THE OPEN SHEET', detail: 'First painted-country gallery route.', route: '/painted-country.html' },
     { id: '4.2', group: 'CHAPTER 4 · THE PAINTED COUNTRY', checkpoint: 'chapter-4-start', title: 'DRAWING STUDIO · STILL LIFE', detail: 'Cabinet pigments and the canvas reconstruction.', route: '/painted-country.html?qa=drawing' },

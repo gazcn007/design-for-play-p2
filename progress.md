@@ -40,6 +40,73 @@ production Conductor boss, never a video or the old Chapter 6 greybox.
 
 ## Work log
 
+- 2026-08-14: Labyrinth full-loss checkpoint change: each wing now records its
+  authored entry room. On a three-life loss, `[R] CONTINUE` restores three
+  lives at the current wing's entry, resets only that wing's statues, and
+  keeps all keys and unlocked gates. It no longer rebuilds the maze or sends
+  the player to Wing I. Chapter 3's standalone entry now treats ESC as a
+  direct return to the chapter list on every Echo City node. Focused tests
+  pass 23/23; local preview server restarted with a fresh Vite dependency
+  cache after intermittent stale optimizer responses.
+
+- 2026-08-14: Chapter 3 developer-node repair: Echo City's dev-list launch
+  pages retain the normal production pause menu, but in the dev list ESC now
+  returns directly to the chapter selector for rapid node switching. Restarted
+  the local Vite preview with forced dependency optimization after its stale
+  optimizer returned `504 Outdated Optimize Dep` before any Chapter 3 GLB
+  could begin loading. Focused Labyrinth/source-route tests pass 22/22.
+
+- 2026-08-14: Labyrinth Wing III moving-wall fairness: a route change now
+  simulates its full target wall layout before applying. It proceeds only if
+  the player's current cell remains walkable and connected to every authored
+  room in the moving wing; otherwise it waits and tries again rather than
+  sealing the player into a corridor. Once all eight keys have been collected,
+  the survey map now draws a pulsing gold escape marker and replaces the key
+  readout with a live `ESCAPE` direction and distance. Clean-server browser QA
+  visually confirmed the marker and readout with no errors.
+
+- 2026-08-14: Labyrinth regression repair: installed the shared ESC pause menu
+  inside the embedded Labyrinth runtime, so ESC pauses instead of exiting the
+  iframe. Fixed the production start-state bug where missing `qa-lives` was
+  coerced via `Number(null)` to one life; QA overrides now require their
+  parameters to exist, while normal runs begin with all three lives and an
+  opening hunter grace window. Bumped the entry module cache version so the
+  repaired runtime is actually loaded. Browser QA verified three lives,
+  non-QA state, no asset errors, and a visible paused menu after Escape.
+
+- 2026-08-14: Final Boss Movement I recovery correction: respawn locations now
+  score their clearance from persistent collapsed-floor rubble, active landed
+  impact hazards, laser/sweep lanes, and ring attacks before selecting a
+  point. A fall that costs only one health layer also uses this safe search
+  instead of forcing the player to the fixed opening coordinate. Full deaths
+  preserve their chosen safe position rather than being overwritten by that
+  old coordinate.
+
+- 2026-08-14: Chapter 2 second-transfer correction: left the repaired first
+  car (`car-a`) untouched. The separate middle car (`car-b`) previously ended
+  at x=3940, merely touching the POWER roof beginning at x=4000. Its endpoint
+  is now x=4120, so its 132px platform carries the player decisively onto that
+  roof. Focused model tests pass 9/9; the desktop package must be refreshed.
+
+- 2026-08-14: Final-integration regression hotfixes: restored Chapter 2's
+  normal Space jump by reading the input only while actually climbing;
+  keeps the optional Space ladder dismount. The Labyrinth's final seal is now
+  active on the final walked route rather than hidden by a floor-only gate,
+  and hit processing is guarded during the invulnerability window so one
+  collision cannot consume multiple lives. The true ending now redirects to
+  the title menu's complete scrolling credits. Final Boss Movements I–II
+  restore their neutral key/fill lights beneath the red wash so world colours
+  and materials remain visible. Focused Chapter 2, Labyrinth and game-flow
+  tests passed 39/39; pending full rebuild/package refresh.
+
+- 2026-08-14: Chapter 2 desktop-app playtest correction: the first flying
+  platform (`car-a`) previously ended at x=1550, which only grazed the
+  x=1600 next roof and made the transfer unreliable under Arcade collision.
+  Its endpoint is now x=1700, carrying the player decisively onto the roof.
+  The separate desktop wrapper hotfix keeps its localhost origin fixed at
+  port 41730 so save-slot state and Magic Stone progress persist across app
+  launches. Pending: focused browser QA and desktop package rebuild.
+
 - 2026-08-14: Replaced the old Black Knife 60-second survival scene with Mathias's current `mathbecsan/Chapter-6-final-boss` main build (commit `9a1b354`): its five-phase Conductor fight, hand-drawn spritesheets, paper ship, UI, fairness telegraphs, and battle music are now the four-stone hidden route. Winning reveals `UNSEAL THE TRUE ENDING` and correctly enters the existing true-ending page. Production browser QA covered movement, shooting, win-state, and the full handoff with no errors.
 - 2026-08-14: Rebalanced only Movement III / Echo City's poetry duel. A correct continuation now deals 25 damage, so its 200 HP segment reaches the Movement IV threshold after exactly four correct answers. No other movement's HP or damage values changed; production browser QA measured 25 damage from a correct verse with no errors.
 - 2026-08-14: Restored Echo City Butch's authored Chapter 3 skeleton animation package in the final integration: idle, walk, jump-start, airborne loop, and landing now cross-fade based on the real movement state. Production browser QA confirmed `Walk_Loop`, `Jump_Start`, and `Jump_Land` in sequence with no console or asset errors.
@@ -1445,3 +1512,24 @@ chapter after what it is, not after the slot it currently occupies.
 
 - The crew manifest now presents every teammate identically as name, route/line label, and one role title. George retains `CREATIVE & INTEGRATION LEAD`, but no one has an expanded contribution list.
 - The title-menu Credits action plays `Last and First Light` through the music channel after its click gesture and stops/resets it on exit. Production browser QA reports the credits panel visible, all five names present, roll active and `musicState: playing`; no console errors. Visual capture: `output/title-credits-final-qa/shot-0.png`.
+
+### 2026-08-14 — Chapter 3 Copper Heron entry and night-room repair
+
+- The hidden `1111` node `3.3` now enters the normal Copper Heron hotel-lobby/check-in sequence (`chapter3-25`) instead of the already-asleep night-room fixture. It no longer starts with Butch deliberately lying on the bed or skips the hotel character route.
+- Hotel replacement shells and furniture now receive a 60-second load allowance and are prioritized ahead of unrelated city replacements. This prevents the final hotel rooms from being abandoned for greybox fallbacks under a congested local browser load.
+- Night hotel exposure was raised from near-black to a deliberately low but readable range across lobby, corridor, and room.
+- Verification: Chapter 3 model/time test coverage passes 49/49. The production browser route `car03-3d.html?playtest=chapter3-25` loaded 26/26 authored set assets, showed the Copper Heron Dusk hotel state, and reported no new replacement-load failures.
+
+### 2026-08-14 — Chapter 3 sleep-to-midnight visibility correction
+
+- Screen review showed the midnight room was present but almost entirely obscured by the intended darkness. The actual sleep flow also held an opaque blackout for 3.4 seconds, which read as a stuck load.
+- The sleep transition now clears its blackout after 650 ms and immediately opens the wake-up dialogue over the loaded midnight room. Hotel night exposure is now readable in the lobby, corridor, and room while retaining a nighttime look.
+- Verification: Chapter 3 model/time test coverage passes 49/49; the final-integration production preview was restarted after the change.
+
+### 2026-08-14 — Chapter 3 sleep blackout crash root-cause fix
+
+- Root cause: `Chapter3OpeningRuntime.beginNightmareWake()` raised the blackout and then called four scripted `car03Audio` cues that were missing from the merged audio module. The first missing `nightmareStorm()` call threw synchronously, so the 650 ms callback that removes the blackout never ran.
+- Restored safe synthesized implementations for `nightmareStorm`, `morningWake`, `trainDoorSlam`, and `trainHorn`. They remain no-ops when WebAudio is unavailable and can no longer interrupt visual progression.
+- Added regression coverage asserting every scripted transition cue exists and is callable. Focused model/time tests pass 50/50; the broader Chapter 3 run reached 208 passing tests before the long asset-lock test was manually interrupted.
+- Exact production regression triggered the real `beginNightmareWake()` callback: no page errors, blackout removed, state advanced to `DAY 2 · 00:40 NIGHT`, dream rendering active, and the wake dialogue appeared over the visible hotel room. Final screenshot: `/private/tmp/chapter3-sleep-fixed.png`.
+- Bumped the Chapter 3 entry-module cache key to `chapter3-integrated-final-v36-night-audio` and restarted the production-mode 5181 server so existing playtest tabs cannot retain the broken merged audio module after refresh.

@@ -2216,11 +2216,24 @@ export class Chapter3OpeningRuntime {
     ];
     if (this.preview.loadingLabel) this.preview.loadingLabel.textContent = 'FITTING ECHO CITY SETS';
     let completed = 0;
-    await Promise.all(jobs.map(async (job) => {
+    const attachJobs = async (batch) => Promise.all(batch.map(async (job) => {
       await this.replacements.attach(job);
       completed += 1;
       if (this.preview.loadingCount) this.preview.loadingCount.textContent = `${completed} / ${jobs.length}`;
     }));
+    // The hotel is the only interior entered by the Copper Heron route.  Load
+    // its authored shell and furniture before unrelated city replacements so
+    // the player never sees the obsolete fallback room while testing 3.3 or
+    // waking after sleep.
+    const hotelReplacementIds = new Set([
+      'env-hotel-lobby-shell', 'env-hotel-lobby-furniture',
+      'prop-hotel-register-key', 'env-hotel-corridor-shell',
+      'env-butch-room-shell', 'env-butch-room-furniture',
+    ]);
+    const hotelJobs = jobs.filter((job) => hotelReplacementIds.has(job.id));
+    const remainingJobs = jobs.filter((job) => !hotelReplacementIds.has(job.id));
+    await attachJobs(hotelJobs);
+    await attachJobs(remainingJobs);
     this.ministryFurnitureModel = this.replacements.model('env-ministry-furniture');
     this.butchRoomFurnitureModel = this.replacements.model('env-butch-room-furniture');
     this.hotelCorridorShellModel = this.replacements.model('env-hotel-corridor-shell');
@@ -5145,7 +5158,7 @@ export class Chapter3OpeningRuntime {
         : !state.evidenceTableComplete && !state.slept && !morning;
       this.preview.scene.background.setHex(0x000000);
       this.preview.scene.fog.color.setHex(0x000000);
-      this.preview.renderer.toneMappingExposure = nightAsleep ? 0.58 : 1.18;
+      this.preview.renderer.toneMappingExposure = nightAsleep ? 0.96 : 1.18;
     } else if (corridor) {
       this.preview.setCameraOffsetOverride(null);
       this.preview.player.position.copy(positionFrom(state.morningRoomLeft || state.nightRoomLeft
@@ -5155,7 +5168,7 @@ export class Chapter3OpeningRuntime {
       this.lev.visible = !state.evidenceTableComplete && !state.slept && !state.morningStarted;
       this.preview.scene.background.setHex(0x000000);
       this.preview.scene.fog.color.setHex(0x000000);
-      this.preview.renderer.toneMappingExposure = nightAsleep ? 0.55 : state.morningStarted ? 1.22 : 1.16;
+      this.preview.renderer.toneMappingExposure = nightAsleep ? 0.90 : state.morningStarted ? 1.22 : 1.16;
     } else {
       this.preview.setCameraOffsetOverride(null);
       this.preview.player.position.copy(positionFrom(HOTEL_POSITIONS.roomPlayerStart));
@@ -5163,7 +5176,7 @@ export class Chapter3OpeningRuntime {
       this.lev.visible = !state.evidenceTableComplete && !state.slept && !state.morningStarted;
       this.preview.scene.background.setHex(0x000000);
       this.preview.scene.fog.color.setHex(0x000000);
-      this.preview.renderer.toneMappingExposure = nightAsleep ? 0.62 : state.morningStarted ? 1.26 : 1.2;
+      this.preview.renderer.toneMappingExposure = nightAsleep ? 0.95 : state.morningStarted ? 1.26 : 1.2;
     }
     this.preview.renderer.domElement.style.transformOrigin = lobby
       ? '50% 50%'
@@ -5417,8 +5430,11 @@ export class Chapter3OpeningRuntime {
     this.hoveredId = null;
     this.elements.blackout?.classList.add('visible');
     car03Audio.nightmareStorm({ duration: 3.6 });
+    // The old 3.4 s opaque hold was indistinguishable from a loading failure
+    // once the player had chosen to sleep.  The storm still continues, but
+    // the actual midnight room and wake-up dialogue appear promptly.
     setTimeout(() => {
-      this.preview.renderer.toneMappingExposure = 0.62;
+      this.preview.renderer.toneMappingExposure = 0.95;
       this.setNightDreamRendering(true);
       this.elements.blackout?.classList.remove('visible');
       this.dialogue.show(NIGHT_WAKE_DIALOGUE, {
@@ -5432,7 +5448,7 @@ export class Chapter3OpeningRuntime {
       });
       this.updateObjective();
       this.updateOutlines();
-    }, 3400);
+    }, 650);
   }
 
   restoreMorningTrainAtStation() {

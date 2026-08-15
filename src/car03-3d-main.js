@@ -7,7 +7,15 @@ import { CINEMATICS, navigateAfterCinematic } from './shell/gameFlow.js';
 import { createSaveStore } from './shell/saveSystem.js';
 
 installDevMenuReturnControl();
-installPauseMenu({ checkpointId: 'chapter-3-start' });
+// Echo City is entered from the chapter list as a self-contained 3D page.
+// Escape always returns there, so every city checkpoint has a reliable exit.
+installPauseMenu({
+  checkpointId: 'chapter-3-start',
+  onEscape: () => {
+    window.location.assign('/');
+    return true;
+  },
+});
 
 window.addEventListener('nightfall:chapter3-complete', () => {
   createSaveStore().markCheckpoint('chapter-4-start');

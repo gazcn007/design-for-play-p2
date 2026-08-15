@@ -243,6 +243,7 @@ export function buildLayout(rng = Math.random) {
   const shields = [];
   const stairs = [];
   const fragmentClues = [];
+  const wingStarts = [];
   let cumulativeKeys = 0;
   let spawn = null;
   let exit = null;
@@ -253,10 +254,15 @@ export function buildLayout(rng = Math.random) {
 
     const incoming = i > 0 ? connectorCell(wings[i - 1], wing) : null;
     const entryRoom = incoming ? entryRoomFor(wing, incoming) : { rx: 0, ry: 0 };
+    const entryCell = roomToLocal(entryRoom.rx, entryRoom.ry);
+    wingStarts[wing.id] = {
+      ...cellCenter(wing.offset.x + entryCell.lx, wing.offset.y + entryCell.ly),
+      cell: { x: wing.offset.x + entryCell.lx, y: wing.offset.y + entryCell.ly },
+      floor: 0,
+    };
 
     if (i === 0) {
-      const { lx, ly } = roomToLocal(entryRoom.rx, entryRoom.ry);
-      spawn = cellCenter(wing.offset.x + lx, wing.offset.y + ly);
+      spawn = { x: wingStarts[wing.id].x, y: wingStarts[wing.id].y };
     }
 
     const isLast = i === wings.length - 1;
@@ -407,6 +413,12 @@ export function buildLayout(rng = Math.random) {
       movingCells.push({ x: change.x, y: change.y, solid: lowerWalls[change.y][change.x] });
     }
   }
+  const movingRouteCells = [];
+  for (let ly = 1; ly < LOCAL_H; ly += 2) {
+    for (let lx = 1; lx < LOCAL_W; lx += 2) {
+      movingRouteCells.push({ x: movingWing.offset.x + lx, y: movingWing.offset.y + ly });
+    }
+  }
 
   // Authored light-station density: abundant teaching light, then sharply
   // fewer safe relight points. Last Gallery has two stations on each floor.
@@ -433,6 +445,7 @@ export function buildLayout(rng = Math.random) {
     floorWalls: [lowerWalls, upperWalls],
     spawn,
     spawnCell: worldToCell(spawn.x, spawn.y),
+    wingStarts,
     exit,
     exitCell: exit.cell,
     keys,
@@ -441,7 +454,12 @@ export function buildLayout(rng = Math.random) {
     stairs,
     fragmentClues,
     torches,
-    movingMaze: { wingId: movingWing.id, states: movingStates, cells: movingCells },
+    movingMaze: {
+      wingId: movingWing.id,
+      states: movingStates,
+      cells: movingCells,
+      routeCells: movingRouteCells,
+    },
     gates,
     wings: wings.map((w) => ({
       id: w.id,

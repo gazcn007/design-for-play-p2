@@ -8,8 +8,8 @@
 // one you're in. Statues line the halls and hold perfectly still while you
 // look straight at them (in your forward cone, in range, unobstructed) —
 // look away and they close the distance. Three lives. Get caught three
-// times and the archive keeps everything you found: the maze reshuffles
-// and you start again from zero.
+// times and the archive returns you to the current wing's entrance, keeping
+// every key and route you already earned.
 //
 // Built on Phaser's own systems rather than hand-rolled equivalents: the
 // maze is a real Phaser.Tilemaps.Tilemap, the player/statues are Arcade
@@ -32,7 +32,7 @@ import Phaser from 'phaser';
 import { VIEW, PAL, CELL, WORLD_W, WORLD_H, GRID_W, GRID_H, LOCAL_W, LOCAL_H, TUNING, STRINGS, WING_WASH } from './labyrinthData.js';
 import { ensureLabyrinthTextures, ensureRadialMask, ensureTilesetTexture, TILE_FLOOR, TILE_WALL, textureKey } from './labyrinthAssets.js';
 import { buildLayout, worldToCell } from './mazeGenerator.js';
-import { stateWouldCrush } from './wingMechanics.js';
+import { cloneWalls, playerCanReachTargets, stateWouldCrush } from './wingMechanics.js';
 import { StatueNPC } from './StatueNPC.js';
 import { applyWingEntryRules, choosePrimaryHunterId, statueCanDamage } from './labyrinthEncounterRules.js';
 import { sfx } from '../../../sfx.js';
@@ -77,7 +77,10 @@ export class LabyrinthScene extends Phaser.Scene {
       e: Phaser.Input.Keyboard.KeyCodes.E,
       enter: Phaser.Input.Keyboard.KeyCodes.ENTER,
     });
-    this.input.keyboard.on('keydown-R', () => this.startRun());
+    this.input.keyboard.on('keydown-R', () => {
+      if (this.state === 'over') this.restartCurrentWing();
+      else this.startRun();
+    });
     this.input.keyboard.on('keydown-SPACE', (event) => {
       if (!event.repeat) this.tryActivateShield();
     });
@@ -136,6 +139,8 @@ export class LabyrinthScene extends Phaser.Scene {
 
     this.player = {
       facing: { x: 0, y: -1 },
+      // A new real run always begins with the authored three lives. QA-only
+      // overrides live in labyrinth-main and are unavailable in production.
       lives: TUNING.lives,
       keysCollected: 0,
       invulnUntil: 0,
@@ -157,6 +162,13 @@ export class LabyrinthScene extends Phaser.Scene {
     this.cameras.main.startFollow(this.playerSprite, true, 0.14, 0.14);
     this.cameras.main.setZoom(1);
     this.cameras.main.flash(220, 10, 10, 14);
+
+    // The player should see the authored three lives before the first chase.
+    // Without a spawn grace window, an initial hunter can strike while the
+    // camera/scene is still settling and drain lives before any input is made.
+    const spawnGraceUntil = this.time.now + TUNING.wingEntryGraceMs;
+    this.player.invulnUntil = spawnGraceUntil;
+    this.wingEntryGraceUntil = spawnGraceUntil;
 
     // Seed silently — spawning "into" the first wing shouldn't pop a
     // transition card, only actually walking into the next one should.
@@ -484,7 +496,10 @@ export class LabyrinthScene extends Phaser.Scene {
       if (!active) statue.sprite.body.setVelocity(0, 0);
       this.statueSprites[i].eye.setVisible(active);
     }
-    const exitActive = this.activeFloor === (this.layout.exit.floor ?? 0);
+    // The final archive seal is a destination marker, not a hidden
+    // floor-specific collectible. Keeping it active on the walked final route
+    // prevents the lower-left final way from appearing to have no exit.
+    const exitActive = true;
     this.gateSprite?.setVisible(exitActive);
     this.gateLabel?.setVisible(exitActive);
     if (this.gateSprite?.body) this.gateSprite.body.enable = exitActive;
@@ -791,8 +806,8 @@ export class LabyrinthScene extends Phaser.Scene {
 
     const toMini = (wx, wy) => [mm.x0 + wx * mm.scale, mm.y0 + wy * mm.scale];
 
-    // The hidden fragment seal is never a map marker. Wing IV must be read
-    // from residue in the world, not solved by following a square.
+    // Once every wing is cleared, the final escape point becomes an explicit
+    // survey objective instead of making the player search the whole maze.
     const allKeys = this.player.keysCollected >= TUNING.keysTotal;
 
     // Remaining keys.
@@ -831,6 +846,16 @@ export class LabyrinthScene extends Phaser.Scene {
     mm.markers.fillStyle(PAL.ivory, 1);
     mm.markers.fillTriangle(pts[0][0], pts[0][1], pts[1][0], pts[1][1], pts[2][0], pts[2][1]);
 
+    if (allKeys) {
+      const [ex, ey] = toMini(this.layout.exit.x, this.layout.exit.y);
+      const exitPulse = 0.68 + 0.32 * Math.sin(time / 180);
+      mm.markers.lineStyle(2, PAL.torchCore, exitPulse);
+      mm.markers.strokeCircle(ex, ey, 6.5);
+      mm.markers.fillStyle(PAL.torch, 1);
+      mm.markers.fillTriangle(ex, ey - 4.5, ex + 4.5, ey, ex, ey + 4.5);
+      mm.markers.fillTriangle(ex, ey - 4.5, ex - 4.5, ey, ex, ey + 4.5);
+    }
+
     // Nearest-key readout: 8-way arrow + distance in paces.
     let nearest = null;
     let nearestD = Infinity;
@@ -849,8 +874,15 @@ export class LabyrinthScene extends Phaser.Scene {
       const idx = (Math.round(((dirAngle + Math.PI * 2) % (Math.PI * 2)) / (Math.PI / 4)) + 8) % 8;
       const paces = Math.max(1, Math.round(nearestD / CELL));
       mm.nearestText.setText(`KEY ${arrows[idx]} ${paces} PACES  ·  ${missing} LEFT`);
+    } else if (allKeys) {
+      const exit = this.layout.exit;
+      const dirAngle = Math.atan2(exit.y - this.playerSprite.y, exit.x - this.playerSprite.x);
+      const arrows = ['→', '↘', '↓', '↙', '←', '↖', '↑', '↗'];
+      const idx = (Math.round(((dirAngle + Math.PI * 2) % (Math.PI * 2)) / (Math.PI / 4)) + 8) % 8;
+      const paces = Math.max(1, Math.round(Phaser.Math.Distance.Between(this.playerSprite.x, this.playerSprite.y, exit.x, exit.y) / CELL));
+      mm.nearestText.setText(`ESCAPE ${arrows[idx]} ${paces} PACES`);
     } else {
-      mm.nearestText.setText(allKeys ? 'FOLLOW THE BROKEN EYES' : '');
+      mm.nearestText.setText('');
     }
 
     mm.pipRow.forEach((pip, i) => {
@@ -890,6 +922,7 @@ export class LabyrinthScene extends Phaser.Scene {
   // ------------------------------------------------------------ end states
 
   onHit() {
+    if (this.state !== 'playing' || this.time.now < this.player.invulnUntil) return;
     this.player.lives -= 1;
     this.player.invulnUntil = this.time.now + TUNING.invulnMs;
     this.primaryHunterId = null;
@@ -935,6 +968,31 @@ export class LabyrinthScene extends Phaser.Scene {
     this.endOverlay.dim.setVisible(true);
     this.endOverlay.line1.setText(STRINGS.gameOverLine).setColor(css(PAL.red));
     this.endOverlay.line2.setText(STRINGS.gameOverSub);
+  }
+
+  // A full loss restarts the *current wing*, not the entire Labyrinth. The
+  // player keeps every key and opened route already earned; only the local
+  // pursuit is reset and the next attempt begins at this wing's safe entry.
+  restartCurrentWing() {
+    const wingId = this.currentWingId ?? 0;
+    const checkpoint = this.layout.wingStarts[wingId] ?? this.layout.spawn;
+    if (this.activeFloor !== (checkpoint.floor ?? 0) && wingId === 3) this.switchFloor();
+    this.state = 'playing';
+    this.player.lives = TUNING.lives;
+    this.player.shieldActiveUntil = 0;
+    this.playerSprite.body.reset(checkpoint.x, checkpoint.y);
+    this.primaryHunterId = null;
+    this.hunterReliefUntil = this.time.now + TUNING.hunterReliefAfterHitMs;
+    this.wingEntryGraceUntil = this.time.now + TUNING.wingEntryGraceMs;
+    this.player.invulnUntil = this.wingEntryGraceUntil;
+    for (const statue of this.statues) {
+      if (statue.wing === wingId) statue.resetToSpawn();
+    }
+    this.endOverlay.dim.setVisible(false);
+    this.endOverlay.line1.setText('');
+    this.endOverlay.line2.setText('');
+    this.cameras.main.flash(220, 233, 226, 208);
+    this.setCaption(`BACK AT ${this.layout.wings[wingId]?.name ?? 'THE ENTRY'} — THREE LIVES RESTORED.`, 2400);
   }
 
   onWin() {
@@ -1058,6 +1116,10 @@ export class LabyrinthScene extends Phaser.Scene {
       if (statue.sprite.visible) occupied.push(worldToCell(statue.x, statue.y));
     }
     if (stateWouldCrush({ changes: finalChanges }, occupied)) return false;
+    const prospectiveWalls = cloneWalls(this.layout.walls);
+    for (const change of finalChanges) prospectiveWalls[change.y][change.x] = change.solid;
+    const playerCell = occupied[0];
+    if (!playerCanReachTargets(prospectiveWalls, playerCell, moving.routeCells)) return false;
     for (const change of finalChanges) {
       this.layout.walls[change.y][change.x] = change.solid;
       this.layout.floorWalls[0][change.y][change.x] = change.solid;

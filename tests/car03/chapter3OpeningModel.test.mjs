@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
 import * as openingContent from '../../src/cars/presentCity3d/chapter3OpeningContent.js';
+import { car03Audio } from '../../src/cars/presentCity/car03Audio.js';
 import { createChapter3OpeningModel } from '../../src/cars/presentCity3d/chapter3OpeningModel.js';
 
 function completeArrivalLoop(model, choice = 'arrival-nerve') {
@@ -52,6 +53,13 @@ function completeNika(model) {
 }
 
 describe('Chapter 3 interactions #1 to #33', () => {
+  it('keeps every scripted Chapter 3 transition audio cue callable', () => {
+    for (const cue of ['nightmareStorm', 'morningWake', 'trainDoorSlam', 'trainHorn']) {
+      assert.equal(typeof car03Audio[cue], 'function', `${cue} must never break a visual transition`);
+      assert.doesNotThrow(() => car03Audio[cue]());
+    }
+  });
+
   it('starts at the train door and protects its snapshots', () => {
     const model = createChapter3OpeningModel();
     const snapshot = model.snapshot();
