@@ -34,7 +34,7 @@ function aggregateSignature(files) {
   return createHash('sha256').update(`${manifest}\n`).digest('hex');
 }
 
-describe('Chapter 3 integrated final lock v35', () => {
+describe('Chapter 3 integrated final lock v36', () => {
   it('preserves the George-approved final Toma composition', () => {
     assert.deepEqual(OPENING_POSITIONS.toma, [37.68, 0.5, -15.87]);
     assert.deepEqual(OPENING_POSITIONS.transportApproach, [37.68, 0.5, -14.35]);
@@ -50,7 +50,7 @@ describe('Chapter 3 integrated final lock v35', () => {
     assert.equal(sourceFiles.length, 24);
     assert.equal(
       aggregateSignature(sourceFiles),
-      '7bc15af8d38739425ef7e086f65e5cbb08b72907d196d6062d94bf601ad57b1d',
+      'e9a0bf137786e4dc89b8f28da5fe610938046fb61ae445d12496ffcd71d67943',
       'Chapter 3 is locked. Reopen it explicitly and create a new lock version before changing runtime source.',
     );
   });

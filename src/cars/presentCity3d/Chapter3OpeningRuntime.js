@@ -153,6 +153,8 @@ import {
 import { car03Audio } from '../presentCity/car03Audio.js';
 
 const INTERACTION_RADIUS = 4.2;
+const SLEEP_BLACKOUT_MS = 5000;
+const HOTEL_STAGE_TRANSITION_MS = 320;
 const SEARCH_HINT_AFTER_SECONDS = 90;
 const SEARCH_HINT_NEAR_TARGET_SECONDS = 60;
 const POST_OLEK_SCORE_SILENCE_SECONDS = 2.2;
@@ -1824,6 +1826,37 @@ function makeCampfireKettle(scene) {
   return group;
 }
 
+function makeMorningCampfireEchoStone(scene) {
+  const group = new THREE.Group();
+  group.name = 'chapter3-morning-campfire-echo-stone';
+  const stoneMaterial = new THREE.MeshStandardMaterial({
+    color: 0x597483,
+    emissive: 0x102a36,
+    emissiveIntensity: 0.22,
+    roughness: 0.58,
+    metalness: 0.08,
+  });
+  const stone = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), stoneMaterial);
+  stone.name = 'chapter3-morning-campfire-echo-stone-mesh';
+  stone.scale.set(0.82, 1.22, 0.72);
+  stone.position.y = 0.22;
+  stone.rotation.set(0.18, -0.48, 0.12);
+  stone.castShadow = true;
+  const coatScrap = new THREE.Mesh(
+    new THREE.CircleGeometry(0.38, 12),
+    new THREE.MeshStandardMaterial({ color: 0x322d34, roughness: 1, side: THREE.DoubleSide }),
+  );
+  coatScrap.name = 'chapter3-morning-campfire-unclaimed-coat-scrap';
+  coatScrap.rotation.x = -Math.PI / 2;
+  coatScrap.scale.set(1.4, 0.72, 1);
+  coatScrap.position.y = 0.015;
+  group.add(coatScrap, stone);
+  group.position.set(-52.35, 0.6, 35.05);
+  group.visible = false;
+  scene.add(group);
+  return group;
+}
+
 function makeLampOilStall(scene) {
   const group = new THREE.Group();
   group.name = 'opening-eda-lamp-oil-stall';
@@ -2216,11 +2249,24 @@ export class Chapter3OpeningRuntime {
     ];
     if (this.preview.loadingLabel) this.preview.loadingLabel.textContent = 'FITTING ECHO CITY SETS';
     let completed = 0;
-    await Promise.all(jobs.map(async (job) => {
+    const attachJobs = async (batch) => Promise.all(batch.map(async (job) => {
       await this.replacements.attach(job);
       completed += 1;
       if (this.preview.loadingCount) this.preview.loadingCount.textContent = `${completed} / ${jobs.length}`;
     }));
+    // The hotel is the only interior entered by the Copper Heron route.  Load
+    // its authored shell and furniture before unrelated city replacements so
+    // the player never sees the obsolete fallback room while testing 3.3 or
+    // waking after sleep.
+    const hotelReplacementIds = new Set([
+      'env-hotel-lobby-shell', 'env-hotel-lobby-furniture',
+      'prop-hotel-register-key', 'env-hotel-corridor-shell',
+      'env-butch-room-shell', 'env-butch-room-furniture',
+    ]);
+    const hotelJobs = jobs.filter((job) => hotelReplacementIds.has(job.id));
+    const remainingJobs = jobs.filter((job) => !hotelReplacementIds.has(job.id));
+    await attachJobs(hotelJobs);
+    await attachJobs(remainingJobs);
     this.ministryFurnitureModel = this.replacements.model('env-ministry-furniture');
     this.butchRoomFurnitureModel = this.replacements.model('env-butch-room-furniture');
     this.hotelCorridorShellModel = this.replacements.model('env-hotel-corridor-shell');
@@ -2925,6 +2971,8 @@ export class Chapter3OpeningRuntime {
     this.campfireSelineOutline = makeObjectHighlight(this.campfireSeline);
     this.campfireKettle = makeCampfireKettle(this.preview.scene);
     this.campfireKettleOutline = makeObjectHighlight(this.campfireKettle);
+    this.morningCampfireEchoStone = makeMorningCampfireEchoStone(this.preview.scene);
+    this.morningCampfireEchoStoneOutline = makeObjectHighlight(this.morningCampfireEchoStone, 0x79dfff);
     this.lampOilStall = makeLampOilStall(this.preview.scene);
     this.seam = makeDarkSeam(
       this.preview.scene,
@@ -3605,6 +3653,13 @@ export class Chapter3OpeningRuntime {
           this.campfireGatheringVisible() ? 'kettle' : 'dawn-remains',
           this.campfireGatheringVisible() ? CAMPFIRE_KETTLE_DIALOGUE : DAWN_CAMPFIRE_REMAINS_DIALOGUE,
         ),
+      },
+      {
+        id: 'morning-campfire-echo-stone', label: 'E — TAKE THE ECHO STONE', position: this.morningCampfireEchoStone.position,
+        approach: [-52.35, 0.5, 36.15], outline: this.morningCampfireEchoStoneOutline,
+        screenRadius: 62,
+        eligible: () => this.morningCampfireStoneAvailable(),
+        activate: () => this.collectMorningCampfireStone(),
       },
     ];
 
@@ -4575,7 +4630,7 @@ export class Chapter3OpeningRuntime {
       this.updateObjective();
       this.updateOutlines();
       this.updateDiagnosticState();
-    }, 320);
+    }, HOTEL_STAGE_TRANSITION_MS);
   }
 
   exitMinistryHall() {
@@ -5145,7 +5200,7 @@ export class Chapter3OpeningRuntime {
         : !state.evidenceTableComplete && !state.slept && !morning;
       this.preview.scene.background.setHex(0x000000);
       this.preview.scene.fog.color.setHex(0x000000);
-      this.preview.renderer.toneMappingExposure = nightAsleep ? 0.58 : 1.18;
+      this.preview.renderer.toneMappingExposure = nightAsleep ? 0.96 : 1.18;
     } else if (corridor) {
       this.preview.setCameraOffsetOverride(null);
       this.preview.player.position.copy(positionFrom(state.morningRoomLeft || state.nightRoomLeft
@@ -5155,7 +5210,7 @@ export class Chapter3OpeningRuntime {
       this.lev.visible = !state.evidenceTableComplete && !state.slept && !state.morningStarted;
       this.preview.scene.background.setHex(0x000000);
       this.preview.scene.fog.color.setHex(0x000000);
-      this.preview.renderer.toneMappingExposure = nightAsleep ? 0.55 : state.morningStarted ? 1.22 : 1.16;
+      this.preview.renderer.toneMappingExposure = nightAsleep ? 0.90 : state.morningStarted ? 1.22 : 1.16;
     } else {
       this.preview.setCameraOffsetOverride(null);
       this.preview.player.position.copy(positionFrom(HOTEL_POSITIONS.roomPlayerStart));
@@ -5163,7 +5218,7 @@ export class Chapter3OpeningRuntime {
       this.lev.visible = !state.evidenceTableComplete && !state.slept && !state.morningStarted;
       this.preview.scene.background.setHex(0x000000);
       this.preview.scene.fog.color.setHex(0x000000);
-      this.preview.renderer.toneMappingExposure = nightAsleep ? 0.62 : state.morningStarted ? 1.26 : 1.2;
+      this.preview.renderer.toneMappingExposure = nightAsleep ? 0.95 : state.morningStarted ? 1.26 : 1.2;
     }
     this.preview.renderer.domElement.style.transformOrigin = lobby
       ? '50% 50%'
@@ -5416,9 +5471,11 @@ export class Chapter3OpeningRuntime {
     this.hotelHall.daro.visible = false;
     this.hoveredId = null;
     this.elements.blackout?.classList.add('visible');
-    car03Audio.nightmareStorm({ duration: 3.6 });
+    // Sleep is a deliberate edit, not an audio scare or a loading flash. Keep
+    // one continuous silent black frame long enough to read as real elapsed
+    // time, and perform the state swap entirely underneath it.
     setTimeout(() => {
-      this.preview.renderer.toneMappingExposure = 0.62;
+      this.preview.renderer.toneMappingExposure = 0.95;
       this.setNightDreamRendering(true);
       this.elements.blackout?.classList.remove('visible');
       this.dialogue.show(NIGHT_WAKE_DIALOGUE, {
@@ -5432,7 +5489,7 @@ export class Chapter3OpeningRuntime {
       });
       this.updateObjective();
       this.updateOutlines();
-    }, 3400);
+    }, SLEEP_BLACKOUT_MS);
   }
 
   restoreMorningTrainAtStation() {
@@ -5558,16 +5615,15 @@ export class Chapter3OpeningRuntime {
         // hotel can never inherit a framing locked on the square.
         this.preview.setCameraOverrideTarget(null);
         this.elements.blackout?.classList.add('visible');
-        // Falling back asleep sounds like the storm draining away; the morning
-        // room answers with a thin dawn shimmer as the blackout lifts.
-        car03Audio.nightmareStorm({ duration: 1.8 });
+        // Prepare the morning near the end of the same silent five-second
+        // blackout. stageHotelInterior owns the final 320 ms and removes the
+        // overlay exactly when the room is ready, preventing a visible hitch.
         setTimeout(() => {
           this.model.beginMorning();
           this.restoreMorningTrainAtStation();
           this.setNightDreamRendering(false);
           this.stageHotelInterior();
-          setTimeout(() => car03Audio.morningWake(), 520);
-        }, 1500);
+        }, SLEEP_BLACKOUT_MS - HOTEL_STAGE_TRANSITION_MS);
       },
     });
   }
@@ -5855,6 +5911,33 @@ export class Chapter3OpeningRuntime {
         }]);
       },
     });
+  }
+
+  morningCampfireStoneAvailable() {
+    const state = this.model.snapshot();
+    return !this.insideHotel && !this.insideMinistry && !this.insideArchive
+      && state.morningStarted
+      && !state.boardedTrain
+      && !magicStoneSnapshot().collected.includes('chapter-3');
+  }
+
+  collectMorningCampfireStone() {
+    if (!this.morningCampfireStoneAvailable()) return false;
+    this.preview.stopWalking();
+    collectMagicStone('chapter-3');
+    this.morningCampfireEchoStone.visible = false;
+    const snapshot = magicStoneSnapshot();
+    this.openAmbientDialogue([
+      { speaker: 'BUTCH', text: 'Something blue catches in the cold ashes beneath Seline\'s abandoned coat.' },
+      { speaker: 'BUTCH', text: `The Echo Stone. MAGIC STONE ${snapshot.count} / ${snapshot.total}.` },
+    ], {
+      onComplete: () => {
+        this.hoveredId = null;
+        this.updateObjective();
+        this.updateOutlines();
+      },
+    });
+    return true;
   }
 
   openRepeatedAmbient(key, linesForUse) {
@@ -6236,6 +6319,7 @@ export class Chapter3OpeningRuntime {
     this.campfireMiro.visible = campfirePresent;
     this.campfireSeline.visible = campfirePresent;
     this.campfireKettle.visible = exterior && !nightAsleep && !state.boardedTrain;
+    this.morningCampfireEchoStone.visible = this.morningCampfireStoneAvailable();
     if (campfirePresent) {
       const sway = Math.sin(this.ambientElapsed * 1.35);
       this.campfireRada.position.y = 0.5 + Math.max(0, sway) * 0.018;
@@ -6972,10 +7056,17 @@ export class Chapter3OpeningRuntime {
       eligibleInteractions: this.eligibleInteractions().map((interaction) => interaction.id),
       magicStone: {
         id: 'chapter-3',
-        source: 'optional-campfire-seline-dialogue',
-        position: actorPosition(this.campfireSeline),
+        source: this.model.snapshot().morningStarted
+          ? 'morning-campfire-physical-pickup'
+          : 'optional-campfire-seline-dialogue',
+        position: actorPosition(this.model.snapshot().morningStarted
+          ? this.morningCampfireEchoStone
+          : this.campfireSeline),
         screen: (() => {
-          const projected = this.campfireSeline.position.clone().project(this.preview.camera);
+          const source = this.model.snapshot().morningStarted
+            ? this.morningCampfireEchoStone
+            : this.campfireSeline;
+          const projected = source.position.clone().project(this.preview.camera);
           const rect = this.preview.renderer.domElement.getBoundingClientRect();
           return {
             x: Number(((projected.x + 1) * rect.width * 0.5).toFixed(1)),
@@ -6983,7 +7074,7 @@ export class Chapter3OpeningRuntime {
           };
         })(),
         collected: magicStoneSnapshot().collected.includes('chapter-3'),
-        available: Boolean(this.campfireSeline?.visible),
+        available: Boolean(this.campfireSeline?.visible || this.morningCampfireEchoStone?.visible),
       },
       dialogue: this.dialogue.snapshot(),
       evidence: state.evidence,

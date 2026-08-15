@@ -2,7 +2,11 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 const ROOT = '/assets/chapter03-3d/replacements';
-const LOAD_TIMEOUT_MS = 18000;
+// Full hotel shells are several MB each.  They are loaded alongside the
+// chapter's other authored sets, and Safari can queue them for longer than
+// the old 18-second cutoff even on localhost.  Do not prematurely replace a
+// real room with the old greybox while it is still arriving.
+const LOAD_TIMEOUT_MS = 60000;
 
 export const CHAPTER3_REPLACEMENT_IDS = Object.freeze([
   'env-eda-oil-stall', 'env-flower-stall',

@@ -40,6 +40,15 @@ export function allTargetsReachable(walls, targets) {
   return targets.every((p) => seen.has(`${p.x},${p.y}`));
 }
 
+// A moving-wall transition is only fair when the player can still walk from
+// their current cell to every authored safe room in that wing.  Checking the
+// target layout by itself is not enough: a player can otherwise be left on an
+// isolated corridor even though the rooms are connected to one another.
+export function playerCanReachTargets(walls, playerCell, targets) {
+  const seen = reachableCells(walls, playerCell);
+  return seen.size > 0 && targets.every((p) => seen.has(`${p.x},${p.y}`));
+}
+
 function corridorCells(walls, solid) {
   const cells = [];
   for (let y = 1; y < walls.length - 1; y += 1) {

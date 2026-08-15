@@ -19,8 +19,8 @@ function action(label, handler, className = '') {
   return button;
 }
 
-export function installPauseMenu({ checkpointId = null } = {}) {
-  if (typeof window === 'undefined' || window.top !== window || document.getElementById(PAUSE_ID)) return null;
+export function installPauseMenu({ checkpointId = null, allowEmbedded = false, onEscape = null } = {}) {
+  if (typeof window === 'undefined' || (!allowEmbedded && window.top !== window) || document.getElementById(PAUSE_ID)) return null;
   applySettings(readSettings());
 
   const root = document.createElement('aside');
@@ -153,6 +153,11 @@ export function installPauseMenu({ checkpointId = null } = {}) {
     if (event.key !== 'Escape' || event.repeat) return;
     event.preventDefault();
     event.stopImmediatePropagation();
+    if (!paused && typeof onEscape === 'function') {
+      // A route can become test-enabled after the page first mounted, so let
+      // the caller decide at keypress time whether it handled Escape.
+      if (onEscape() !== false) return;
+    }
     if (!paused) open();
     else if (inSettings) {
       inSettings = false;
