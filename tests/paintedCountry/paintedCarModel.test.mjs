@@ -33,30 +33,28 @@ test('paint is unlimited and the car keeps no inventory', () => {
   assert.equal(CELL_SIZE, CELL);
 });
 
-test('paint has to go on something — a stroke in mid-air is refused', () => {
+test('paper can be placed freely in empty unvarnished cells', () => {
   const car = createPaintedCar();
   // Well clear of the floor and of every wall.
-  assert.equal(car.paintRefusal(10, 4), 'nothing-to-hold-it');
-  assert.equal(car.paint(10, 4), false);
-  assert.equal(car.state.painted.size, 0);
+  assert.equal(car.paintRefusal(10, 4), null);
+  assert.equal(car.paint(10, 4), true);
+  assert.equal(car.state.painted.size, 1);
 });
 
-test('a staircase can be drawn up from the floor, one step holding the next', () => {
+test('a staircase can be drawn directly', () => {
   const car = createPaintedCar();
-  // The first step touches the floor; each later one touches the step below it.
   assert.equal(car.paint(5, FLOOR_ROW - 1), true);
-  assert.equal(car.paint(6, FLOOR_ROW - 2), true, 'diagonals count, so stairs draw as stairs');
+  assert.equal(car.paint(6, FLOOR_ROW - 2), true);
   assert.equal(car.paint(7, FLOOR_ROW - 3), true);
   assert.equal(car.isSolid(7, FLOOR_ROW - 3), true);
   // ...and the step you just made is something to stand on.
   assert.equal(car.isPainted(7, FLOOR_ROW - 3), true);
 });
 
-test('varnished paper refuses paint, and the door face can never be painted over', () => {
+test('the Last City wall is buildable while the door face stays varnished', () => {
   const car = createPaintedCar();
   // Directly beneath the third picture.
-  assert.equal(car.isGlaze(88, 15), true);
-  assert.equal(car.paintRefusal(88, 15), 'varnished');
+  assert.equal(car.isGlaze(88, 15), false);
   // The signs on the door stay readable.
   const panel = DOOR.panels[0];
   const pc = Math.floor((panel.x + panel.w / 2) / CELL);
@@ -176,6 +174,15 @@ test('the puzzle is well posed: exactly one door sign is named by every caption'
   assert.deepEqual(inEvery, [SIGN.MOON], 'the answer must be unique and deducible from the text');
   assert.equal(DOOR.correct, SIGN.MOON);
 
+  assert.equal(new Set(PAINTINGS.map((p) => p.primarySign)).size, PAINTINGS.length,
+    'the three large archive marks must all look different');
+  assert.deepEqual(PAINTINGS.map((p) => p.primarySign), [SIGN.EYE, SIGN.HEIR, SIGN.RAPTURE]);
+  PAINTINGS.forEach((p) => assert.equal(p.sharedSign, SIGN.MOON));
+  assert.ok(DOOR.panels.every((panel) =>
+    panel.sign === SIGN.OEDON
+      || panel.sign === SIGN.MOON
+      || PAINTINGS.some((p) => p.primarySign === panel.sign)));
+
   // Every caption really does finish on the answer, which is what the door's
   // prompt promises the player.
   PAINTINGS.forEach((p) => {
@@ -191,7 +198,7 @@ test('the puzzle is well posed: exactly one door sign is named by every caption'
   assert.ok(namedIn(SIGN.EYE) > 0 && namedIn(SIGN.EYE) < PAINTINGS.length);
 });
 
-test('every picture has real artwork and a caption behind it', () => {
+test('every archive retains source provenance and a substantial caption', () => {
   PAINTINGS.forEach((p) => {
     assert.match(p.file, /^assets\/chapter04\/gallery\/.+\.(jpg|png|webp)$/);
     assert.ok(p.caption.length > 120, `${p.id} needs a caption worth climbing for`);
@@ -207,8 +214,8 @@ test('every picture has real artwork and a caption behind it', () => {
 // The intended threading. Two of the three cords have to bend around a torn
 // eyelet, and the bends have to bend the opposite way from each other.
 const SOLUTION = {
-  amber: [[0, 0], [1, 0], [1, 1], [2, 1], [3, 1], [3, 0], [4, 0]],
-  cyan: [[0, 2], [1, 2], [1, 3], [2, 3], [3, 3], [3, 2], [4, 2]],
+  amber: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]],
+  cyan: [[0, 2], [1, 2], [2, 2], [3, 2], [4, 2]],
   red: [[0, 4], [1, 4], [2, 4], [3, 4], [4, 4]],
 };
 
@@ -247,15 +254,12 @@ const threadAllBoards = (car) => {
   PAINTINGS.forEach((picture) => threadBoard(car, picture.id, BOARD_SOLUTIONS[picture.id]));
 };
 
-test('the thread board starts empty and refuses torn eyelets', () => {
+test('the teaching board starts empty and accepts three obvious straight routes', () => {
   const car = createPaintedCar();
   assert.equal(car.boardSolved(), false);
-  assert.equal(car.isTorn(2, 0), true);
-  assert.equal(car.isTorn(2, 2), true);
-
-  car.boardBegin(0, 0);
-  assert.equal(car.boardExtend(1, 0), true);
-  assert.equal(car.boardExtend(2, 0), false, 'a cord cannot pass through a torn hole');
+  assert.equal(BOARD.torn.length, 0);
+  threadBoard(car, PAINTINGS[0].id, SOLUTION);
+  assert.equal(car.boardSolved(), true);
 });
 
 test('a cord cannot share a hole with another cord, and dragging back undoes it', () => {
@@ -265,9 +269,9 @@ test('a cord cannot share a hole with another cord, and dragging back undoes it'
 
   // Cyan tries to run through amber's cord.
   car.boardBegin(PAINTINGS[0].id, 0, 2);
-  car.boardExtend(PAINTINGS[0].id, 1, 2);
-  car.boardExtend(PAINTINGS[0].id, 1, 1); // amber is sitting here
-  assert.equal(car.cordCovering(PAINTINGS[0].id, 1, 1), 'amber');
+  car.boardExtend(PAINTINGS[0].id, 0, 1);
+  car.boardExtend(PAINTINGS[0].id, 0, 0); // amber's endpoint is sitting here
+  assert.equal(car.cordCovering(PAINTINGS[0].id, 0, 0), 'amber');
   assert.equal(car.state.board.cords.cyan.length, 2, 'the blocked step was not taken');
 
   // Backtracking shortens rather than restarting.
@@ -288,7 +292,7 @@ test('the intended threading solves the board', () => {
   assert.equal(car.boardSolved(), false);
 });
 
-test('the board is solvable, and two of the three cords are forced to bend', () => {
+test('the first board is solvable and no teaching cord is forced to bend', () => {
   // Brute force every legal threading, so "solvable" is proved rather than
   // asserted, and so a future tweak to the torn holes cannot quietly make the
   // lock impossible.
@@ -347,7 +351,7 @@ test('the board is solvable, and two of the three cords are forced to bend', () 
     }
     return false;
   });
-  assert.equal(forcedToBend.length, 2, 'two cords should have a torn hole straight across their path');
+  assert.equal(forcedToBend.length, 0, 'the teaching board should not disguise a route with torn holes');
 });
 
 test('the door is dark until the board is threaded', () => {
@@ -395,15 +399,17 @@ test('the door stays silent until all three pictures have been read', () => {
   assert.equal(car.allSeen(), true);
   assert.deepEqual(car.snapshot().picturesRead, PAINTINGS.map((p) => p.id));
 
-  // A wrong sign is the one commitment in the car: it kills and restarts.
+  // A wrong sign is readable but recoverable; the three archive puzzles stay solved.
   car.drainEvents();
   answer = car.chooseSign(SIGN.EYE);
   assert.equal(answer.ok, false);
   assert.equal(answer.reason, 'wrong-sign');
   assert.equal(car.state.complete, false);
-  assert.equal(car.state.killed, true, 'the wrong sign must cost the run');
+  assert.equal(car.state.killed, false, 'the fused chapter must preserve the investigation');
   assert.equal(car.state.door.wrongTries, 1);
-  assert.deepEqual(car.drainEvents().map((e) => e.type), ['door-killed']);
+  assert.deepEqual(car.drainEvents().map((e) => e.type), ['door-refused']);
+  assert.equal(car.boardsSolved(), true);
+  assert.equal(car.allSeen(), true);
 
   // The moon opens it.
   answer = car.chooseSign(SIGN.MOON);

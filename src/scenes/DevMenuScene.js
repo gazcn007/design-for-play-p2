@@ -10,10 +10,10 @@ import { enterDevRoute } from '../devMode.js';
 
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace';
 
-const DIM = '#7d8997';
-const BODY = '#aab5c2';
-const BRIGHT = '#e5ebf1';
-const ACCENT = '#dfbd58';
+const DIM = '#4d5764';
+const BODY = '#7d8896';
+const BRIGHT = '#d7e2ee';
+const ACCENT = '#c9a227';
 
 // ---------------------------------------------------------------------------
 // ADDING YOUR CHAPTER
@@ -30,14 +30,19 @@ const ACCENT = '#dfbd58';
 // there is no need to start that car's own Vite config to reach it from here.
 const STANDALONE_SLICES = [
   {
-    label: 'CAR 03  //  ECHO CITY',
-    detail: 'Isolated slice, own entry point. Chapter 3, the city that remembers.',
-    href: '/car03.html',
+    label: 'CHAPTER 1  //  NIGHT SERVICE · ORANGE CARRIAGE',
+    detail: 'Latest playable narrative interior: the Conductor, the power-restoration route, and the retro transit car.',
+    href: '/?chapter=0',
   },
   {
-    label: 'CAR 04  //  THE BORROWED GRID',
-    detail: 'Isolated slice, own entry point. The city still runs. It does not run for you.',
-    href: '/car04.html',
+    label: 'CHAPTER 2  //  CYBERPUNK PARKOUR',
+    detail: 'Direct development route for the movable-route, ladder and flying-car slice.',
+    href: '/?chapter=cyberpunk',
+  },
+  {
+    label: 'CHAPTER 3  //  ECHO CITY 3D',
+    detail: 'Current playable Echo City investigation package with its own 3D runtime.',
+    href: '/car03-3d.html',
   },
   {
     label: 'CHAPTER 6  //  ALL WORLDS AT ONCE',
@@ -48,6 +53,26 @@ const STANDALONE_SLICES = [
     label: 'CHAPTER 4  //  THE PAINTED COUNTRY',
     detail: 'Playable. Route the ink, wash the three wall archives, then choose the mark the car remembers.',
     href: '/painted-country.html',
+  },
+  {
+    label: 'CHAPTER 5  //  THE MUSEUM OF ONE ANSWER',
+    detail: 'The Labyrinth, eight-key collapse gauntlet, and Final Archive exit.',
+    href: '/museum-3d.html',
+  },
+  {
+    label: 'CHAPTER 5  //  DOOR 1 · LABYRINTH',
+    detail: 'Direct development route for the eight-key statue chase and return artifact.',
+    href: '/labyrinth.html',
+  },
+  {
+    label: 'CHAPTER 5  //  DOOR 2 · BORROWED GRID',
+    detail: 'Direct development route for the three-round public-power service shift.',
+    href: '/borrowed-grid.html',
+  },
+  {
+    label: 'CHAPTER 5  //  ECHO CITY REVIEW',
+    detail: 'Direct Chapter 5 reconstruction route. The optional Lev character review remains query-gated.',
+    href: '/museum-3d.html?beat=echo&standalone=1',
   },
 ];
 // ---------------------------------------------------------------------------
@@ -74,11 +99,11 @@ const COLUMN_X = [64, 500];
 const COLUMN_W = 396;
 const HEADING_Y = 168;
 const ROW_TOP = 200;
-const ROW_STEP = 25;
-const GROUP_GAP = 22; // blank space a sub-heading sits in
+const ROW_STEP = 18;
+const GROUP_GAP = 10; // compact gap: the left column includes the active chapter routes
 // The page shell lets the canvas overflow a short window, so the detail block
 // is measured from the longest column rather than pinned to the bottom edge.
-const DETAIL_GAP = 26;
+const DETAIL_GAP = 18;
 const DETAIL_MIN_Y = 440;
 
 export default class DevMenuScene extends Phaser.Scene {
@@ -157,25 +182,25 @@ export default class DevMenuScene extends Phaser.Scene {
   }
 
   buildHeader() {
-    this.label(COLUMN_X[0], 56, 'NIGHTFALL  //  DEV BUILD', 13, DIM);
-    this.label(COLUMN_X[0], 78, 'CHAPTER SELECT', 25, BRIGHT);
+    this.label(COLUMN_X[0], 58, 'NIGHTFALL  //  DEV BUILD', 11, DIM);
+    this.label(COLUMN_X[0], 78, 'CHAPTER SELECT', 22, BRIGHT);
     this.label(
       COLUMN_X[0],
       112,
       'W / S  or  ↑ ↓   move      A / D  or  ← →   column      ENTER  start      `  back here',
-      13,
+      11,
       BODY,
     );
     this.label(
       COLUMN_X[0],
       130,
       'this screen exists only in `npm run dev`  ·  `npm run prod` starts the real run',
-      12,
+      11,
       DIM,
     );
 
-    this.label(COLUMN_X[0], HEADING_Y, 'PROLOGUE  ·  BEFORE DEPARTURE', 14, ACCENT);
-    this.label(COLUMN_X[1], HEADING_Y, 'CHAPTERS  ·  BACKWARD THROUGH THE TRAIN', 14, ACCENT);
+    this.label(COLUMN_X[0], HEADING_Y, 'PROLOGUE  ·  BEFORE DEPARTURE', 12, ACCENT);
+    this.label(COLUMN_X[1], HEADING_Y, 'CHAPTERS  ·  BACKWARD THROUGH THE TRAIN', 12, ACCENT);
 
     const rule = this.add.graphics();
     rule.lineStyle(1, 0x232b36, 1);
@@ -191,7 +216,7 @@ export default class DevMenuScene extends Phaser.Scene {
       const x = COLUMN_X[entry.column];
       if (entry.heading) {
         nextY[entry.column] += GROUP_GAP;
-        this.label(x, nextY[entry.column], entry.heading, 13, ACCENT);
+        this.label(x, nextY[entry.column], entry.heading, 11, ACCENT);
         nextY[entry.column] += ROW_STEP;
       }
 
@@ -202,8 +227,8 @@ export default class DevMenuScene extends Phaser.Scene {
       nextY[entry.column] += ROW_STEP;
       entry.row = row;
 
-      entry.marker = this.label(x, y, '▸', 14, ACCENT);
-      entry.text = this.label(x + 18, y, entry.label, 13, BODY);
+      entry.marker = this.label(x, y, '▸', 12, ACCENT);
+      entry.text = this.label(x + 18, y, entry.label, 12, BODY);
 
       // A generous invisible strip so the mouse does not have to find the
       // glyphs themselves.
@@ -231,9 +256,9 @@ export default class DevMenuScene extends Phaser.Scene {
     g.lineStyle(1, 0x232b36, 1);
     g.lineBetween(COLUMN_X[0], y, GAME_W - 64, y);
 
-    this.detailText = this.label(COLUMN_X[0], y + 14, '', 14, BRIGHT);
+    this.detailText = this.label(COLUMN_X[0], y + 14, '', 12, BRIGHT);
     this.detailText.setWordWrapWidth(GAME_W - 128);
-    this.routeText = this.label(COLUMN_X[0], y + 42, '', 12, DIM);
+    this.routeText = this.label(COLUMN_X[0], y + 40, '', 11, DIM);
   }
 
   // ------------------------------------------------------------------- input

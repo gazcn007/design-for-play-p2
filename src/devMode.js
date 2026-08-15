@@ -17,6 +17,27 @@
 // (car03 / car04 / car06), which each run under their own Vite config and
 // never define the constant.
 export const DEV_MODE = typeof __DEV_MODE__ === 'undefined' ? false : __DEV_MODE__;
+const HIDDEN_ROUTER_KEY = 'nightfall.hidden-router.v1';
+
+// The production title's 1111 code is an intentional playtest doorway. It
+// grants only this browser tab's session permission to use the existing named
+// test nodes; normal players can neither see the router nor activate a query
+// route by typing one into the address bar.
+export function hiddenRouterActive(storage = globalThis.sessionStorage) {
+  return storage?.getItem(HIDDEN_ROUTER_KEY) === '1';
+}
+
+export function activateHiddenRouter(storage = globalThis.sessionStorage) {
+  storage?.setItem(HIDDEN_ROUTER_KEY, '1');
+}
+
+export function clearHiddenRouter(storage = globalThis.sessionStorage) {
+  storage?.removeItem(HIDDEN_ROUTER_KEY);
+}
+
+export function devRoutesEnabled() {
+  return DEV_MODE || hiddenRouterActive();
+}
 
 // Every query key that can move the game away from a clean run. Reading them
 // all through devParams() below means production has exactly one kill switch
@@ -31,7 +52,7 @@ function currentSearch(explicit) {
 // The single gate. In a production build this always returns an empty set, so
 // no dev route can be reached by hand-editing the URL of a shipped page.
 export function devParams(explicitSearch) {
-  if (!DEV_MODE) return new URLSearchParams();
+  if (!devRoutesEnabled()) return new URLSearchParams();
   return new URLSearchParams(currentSearch(explicitSearch));
 }
 

@@ -49,7 +49,7 @@ export const BLOCK_RECTS = [
 
 // ------------------------------------------------------------ the thread boards
 // Each archive has its own color-link card. The first card is the existing
-// three-pair teaching board; the later cards add more pairs and turns. The
+// three-pair teaching board; the later cards add turns and crossings. The
 // model owns the rules, while the scene places the active card inside the E
 // viewer beside the image it develops.
 export const BOARDS = [
@@ -57,7 +57,9 @@ export const BOARDS = [
     id: 'board-nave',
     cols: 5,
     rows: 5,
-    torn: [[2, 0], [2, 2]],
+    // The first card is deliberately literal: three separate straight lines.
+    // It teaches dragging and releasing without looking like a dead end.
+    torn: [],
     pairs: [
       { id: 'amber', a: [0, 0], b: [4, 0] },
       { id: 'cyan', a: [0, 2], b: [4, 2] },
@@ -126,12 +128,10 @@ export const CORD_COLOURS = {
   blue: 0x3f7fc4,
 };
 
-// Varnished paper. Paint slides straight off these cells, so a staircase
-// cannot simply be run up the wall beneath the third picture — the player has
-// to build out to the side and come across the top of it. The door face is
-// varnished too, so the signs on it can never be painted over.
+// Varnished paper. Only the door face is protected. The former varnished patch
+// beneath The Last City made the archive look reachable while preventing the
+// player from placing the staircase the controls had taught them to build.
 export const GLAZE_RECTS = [
-  { col: 84, row: 12, cols: 9, rows: 10 },
   // The door face, so the signs can never be painted over.
   { col: 129, row: 8, cols: 15, rows: 14 },
 ];
@@ -144,10 +144,9 @@ export const SIGN = Object.freeze({
   OEDON: 'oedon',
 });
 
-// The five signs cut into the vestibule door. The eye is the New Harmony logo
-// and is all over every picture in the gallery, which is exactly why it is the
-// wrong answer: the player who only looks will pick it, and the player who
-// reads will not.
+// The five signs cut into the vestibule door. Each archive has a different
+// large mark drawn from these signs, plus one smaller repeated seal. Comparing
+// all three pictures reveals the repeated seal without requiring guesswork.
 export const SIGN_ART = {
   [SIGN.MOON]: 'assets/chapter04/icons/Moon.webp',
   [SIGN.EYE]: 'assets/chapter04/icons/Eye_Tier_3.webp',
@@ -157,8 +156,8 @@ export const SIGN_ART = {
 };
 
 // The gallery. Hung high on purpose: the only way to read one is to build up
-// to it. The moon is the only sign in all three, which is the answer the door
-// is asking for.
+// to it. The large marks are deliberately different; the small moon seal is
+// the only sign in all three, which is the answer the door is asking for.
 // Three pictures of the same institution, three ages apart — which is the whole
 // reason this car is on a train travelling backwards. Each one is hung too high
 // to read from the floor. Standing close enough lets the player press E and see
@@ -171,6 +170,8 @@ export const PAINTINGS = [
     key: 'plate-nave',
     file: 'assets/chapter04/gallery/middleage.jpg',
     title: 'YEAR ONE  ·  THE NAVE',
+    primarySign: SIGN.EYE,
+    sharedSign: SIGN.MOON,
     x: 1000,
     y: 240,
     w: 200,
@@ -178,7 +179,7 @@ export const PAINTINGS = [
     caption:
       'They pulled out the altar and set the instruments where it had stood, and they cut their eye into every banner in the hall.\n' +
       'Nothing in the building ever answered them. The only thing that did came through the high window on a clear night, and the ledger for that year enters it under one word:\n' +
-      'MOON.',
+      'LARGE MARK: EYE.  SMALL SEAL: MOON.',
   },
   {
     id: 'field',
@@ -186,6 +187,8 @@ export const PAINTINGS = [
     key: 'plate-field',
     file: 'assets/chapter04/gallery/duga.jpg',
     title: 'YEAR FORTY  ·  THE LISTENING FIELD',
+    primarySign: SIGN.HEIR,
+    sharedSign: SIGN.MOON,
     x: 1320,
     y: 148,
     w: 200,
@@ -193,7 +196,7 @@ export const PAINTINGS = [
     caption:
       'Three hundred metres of aerial pointed at everything, logging every signal that crossed the commune for forty years.\n' +
       'Exactly one of them came back on schedule, every twenty-nine days. The duty officer was not permitted to write down what he believed it was, so he wrote:\n' +
-      'MOON.',
+      'LARGE MARK: HEIR.  SMALL SEAL: MOON.',
   },
   {
     id: 'city',
@@ -201,6 +204,8 @@ export const PAINTINGS = [
     key: 'plate-city',
     file: 'assets/chapter04/gallery/cyberpunk.jpg',
     title: 'THE LAST CITY',
+    primarySign: SIGN.RAPTURE,
+    sharedSign: SIGN.MOON,
     x: 1660,
     y: 110,
     w: 200,
@@ -208,7 +213,7 @@ export const PAINTINGS = [
     caption:
       'Ninety storeys of him, with a world held up in each hand. Everyone agreed the right hand was the earth.\n' +
       'Nobody could agree about the left, so the plaque stayed blank for eleven years — until somebody climbed up in the dark and finished it:\n' +
-      'MOON.',
+      'LARGE MARK: RAPTURE.  SMALL SEAL: MOON.',
   },
 ];
 
@@ -224,7 +229,7 @@ export const DOOR = {
   w: 260,
   h: 254,
   correct: SIGN.MOON,
-  prompt: 'ALL THREE ARCHIVES END ON\nTHE SAME WORD. PRESS IT.',
+  prompt: 'THE LARGE MARKS CHANGE.\nWHICH SMALL SEAL REPEATS?',
   panels: [
     { sign: SIGN.EYE, x: 2626, y: 238, w: 56, h: 56 },
     { sign: SIGN.MOON, x: 2702, y: 238, w: 56, h: 56 },

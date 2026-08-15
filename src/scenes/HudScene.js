@@ -11,12 +11,12 @@ export default class HudScene extends Phaser.Scene {
   create() {
     this.last = {};
 
-    const panel = (x, y, text, size = 15) =>
+    const panel = (x, y, text, size = 13) =>
       this.add
         .text(x, y, text, {
           fontFamily: MONO,
           fontSize: `${size}px`,
-          color: '#b7c1cc',
+          color: '#8f9aa8',
           letterSpacing: 2,
         })
         .setScrollFactor(0);
@@ -30,13 +30,13 @@ export default class HudScene extends Phaser.Scene {
     // Keep the HUD as spare as the reference: health and spatial orientation
     // belong on-screen, score counters do not.
     this.scoreText = panel(18, 36, 'MEMORY  0');
-    this.coinText = panel(18, 57, 'WITNESSES  0');
+    this.coinText = panel(18, 54, 'WITNESSES  0');
 
     this.laneText = this.add
       .text(GAME_W - 18, 16, 'NEAR', {
         fontFamily: MONO,
-        fontSize: '15px',
-        color: '#b7c1cc',
+        fontSize: '13px',
+        color: '#8f9aa8',
         letterSpacing: 3,
       })
       .setOrigin(1, 0)
@@ -45,10 +45,10 @@ export default class HudScene extends Phaser.Scene {
     this.toast = this.add
       .text(GAME_W / 2, GAME_H - 96, '', {
         fontFamily: MONO,
-        fontSize: '16px',
-        color: '#edf1f4',
-        backgroundColor: '#05070bf2',
-        padding: { x: 12, y: 7 },
+        fontSize: '13px',
+        color: '#ffffff',
+        backgroundColor: '#07090d',
+        padding: { x: 9, y: 5 },
         align: 'center',
       })
       .setOrigin(0.5)
@@ -62,8 +62,8 @@ export default class HudScene extends Phaser.Scene {
         'A / D    SPACE    E',
         {
           fontFamily: MONO,
-          fontSize: '13px',
-          color: '#a7b2bd',
+          fontSize: '10px',
+          color: '#66717f',
           align: 'center',
         },
       )
@@ -73,8 +73,8 @@ export default class HudScene extends Phaser.Scene {
     this.chapterTitle = this.add
       .text(GAME_W / 2, 244, '', {
         fontFamily: MONO,
-        fontSize: '22px',
-        color: '#e5eaee',
+        fontSize: '18px',
+        color: '#d0d9e2',
         letterSpacing: 3,
         align: 'center',
         backgroundColor: '#071016',
@@ -87,8 +87,8 @@ export default class HudScene extends Phaser.Scene {
     this.chapterSubtitle = this.add
       .text(GAME_W / 2, 286, '', {
         fontFamily: MONO,
-        fontSize: '14px',
-        color: '#b4bec8',
+        fontSize: '11px',
+        color: '#8e9aa7',
         align: 'center',
         backgroundColor: '#071016',
         padding: { x: 8, y: 5 },
@@ -100,18 +100,18 @@ export default class HudScene extends Phaser.Scene {
     // Keep dialogue over the window band, not over the player and floor-mounted
     // machinery. Lines arrive with a typewriter cadence instead of popping in.
     this.dialoguePanel = this.add
-      .rectangle(28, 34, 720, 178, 0x05070c, 0.96)
+      .rectangle(28, 34, 620, 164, 0x05070c, 0.9)
       .setOrigin(0)
       .setScrollFactor(0)
       .setDepth(80)
       .setVisible(false);
-    this.dialoguePanel.setStrokeStyle(1, 0x687481, 0.95);
+    this.dialoguePanel.setStrokeStyle(1, 0x3a4653, 0.95);
 
     this.dialogueSpeaker = this.add
-      .text(48, 50, '', {
+      .text(48, 52, '', {
         fontFamily: MONO,
-        fontSize: '16px',
-        color: '#e8edf1',
+        fontSize: '13px',
+        color: '#d9e3eb',
         letterSpacing: 2,
       })
       .setScrollFactor(0)
@@ -119,10 +119,10 @@ export default class HudScene extends Phaser.Scene {
       .setVisible(false);
 
     this.dialogueRole = this.add
-      .text(48, 76, '', {
+      .text(48, 73, '', {
         fontFamily: MONO,
-        fontSize: '12px',
-        color: '#a6b1bc',
+        fontSize: '9px',
+        color: '#697784',
         letterSpacing: 1,
       })
       .setScrollFactor(0)
@@ -130,34 +130,34 @@ export default class HudScene extends Phaser.Scene {
       .setVisible(false);
 
     this.dialogueText = this.add
-      .text(48, 101, '', {
+      .text(48, 96, '', {
         fontFamily: MONO,
-        fontSize: '17px',
-        color: '#edf1f4',
+        fontSize: '15px',
+        color: '#f0f3f5',
         lineSpacing: 6,
-        wordWrap: { width: 670 },
+        wordWrap: { width: 570 },
       })
       .setScrollFactor(0)
       .setDepth(81)
       .setVisible(false);
 
     this.dialogueChoices = this.add
-      .text(48, 149, '', {
+      .text(48, 138, '', {
         fontFamily: MONO,
-        fontSize: '14px',
-        color: '#ead9ad',
+        fontSize: '12px',
+        color: '#d8c89f',
         lineSpacing: 8,
-        wordWrap: { width: 670 },
+        wordWrap: { width: 570 },
       })
       .setScrollFactor(0)
       .setDepth(81)
       .setVisible(false);
 
     this.dialogueHint = this.add
-      .text(728, 187, '', {
+      .text(628, 174, '', {
         fontFamily: MONO,
-        fontSize: '12px',
-        color: '#b0bbc5',
+        fontSize: '10px',
+        color: '#687684',
       })
       .setOrigin(1, 0)
       .setScrollFactor(0)
@@ -178,8 +178,8 @@ export default class HudScene extends Phaser.Scene {
     this.bigText = this.add
       .text(GAME_W / 2, GAME_H / 2, '', {
         fontFamily: MONO,
-        fontSize: '38px',
-        color: '#edf1f4',
+        fontSize: '34px',
+        color: '#ffffff',
         align: 'center',
         lineSpacing: 12,
       })
@@ -190,8 +190,8 @@ export default class HudScene extends Phaser.Scene {
     this.chapterCardKicker = this.add
       .text(GAME_W / 2, 220, '', {
         fontFamily: 'Georgia, Times New Roman, serif',
-        fontSize: '15px',
-        color: '#b7c0c7',
+        fontSize: '13px',
+        color: '#9ba6ad',
         letterSpacing: 6,
       })
       .setOrigin(0.5)
@@ -200,7 +200,7 @@ export default class HudScene extends Phaser.Scene {
     this.chapterCardTitle = this.add
       .text(GAME_W / 2, 284, '', {
         fontFamily: 'Georgia, Times New Roman, serif',
-        fontSize: '42px',
+        fontSize: '38px',
         color: '#f0ede6',
         letterSpacing: 3,
       })
@@ -210,8 +210,8 @@ export default class HudScene extends Phaser.Scene {
     this.chapterCardSubtitle = this.add
       .text(GAME_W / 2, 342, '', {
         fontFamily: 'Georgia, Times New Roman, serif',
-        fontSize: '17px',
-        color: '#aeb7bd',
+        fontSize: '14px',
+        color: '#7e888e',
         align: 'center',
         wordWrap: { width: 620 },
       })

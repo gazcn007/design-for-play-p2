@@ -7,6 +7,9 @@
 import Phaser from 'phaser';
 import { GAME_W, GAME_H, GRAVITY } from './constants.js';
 import EchoCityScene from './cars/presentCity/EchoCityIsoScene.js';
+import { installDevMenuReturnControl } from './devMenuReturn.js';
+
+installDevMenuReturnControl();
 
 const config = {
   type: Phaser.AUTO,

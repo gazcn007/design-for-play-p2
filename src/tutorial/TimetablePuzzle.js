@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { LANE_NEAR, LANES } from '../constants.js';
-import { DEV_MODE, devParams } from '../devMode.js';
+import { devRoutesEnabled, devParams } from '../devMode.js';
 import { sfx } from '../sfx.js';
 import {
   causalBlocker,
@@ -2044,17 +2044,8 @@ export default class TimetablePuzzle {
       return '[E] OPEN SERVICE TABLE';
     }
     if (interactable.def.kind === 'contact-interlock') {
-      const snap = this.contactLock?.snapshot?.();
-      if (!snap) return null;
-      if (interactable.def.command === 'latch') {
-        return snap.latchClosed ? null : CONTACT_PROMPTS.latch;
-      }
-      if (interactable.def.command === 'relay') {
-        return this.relay?.isSolved() ? null : CONTACT_PROMPTS.relay;
-      }
-      if (interactable.def.command === 'power') {
-        return snap.complete ? null : CONTACT_PROMPTS.power;
-      }
+      // Null on purpose: the shared prompt bubble stays hidden and
+      // ContactInterlockArt shows the only two allowed strings in-world.
       return null;
     }
     if (interactable.def.kind === 'timetable-run') return '[E] RUN TIMETABLE';
@@ -5539,15 +5530,33 @@ export default class TimetablePuzzle {
     }
   }
 
-  // Interaction copy is rendered by GameScene's fixed black hint bar. Keep
-  // the legacy art-owned prompt slots empty so light carriage panels cannot
-  // wash out the text or leave duplicate instructions in the world.
+  // The only strings the room may show (spec §4 + relay §2.1), gated by
+  // distance and machine state. Each prompt vanishes the moment the player
+  // leaves its device or the device has done its job. The relay prompt only
+  // exists while the case is still unbridged and the close-up is down.
   updateContactPrompts() {
+    const { scene } = this;
+    const puzzle = scene.tutorialPuzzle;
+    const lock = this.contactLock;
     const art = this.contactArt;
-    if (!art) return;
-    art.setPrompt('latch', null);
-    art.setPrompt('relay', null);
-    art.setPrompt('power', null);
+    if (!lock || !art) return;
+    const snap = lock.snapshot();
+    const live = puzzle.stageIndex === CONTACT_STAGE_INDEX
+      && puzzle.briefed
+      && !puzzle.stageComplete[CONTACT_STAGE_INDEX]
+      && !['opening', 'approach', 'departure', 'complete'].includes(puzzle.phase)
+      && this.visible
+      && scene.activeWorldIndex === 0;
+    const nearLatch = live && Math.abs(scene.player.x - CONTACT_INTERLOCK_LAYOUT.startX) < 62;
+    const nearRelay = live && Math.abs(scene.player.x - CONTACT_INTERLOCK_LAYOUT.relayX) < 62;
+    const nearPower = live && Math.abs(scene.player.x - CONTACT_INTERLOCK_LAYOUT.endX) < 62;
+    const relaySolved = this.relay?.isSolved() ?? false;
+    art.setPrompt('latch', nearLatch && !snap.latchClosed ? CONTACT_PROMPTS.latch : null);
+    art.setPrompt(
+      'relay',
+      nearRelay && !relaySolved && !scene.relayCloseupActive ? CONTACT_PROMPTS.relay : null,
+    );
+    art.setPrompt('power', nearPower && !snap.complete ? CONTACT_PROMPTS.power : null);
   }
 
   // ------------------------------------------------------ relay close-up --
@@ -5589,8 +5598,8 @@ export default class TimetablePuzzle {
     this._mechanicalPressedId = null;
     const partTextStyle = {
       fontFamily: 'ui-monospace, Menlo, monospace',
-      fontSize: '13px',
-      color: '#b8cbd2',
+      fontSize: '11px',
+      color: '#9fb7c0',
       align: 'center',
     };
     const partTexts = Object.fromEntries(
@@ -5610,19 +5619,19 @@ export default class TimetablePuzzle {
       graphics: make(scene.add.graphics(), tableMode ? 791 : 790),
       title: make(scene.add.text(left + 28, top + 20, '', {
         fontFamily: 'ui-monospace, Menlo, monospace',
-        fontSize: '22px',
-        color: '#f0dfb5',
+        fontSize: '18px',
+        color: '#e8d5a7',
       }), 792),
       status: make(scene.add.text(left + width / 2, top + 68, '', {
         fontFamily: 'ui-monospace, Menlo, monospace',
-        fontSize: '15px',
-        color: '#b8cbd2',
+        fontSize: '13px',
+        color: '#9fb7c0',
         align: 'center',
       }).setOrigin(0.5), 792),
       help: make(scene.add.text(left + width / 2, top + height - 24, 'CLICK MECHANICAL PARTS    /    ESC OR E TO CLOSE', {
         fontFamily: 'ui-monospace, Menlo, monospace',
-        fontSize: '12px',
-        color: '#a7b6bc',
+        fontSize: '10px',
+        color: '#687981',
       }).setOrigin(0.5), 792),
       objects: [],
       hits: [],
@@ -7413,9 +7422,26 @@ export default class TimetablePuzzle {
   }
 
   setupQA() {
-    if (!DEV_MODE || typeof window === 'undefined') return false;
+    if (!devRoutesEnabled() || typeof window === 'undefined') return false;
     const params = devParams();
     const qa = params.get('qa');
+    // Phase I has no frozen showcase state: this is the playable first
+    // junction, with its own machine active and the later cars cleared only
+    // for routing purposes.
+    if (qa === 'phase1') {
+      this.scene.tutorialQAActive = true;
+      const puzzle = this.scene.tutorialPuzzle;
+      puzzle.stageIndex = 0;
+      puzzle.stageComplete = this.config.stages.map(() => false);
+      puzzle.briefed = true;
+      puzzle.phase = 'idle';
+      const stage = this.config.stages[0];
+      this.scene.player.resetTo(stage.startX + 92, 400, LANE_NEAR);
+      this.scene.cameras.main.setScroll(Math.max(0, stage.startX + 92 - this.scene.cameras.main.width / 2), 0);
+      this.scene.refreshTutorialStageVisuals();
+      this.refresh();
+      return true;
+    }
     // Phase II fixture route: ?qa=phase2&state=<entry|power-fail|latch-closed|
     // signal-mid|energized|complete|reset-replay>. Warps into junction-2 and
     // drives the LIVE interlock instance to the named fixture state, replays
@@ -7542,7 +7568,7 @@ export default class TimetablePuzzle {
     if (qa === 'phase4') {
       this.scene.tutorialQAActive = true;
       const requested = params.get('state') ?? 'entry';
-      const stateName = ['entry', 'fall', 'middle', 'punched', 'refusal', 'solved'].includes(requested)
+      const stateName = ['entry', 'fall', 'middle', 'punched', 'refusal', 'solved', 'magic-stone'].includes(requested)
         ? requested
         : 'entry';
       const puzzle = this.scene.tutorialPuzzle;
@@ -7593,6 +7619,13 @@ export default class TimetablePuzzle {
       this.firstWeightArt?.applySnapshot(snap);
       this.scene.refreshTutorialStageVisuals();
       this.refresh();
+      if (stateName === 'magic-stone') {
+        const suitcase = this.scene.narrativeProps?.props?.find((prop) => prop.inspectorId === 'phase-iv');
+        if (suitcase) {
+          suitcase.state.envelopeReadComplete = true;
+          this.scene.time.delayedCall(180, () => this.scene.narrativeProps?.openInspectionModal(suitcase));
+        }
+      }
       return true;
     }
     // Phase V/VI world-space narrative fixtures. Entry remains a real

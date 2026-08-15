@@ -15,6 +15,7 @@ import {
   parkourSnapshot,
   previewDrag,
   recordCarRide,
+  recordNarrativeInteraction,
   resetParkourState,
   stepFlyingCars,
 } from '../../src/cars/cyberpunkParkour/parkourModel.js';
@@ -67,6 +68,12 @@ test('illegal placement stays on its rail and restores committed collision posit
 test('flying cars move autonomously, expose phase, and reverse at authored bounds', () => {
   const state = createParkourState();
   const car = state.flyingCars[0];
+  assert.equal(car.maxX, 1700, 'the first transfer car must overlap the next roof by a safe margin');
+  assert.equal(
+    state.flyingCars.find(({ id }) => id === 'car-b').maxX,
+    4120,
+    'the second transfer car must carry the player safely onto the POWER roof',
+  );
   const first = stepFlyingCars(state, 100)[0];
   assert.ok(first.deltaX > 0);
   assert.ok(first.phase > 0);
@@ -79,7 +86,7 @@ test('flying cars move autonomously, expose phase, and reverse at authored bound
   assert.equal(car.phase, 1);
 });
 
-test('goal requires every old and new movable plus all four flying cars', () => {
+test('goal requires every obstacle, all four cars, and Mara\'s final letter', () => {
   const state = createParkourState();
   for (const movable of state.movables) {
     const x = movable.startX === movable.maxX ? movable.minX : movable.maxX;
@@ -94,8 +101,19 @@ test('goal requires every old and new movable plus all four flying cars', () => 
   for (const id of ['car-a', 'car-b', 'car-c']) recordCarRide(state, id);
   assert.equal(canCompleteGoal(state), false, 'the final new car remains mandatory');
   recordCarRide(state, 'car-d');
+  assert.equal(canCompleteGoal(state), false, 'the story reveal remains mandatory');
+  assert.equal(recordNarrativeInteraction(state, 'letter'), true);
   assert.equal(canCompleteGoal(state), true);
   assert.equal(completeGoal(state), true);
+});
+
+test('Mara story evidence is explicit and survives route recovery', () => {
+  const state = createParkourState();
+  assert.deepEqual(state.narrative, { npcTalked: false, letterRead: false });
+  assert.equal(recordNarrativeInteraction(state, 'npc'), true);
+  assert.equal(recordNarrativeInteraction(state, 'letter'), true);
+  resetParkourState(state, 'fall');
+  assert.deepEqual(parkourSnapshot(state).narrative, { npcTalked: true, letterRead: true });
 });
 
 test('physically reaching the midpoint always activates it and preserves it after failure', () => {

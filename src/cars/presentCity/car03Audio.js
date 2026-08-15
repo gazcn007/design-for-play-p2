@@ -212,6 +212,30 @@ export const car03Audio = {
   // synthesized only, gesture-unlocked, subtle volumes, never gates input.
   // ------------------------------------------------------------------
 
+  // Scripted transition cues must always exist because the visual sequence
+  // continues immediately after each call. Every tone helper is already a
+  // safe no-op when WebAudio is unavailable.
+  nightmareStorm({ duration = 3.6 } = {}) {
+    const span = Math.max(0.4, Number(duration) || 3.6);
+    tone({ freq: 72, to: 38, dur: Math.min(span, 1.8), type: 'sawtooth', vol: 0.035 });
+    tone({ freq: 118, to: 62, dur: Math.min(span * 0.72, 1.5), type: 'triangle', vol: 0.026, delay: 0.18 });
+    tone({ freq: 47, to: 31, dur: Math.min(span * 0.55, 1.25), type: 'sine', vol: 0.03, delay: 0.42 });
+  },
+
+  morningWake() {
+    tone({ freq: 294, dur: 0.22, type: 'sine', vol: 0.032 });
+    tone({ freq: 440, dur: 0.34, type: 'sine', vol: 0.035, delay: 0.16 });
+  },
+
+  trainDoorSlam() {
+    tone({ freq: 92, to: 46, dur: 0.24, type: 'triangle', vol: 0.07 });
+  },
+
+  trainHorn() {
+    tone({ freq: 110, dur: 0.72, type: 'sawtooth', vol: 0.042 });
+    tone({ freq: 165, dur: 0.68, type: 'triangle', vol: 0.025, delay: 0.04 });
+  },
+
   // RESONANCE focus acquired: soft two-note shimmer.
   echoFocus() {
     tone({ freq: 392, dur: 0.08, type: 'sine', vol: 0.03 });

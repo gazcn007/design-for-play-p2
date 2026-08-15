@@ -25,6 +25,7 @@ import {
 } from './carLayout.js';
 import { colOf, createPaintedCar, idx, rowOf } from './paintedCarModel.js';
 import { PAPER } from './paperPalette.js';
+import { drawPaintedPlayer } from './paintedPlayerFigure.js';
 import {
   buildPaperGrain,
   draftLine,
@@ -36,9 +37,8 @@ import {
 
 // Chapter 4 // THE PAINTED COUNTRY — draw your own way through.
 //
-// The player paints and washes anywhere they can reach. Paint only takes where
-// it touches paper that is already there, so wanting to be higher up means
-// building a staircase and climbing it. Three pictures are hung too high to
+// The player paints and washes anywhere they can reach. A tap places one paper
+// cell immediately; holding and dragging lays a continuous path. Three pictures are hung too high to
 // read from the floor, and the door at the end wants to know which sign was in
 // all of them.
 //
@@ -70,11 +70,23 @@ export class PaintedCountryScene extends Phaser.Scene {
   }
 
   preload() {
-    PAINTINGS.forEach((picture) => this.load.image(picture.key, picture.file));
     Object.entries(SIGN_ART).forEach(([sign, file]) => this.load.image(`sign-${sign}`, file));
+    if (!this.cache.audio.exists('chapter4-drawing-music')) {
+      this.load.audio('chapter4-drawing-music', '/assets/music/ch4/4.3_debussy_reflets_dans_leau.mp3');
+    }
   }
 
   create() {
+    this.music = this.sound.add('chapter4-drawing-music', { loop: true, volume: 0.42 });
+    const playMusic = () => { if (!this.music?.isPlaying) this.music?.play(); };
+    if (this.sound.locked) this.sound.once('unlocked', playMusic);
+    else playMusic();
+    this.input.once('pointerdown', playMusic);
+    this.input.keyboard.once('keydown', playMusic);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.music?.stop());
+    this.advancingToStudio = false;
+    this.registry.set('chapter4Pigments', []);
+    this.registry.remove('chapter4ArchiveAnswer');
     this.rnd = makeRandom(0x9a17);
     this.motes = [];
     this.boilTargets = [];
@@ -83,6 +95,10 @@ export class PaintedCountryScene extends Phaser.Scene {
     this.paintDirty = true;
     this.lastBrushCell = null;
     this.wasLeftDown = false;
+    this.hoveredPictureId = null;
+    this.hoveredDoorSign = null;
+    this.tutorialSeen = { bridge: false, wash: false };
+    this.activeTutorial = null;
 
     this.cameras.main.setBackgroundColor(PAPER.sheet);
     this.cameras.main.setBounds(0, 0, WORLD.w, WORLD.h);
@@ -93,11 +109,11 @@ export class PaintedCountryScene extends Phaser.Scene {
     this.buildCarriage();
     this.buildGrid();
     this.buildGlaze();
+    this.buildArchiveSymbolTextures();
     this.buildGallery();
     this.buildDoor();
     this.buildSolids();
     this.buildPlayer();
-
     this.paintLayer = this.graphics(DEPTH.PAINT);
     this.blockLayer = this.graphics(DEPTH.BLOCK);
     this.brushCursor = this.graphics(DEPTH.CURSOR);
@@ -111,7 +127,7 @@ export class PaintedCountryScene extends Phaser.Scene {
 
     this.car.state.blocks.forEach((key) => this.addCellBody(key % GRID.w, Math.floor(key / GRID.w)));
     this.input.mouse?.disableContextMenu();
-    this.input.on('pointerdown', this.handleViewerPointerDown, this);
+    this.input.on('pointerdown', this.handlePointerDown, this);
     this.input.on('pointermove', this.handleViewerPointerMove, this);
     this.input.on('pointerup', this.handleViewerPointerUp, this);
 
@@ -128,10 +144,21 @@ export class PaintedCountryScene extends Phaser.Scene {
 
   applyQaRoute() {
     const qa = new URLSearchParams(window.location.search).get('qa');
-    const match = qa?.match(/^archive-([123])$/);
+    if (qa === 'door-view') {
+      this.walker.setPosition(DOOR.x - 82, FLOOR_Y - 30);
+      this.cameras.main.centerOn(DOOR.x + DOOR.w / 2, VIEW.h / 2);
+      return;
+    }
+    const match = qa?.match(/^archive-([123])(-solved)?$/);
     if (!match) return;
     const picture = PAINTINGS[Number(match[1]) - 1];
-    if (picture) this.openPicture(picture);
+    if (!picture) return;
+    if (match[2]) {
+      const board = this.car.boardSpec(picture.id);
+      const state = this.car.boardState(picture.id);
+      board.pairs.forEach((pair) => { state.cords[pair.id] = [pair.a, pair.b]; });
+    }
+    this.openPicture(picture);
   }
 
   // =========================================================== the sheet
@@ -291,6 +318,81 @@ export class PaintedCountryScene extends Phaser.Scene {
 
   // =========================================================== the gallery
 
+  // The archive photographs came from a photorealistic visual language that
+  // fought the hand-drawn carriage. Redraw the clue as three distinct graphite
+  // marks, each carrying the same small moon seal. The final door asks for the
+  // repeated small seal, so the visual and narrative deductions agree.
+  buildArchiveSymbolTextures() {
+    const accents = [PAPER.bookCloth, PAPER.graphiteSoft, PAPER.cyan];
+    PAINTINGS.forEach((picture, index) => {
+      if (this.textures.exists(picture.key)) this.textures.remove(picture.key);
+      const g = this.add.graphics();
+      const w = 1200;
+      const h = 672;
+      const cx = w / 2;
+      const cy = h / 2;
+      const accent = accents[index] ?? PAPER.graphite;
+      g.fillStyle(PAPER.sheetHigh, 1).fillRect(0, 0, w, h);
+      g.lineStyle(9, PAPER.graphiteFaint, 0.2);
+      for (let y = 70; y < h; y += 86) g.lineBetween(76, y, w - 76, y + (index - 1) * 5);
+
+      g.lineStyle(18, accent, 0.92);
+      if (picture.primarySign === 'eye') {
+        // NAVE — a broad eye and pupil.
+        g.strokeEllipse(cx - 50, cy - 24, 500, 238);
+        g.lineStyle(13, PAPER.graphite, 0.94);
+        g.strokeEllipse(cx - 50, cy - 24, 205, 142);
+        g.fillStyle(accent, 0.96).fillCircle(cx - 50, cy - 24, 46);
+        g.lineStyle(7, PAPER.sheetHigh, 0.92).strokeCircle(cx - 64, cy - 38, 13);
+      } else if (picture.primarySign === 'heir') {
+        // LISTENING FIELD — a crowned heir, reduced to head, shoulders and crown.
+        g.strokeCircle(cx - 50, cy + 12, 86);
+        g.beginPath();
+        g.moveTo(cx - 225, cy + 190);
+        g.lineTo(cx - 174, cy + 102);
+        g.lineTo(cx - 50, cy + 82);
+        g.lineTo(cx + 74, cy + 102);
+        g.lineTo(cx + 125, cy + 190);
+        g.strokePath();
+        g.beginPath();
+        g.moveTo(cx - 155, cy - 100);
+        g.lineTo(cx - 120, cy - 205);
+        g.lineTo(cx - 52, cy - 132);
+        g.lineTo(cx + 12, cy - 215);
+        g.lineTo(cx + 58, cy - 100);
+        g.closePath().strokePath();
+      } else {
+        // LAST CITY — the rapture mark: a falling drop inside a radiating burst.
+        g.beginPath();
+        g.moveTo(cx - 50, cy - 190);
+        g.lineTo(cx - 145, cy + 10);
+        g.lineTo(cx - 50, cy + 125);
+        g.lineTo(cx + 45, cy + 10);
+        g.closePath().strokePath();
+        g.lineStyle(13, PAPER.graphite, 0.9);
+        for (let ray = 0; ray < 8; ray += 1) {
+          const a = (Math.PI * 2 * ray) / 8;
+          g.lineBetween(
+            cx - 50 + Math.cos(a) * 165,
+            cy - 25 + Math.sin(a) * 165,
+            cx - 50 + Math.cos(a) * 235,
+            cy - 25 + Math.sin(a) * 235,
+          );
+        }
+      }
+
+      // The shared clue is deliberately smaller and placed like an accession
+      // stamp, so it can repeat without making the three main images identical.
+      const sealX = w - 150;
+      const sealY = h - 136;
+      g.lineStyle(9, PAPER.graphiteSoft, 0.78).strokeCircle(sealX, sealY, 76);
+      g.fillStyle(PAPER.graphite, 0.9).fillCircle(sealX - 4, sealY, 48);
+      g.fillStyle(PAPER.sheetHigh, 1).fillCircle(sealX + 19, sealY - 12, 45);
+      g.generateTexture(picture.key, w, h);
+      g.destroy();
+    });
+  }
+
   buildGallery() {
     const g = this.graphics(DEPTH.PICTURE);
     const mono = 'ui-monospace, SFMono-Regular, Menlo, monospace';
@@ -315,6 +417,16 @@ export class PaintedCountryScene extends Phaser.Scene {
         )
         .setStrokeStyle(1, PAPER.deckle, 0.8)
         .setDepth(DEPTH.PICTURE + 0.5);
+
+      const makeInteractive = (object) => object
+        .setInteractive({ useHandCursor: true })
+        .on('pointerover', () => { this.hoveredPictureId = picture.id; })
+        .on('pointerout', () => {
+          if (this.hoveredPictureId === picture.id) this.hoveredPictureId = null;
+        })
+        .on('pointerdown', (_pointer, _localX, _localY, event) => this.tryOpenPicture(picture, event));
+      makeInteractive(plate);
+      makeInteractive(cover);
 
       // Frame over the top of it.
       g.lineStyle(3, PAPER.graphite, 0.94);
@@ -533,12 +645,30 @@ export class PaintedCountryScene extends Phaser.Scene {
 
     // The five signs, as real plates screwed to the door.
     this.panelArt = {};
+    this.panelLabels = {};
     DOOR.panels.forEach((panel) => {
       const art = this.add
         .image(panel.x + panel.w / 2, panel.y + panel.h / 2, `sign-${panel.sign}`)
         .setDepth(DEPTH.DOOR + 1)
-        .setDisplaySize(panel.w - 10, panel.h - 10);
+        .setDisplaySize(panel.w - 10, panel.h - 10)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerover', () => { this.hoveredDoorSign = panel.sign; })
+        .on('pointerout', () => {
+          if (this.hoveredDoorSign === panel.sign) this.hoveredDoorSign = null;
+        })
+        .on('pointerdown', (_pointer, _localX, _localY, event) => this.tryAnswerDoor(panel, event));
       this.panelArt[panel.sign] = art;
+      this.panelLabels[panel.sign] = this.add
+        .text(panel.x + panel.w / 2, panel.y + panel.h - 2, panel.sign.toUpperCase(), {
+          fontFamily: mono,
+          fontSize: '7px',
+          color: '#5c574f',
+          backgroundColor: '#f7f4ecdd',
+          padding: { x: 3, y: 1 },
+          letterSpacing: 0.8,
+        })
+        .setOrigin(0.5, 1)
+        .setDepth(DEPTH.DOOR + 2);
     });
 
     this.doorHint = this.add
@@ -646,33 +776,17 @@ export class PaintedCountryScene extends Phaser.Scene {
         .setScrollFactor(0)
         .setDepth(DEPTH.HUD);
 
-    // A torn strip of paper laid over the top of the drawing. Without it the
-    // controls sat directly on the carriage's hatching and every line of text
-    // fought with a drafted one behind it.
-    const band = this.add
-      .graphics()
-      .setScrollFactor(0)
-      .setDepth(DEPTH.HUD - 2);
-    band.fillStyle(0xf3efe4, 0.94);
-    band.fillRect(0, 0, VIEW.w, 74);
-    band.lineStyle(1.4, 0xd8cfb9, 0.9);
-    band.lineBetween(0, 74, VIEW.w, 74);
-
-    this.hudBand = band;
-    this.controlLines = [
-      fixed(24, 14, 'A / D  ←→  walk     SPACE  jump     E  look / read     R  restart', '#a49c8d'),
-      fixed(24, 30, 'HOLD LEFT  draw paper (∞)      HOLD RIGHT  wash it away', '#a49c8d'),
-    ];
-    this.objective = fixed(24, 50, '', '#4a4640', 12);
-    this.bayLabel = fixed(VIEW.w - 24, 14, '', '#a49c8d', 11, 1);
-
+    // No persistent HUD in Chapter 4. The two mechanics are taught in place,
+    // exactly where the player first needs them.
+    this.hudBand = null;
+    this.controlLines = [];
+    this.objective = null;
+    this.bayLabel = null;
     this.flash = fixed(24, 86, '', '#b4453a', 12);
     this.flash.setPadding(8, 5, 8, 5).setBackgroundColor('#f7f4ec').setAlpha(0);
-
-    // The notebook. What the player has actually seen, never the answer. It
-    // lives bottom-right so it never lands on the bay name or the objective.
-    this.notebook = fixed(VIEW.w - 20, VIEW.h - 18, '', '#4a4640', 11, 1, 1);
-    this.notebook.setPadding(11, 9, 11, 9).setBackgroundColor('#ece5d5').setLineSpacing(4).setAlpha(0);
+    this.notebook = null;
+    this.tutorialPrompt = fixed(VIEW.w / 2, VIEW.h - 74, '', '#35312c', 15, 0.5, 0.5);
+    this.tutorialPrompt.setPadding(14, 9, 14, 9).setBackgroundColor('#f7f4ec').setAlpha(0);
 
     // Bay names belong to the world, painted under the floor line where there
     // is nothing else to collide with.
@@ -844,7 +958,8 @@ export class PaintedCountryScene extends Phaser.Scene {
     this.viewer.picture = picture;
     this.viewer.wasLeftDown = false;
     const archiveNumber = PAINTINGS.findIndex((candidate) => candidate.id === picture.id) + 1;
-    this.viewer.title.setText(`${picture.title}  ·  ARCHIVE ${archiveNumber} / ${PAINTINGS.length}`);
+    this.viewer.title.setText(`${picture.title}  ·  ${picture.primarySign.toUpperCase()} + SMALL SEAL`);
+    this.viewer.caption.setPosition(62, 386);
 
     // Fit the full artwork into a deliberately generous image well without
     // distorting it. At 1672×941 this renders at roughly 490×276 in the 960px
@@ -880,7 +995,9 @@ export class PaintedCountryScene extends Phaser.Scene {
     this.viewer.boardStatus.setText(
       solved
         ? 'ARCHIVE DEVELOPED\nTHE CAPTION IS NOW IN YOUR NOTES.'
-        : 'DRAG FROM ONE COLORED DOT\nTO ITS MATCH. DO NOT SHARE A HOLE.',
+        : picture.id === 'nave'
+          ? 'DRAG EACH COLOR STRAIGHT ACROSS\nTO ITS MATCH. THREE SEPARATE LINES.'
+          : 'DRAG FROM ONE COLORED DOT\nTO ITS MATCH. DO NOT SHARE A HOLE.',
     ).setColor(solved ? '#6f9c8b' : '#8d8579');
   }
 
@@ -890,12 +1007,12 @@ export class PaintedCountryScene extends Phaser.Scene {
     const read = this.car.picturesRead();
     this.viewer.picture = null;
     this.viewer.wasLeftDown = false;
-    this.viewer.title.setText('WHAT THE ARCHIVES SAY');
+    this.viewer.title.setText('COMPARE THE THREE SMALL SEALS');
     this.viewer.plate.setVisible(false);
     this.viewer.caption
       .setText(
         read.length
-          ? read.map((p) => `${p.title}\n${p.caption.split('\n').slice(-2).join(' ')}`).join('\n\n')
+          ? read.map((p) => `${p.title}\nLARGE ${p.primarySign.toUpperCase()}  +  SMALL ${p.sharedSign.toUpperCase()}`).join('\n\n')
           : 'YOU HAVE NOT READ ANY OF THEM YET.',
       )
       .setPosition(62, 110);
@@ -957,29 +1074,7 @@ export class PaintedCountryScene extends Phaser.Scene {
   }
 
   drawFigure() {
-    const g = this.figure;
-    const x = Math.round(this.walker.x);
-    g.clear();
-    const feetY = Math.round(this.walker.y + 29);
-    const at = (dy) => feetY - dy;
-    g.fillStyle(PAPER.figure, 1);
-    g.fillRect(x - 6, feetY - 18, 5, 18);
-    g.fillRect(x + 1, feetY - 18, 5, 18);
-    g.fillRect(x - 8, feetY - 46, 16, 28);
-    g.fillCircle(x, at(54), 8);
-
-    const pointer = this.input.activePointer;
-    const shoulderY = at(38);
-    const angle = Math.atan2(pointer.worldY - shoulderY, pointer.worldX - x);
-    const tipX = x + Math.cos(angle) * 30;
-    const tipY = shoulderY + Math.sin(angle) * 30;
-    g.lineStyle(3.2, PAPER.bookCloth, 1);
-    g.beginPath();
-    g.moveTo(x + Math.cos(angle) * 8, shoulderY + Math.sin(angle) * 8);
-    g.lineTo(tipX, tipY);
-    g.strokePath();
-    g.fillStyle(PAPER.indigo, 0.95);
-    g.fillCircle(tipX, tipY, 4.6);
+    drawPaintedPlayer(this.figure, this.walker, this.input.activePointer);
   }
 
   // The cursor is the whole tutorial: it shows the cell you would fill, and
@@ -1048,6 +1143,33 @@ export class PaintedCountryScene extends Phaser.Scene {
     );
   }
 
+  pictureAt(wx, wy) {
+    return PAINTINGS.find(
+      (picture) => wx >= picture.x && wx <= picture.x + picture.w && wy >= picture.y && wy <= picture.y + picture.h,
+    ) ?? null;
+  }
+
+  tryOpenPicture(picture, event) {
+    event?.stopPropagation?.();
+    if (this.viewer?.open) return;
+    const inRange = this.car.pictureInRange(this.walker.x, this.walker.y);
+    if (inRange?.id !== picture.id) {
+      this.flashMessage('BUILD CLOSER — THEN CLICK OR PRESS E TO OPEN THIS ARCHIVE.', '#c8892f');
+      return;
+    }
+    this.openPicture(picture);
+  }
+
+  tryAnswerDoor(panel, event) {
+    event?.stopPropagation?.();
+    if (this.viewer?.open) return;
+    if (!this.nearDoor()) {
+      this.flashMessage('STAND CLOSER TO THE SIGN WALL.', '#c8892f');
+      return;
+    }
+    this.answerDoor(panel.sign);
+  }
+
   // Only the one cell the player is actually standing in is off limits. Being
   // stricter than this meant a player at the very lip of a hole could not draw
   // the first plank of their own bridge, because their toes were grazing it.
@@ -1066,6 +1188,7 @@ export class PaintedCountryScene extends Phaser.Scene {
       if (this.car.wash(cx, cy)) {
         this.removeCellBody(cx, cy);
         this.paintDirty = true;
+        if (this.activeTutorial === 'wash') this.dismissTutorial('wash');
       }
       return;
     }
@@ -1073,6 +1196,7 @@ export class PaintedCountryScene extends Phaser.Scene {
     if (this.car.paint(cx, cy)) {
       this.addCellBody(cx, cy);
       this.paintDirty = true;
+      if (this.activeTutorial === 'bridge') this.dismissTutorial('bridge');
     }
   }
 
@@ -1134,14 +1258,31 @@ export class PaintedCountryScene extends Phaser.Scene {
     this.viewer.wasLeftDown = left;
   }
 
-  handleViewerPointerDown(pointer) {
+  handlePointerDown(pointer) {
     const picture = this.viewer?.picture;
-    if (!this.viewer?.open || !picture) return;
-    const hole = this.boardCellAt(pointer.x, pointer.y);
-    if (!hole) return;
-    if (pointer.rightButtonDown()) this.car.boardClearAt(picture.id, hole.c, hole.r);
-    else this.car.boardBegin(picture.id, hole.c, hole.r);
-    this.viewer.wasLeftDown = pointer.leftButtonDown();
+    if (this.viewer?.open) {
+      if (!picture) return;
+      const hole = this.boardCellAt(pointer.x, pointer.y);
+      if (!hole) return;
+      if (pointer.rightButtonDown()) this.car.boardClearAt(picture.id, hole.c, hole.r);
+      else this.car.boardBegin(picture.id, hole.c, hole.r);
+      this.viewer.wasLeftDown = pointer.leftButtonDown();
+      return;
+    }
+
+    // A quick click can begin and end between two update frames. Applying the
+    // first cell from the actual pointer-down event makes a tap just as reliable
+    // as a held stroke; stepBrush continues the same stroke while it is held.
+    const left = pointer.leftButtonDown();
+    const right = pointer.rightButtonDown();
+    if ((!left && !right) || this.advancingToStudio) return;
+    if (this.panelAt(pointer.worldX, pointer.worldY) || this.pictureAt(pointer.worldX, pointer.worldY)) return;
+    if (Phaser.Math.Distance.Between(this.walker.x, this.walker.y, pointer.worldX, pointer.worldY) > REACH) return;
+    const cx = colOf(pointer.worldX);
+    const cy = rowOf(pointer.worldY);
+    this.applyBrush(cx, cy, right);
+    this.lastBrushCell = { cx, cy };
+    this.wasLeftDown = left;
   }
 
   handleViewerPointerMove(pointer) {
@@ -1153,7 +1294,11 @@ export class PaintedCountryScene extends Phaser.Scene {
 
   handleViewerPointerUp(pointer) {
     const picture = this.viewer?.picture;
-    if (!picture) return;
+    if (!picture) {
+      this.lastBrushCell = null;
+      this.wasLeftDown = false;
+      return;
+    }
     this.car.boardRelease(picture.id);
     this.viewer.wasLeftDown = false;
   }
@@ -1164,6 +1309,10 @@ export class PaintedCountryScene extends Phaser.Scene {
   }
 
   stepPlayer() {
+    if (this.advancingToStudio) {
+      this.walker.body.setVelocityX(0);
+      return;
+    }
     const k = this.keys;
     const body = this.walker.body;
     const left = k.left.isDown || k.a.isDown;
@@ -1182,8 +1331,8 @@ export class PaintedCountryScene extends Phaser.Scene {
     }
   }
 
-  // The wrong sign is the only thing in this car that costs the player anything.
-  // The sheet floods with ink and the whole drawing starts again.
+  // Retained for old QA routes. Normal fused play gives a recoverable refusal
+  // instead of erasing three archive puzzles.
   playDeath(sign) {
     if (this.dying) return;
     this.dying = true;
@@ -1213,6 +1362,8 @@ export class PaintedCountryScene extends Phaser.Scene {
   }
 
   playCompletion() {
+    if (this.advancingToStudio) return;
+    this.advancingToStudio = true;
     const bloom = this.add
       .rectangle(0, 0, VIEW.w, VIEW.h, PAPER.bookCloth, 0)
       .setOrigin(0)
@@ -1225,8 +1376,21 @@ export class PaintedCountryScene extends Phaser.Scene {
       yoyo: true,
       hold: 900,
       ease: 'Sine.easeInOut',
-      onComplete: () => bloom.destroy(),
+      onComplete: () => {
+        bloom.destroy();
+        this.goToStudio();
+      },
     });
+  }
+
+  goToStudio() {
+    // The gallery carries only the archive answer forward. Color begins in the
+    // second scene, so the first scene never draws or pre-fills the HUE ring.
+    this.registry.set('chapter4Pigments', []);
+    this.registry.set('chapter4ArchiveAnswer', 'moon');
+    this.tweens.add({ targets: this.music, volume: 0, duration: 360 });
+    this.cameras.main.fadeOut(420, 247, 244, 236);
+    this.time.delayedCall(450, () => this.scene.start('DrawingStudio'));
   }
 
   bayId() {
@@ -1238,20 +1402,45 @@ export class PaintedCountryScene extends Phaser.Scene {
     if (car.state.complete) return 'THE DOOR IS OPEN. IT WAS THE MOON.';
     const read = car.state.seen.size;
     if (read < PAINTINGS.length) {
-      if (this.bayId() === 'A') return 'DRAW PAPER TO CROSS — IT ONLY TAKES WHERE IT TOUCHES SOMETHING.';
+      if (this.bayId() === 'A') return 'CLICK OR DRAG — PAPER APPEARS ANYWHERE WITHIN THE BRUSH CIRCLE.';
       const nearby = car.pictureInRange(this.walker.x, this.walker.y);
       if (nearby && !car.boardSolved(nearby.id)) return 'PRESS E — COLOR-LINK THE ARCHIVE BESIDE ITS IMAGE.';
       return `BUILD UP TO THE PICTURES AND READ THEM — ${read} OF ${PAINTINGS.length} SO FAR.`;
     }
     if (!car.boardsSolved()) return 'FINISH THE COLOR LINKS — EACH ARCHIVE HAS ITS OWN CARD.';
-    return 'THE DOOR WANTS THE SIGN THAT WAS IN EVERY PICTURE.';
+    return 'THE LARGE MARKS DIFFER — CHOOSE THE SMALL SEAL REPEATED IN ALL THREE.';
   }
 
   updateNotebook() {
-    const lines = PAINTINGS.map(
-      (p) => `${this.car.state.seen.has(p.id) ? '[x]' : '[ ]'}  ${p.title}`,
-    );
+    if (!this.notebook) return;
+    const lines = PAINTINGS.map((p) => {
+      const seen = this.car.state.seen.has(p.id);
+      return `${seen ? '[x]' : '[ ]'}  ${p.title}${seen ? ` · ${p.primarySign.toUpperCase()} + ${p.sharedSign.toUpperCase()}` : ''}`;
+    });
     this.notebook.setText(['THE GALLERY', ...lines].join('\n')).setAlpha(0.96);
+  }
+
+  showTutorial(id, text) {
+    if (this.tutorialSeen[id] || this.activeTutorial) return;
+    this.activeTutorial = id;
+    this.tutorialPrompt.setText(text).setAlpha(1);
+  }
+
+  dismissTutorial(id) {
+    if (this.activeTutorial !== id) return;
+    this.tutorialSeen[id] = true;
+    this.activeTutorial = null;
+    this.tweens.add({ targets: this.tutorialPrompt, alpha: 0, duration: 180 });
+  }
+
+  updateTutorials() {
+    // The first floor break is columns 20–31; the first removable paper wall
+    // begins at column 40. These are spatial prompts, not global instructions.
+    if (!this.tutorialSeen.bridge && this.walker.x >= 300) {
+      this.showTutorial('bridge', 'LEFT MOUSE · DRAW PAPER ACROSS THE GAP');
+    } else if (this.tutorialSeen.bridge && !this.tutorialSeen.wash && this.walker.x >= 710) {
+      this.showTutorial('wash', 'RIGHT MOUSE · ERASE THE PAPER BLOCK');
+    }
   }
 
   nearDoor() {
@@ -1289,19 +1478,24 @@ export class PaintedCountryScene extends Phaser.Scene {
       if (!entry) return;
       const here = inRange && inRange.id === picture.id;
       const seen = this.car.state.seen.has(picture.id);
-      entry.hint.setVisible(here);
-      if (here) {
+      const hovered = this.hoveredPictureId === picture.id;
+      entry.hint.setVisible(here || hovered);
+      if (here || hovered) {
         entry.hint.setText(
-          seen
-            ? 'PRESS  E  TO REVIEW'
-            : this.car.boardSolved(picture.id)
-              ? 'PRESS  E  TO READ'
-              : 'PRESS  E  TO COLOR LINK',
+          !here
+            ? 'BUILD CLOSER TO REACH THIS ARCHIVE'
+            : seen
+              ? 'CLICK OR PRESS E  ·  REVIEW'
+              : this.car.boardSolved(picture.id)
+                ? 'CLICK OR PRESS E  ·  READ'
+                : 'CLICK OR PRESS E  ·  OPEN COLOR LINK',
         );
       }
       const revealed = seen || this.car.boardSolved(picture.id);
       entry.plate.setVisible(revealed).setAlpha(revealed ? 1 : 0);
-      entry.cover.setVisible(!revealed);
+      entry.cover
+        .setVisible(!revealed)
+        .setStrokeStyle(here || hovered ? 2.4 : 1, here || hovered ? PAPER.cyan : PAPER.deckle, here || hovered ? 0.95 : 0.8);
     });
 
     if (!this.doorHint) return;
@@ -1316,7 +1510,7 @@ export class PaintedCountryScene extends Phaser.Scene {
     }
     else if (!this.car.allSeen()) {
       this.doorHint.setText(`READ THE ARCHIVES\n${this.car.state.seen.size} OF 3`);
-    } else this.doorHint.setText('E FOR NOTES\nCLICK A SIGN');
+    } else this.doorHint.setText('E · COMPARE SMALL SEALS\nCLICK THE REPEATED ONE');
   }
 
   processCarEvents() {
@@ -1324,7 +1518,7 @@ export class PaintedCountryScene extends Phaser.Scene {
     while (events.length) {
       events.forEach((event) => {
         if (event.type === 'picture-read') {
-          this.flashMessage('ARCHIVE DEVELOPED. THE IMAGE IS IN YOUR NOTES.', '#6f9c8b');
+          this.flashMessage('ARCHIVE DEVELOPED · THE SYMBOLS ENTER YOUR NOTES.', '#2f8c9e');
           if (this.viewer.picture?.id === event.id) this.updateViewerArchive();
         } else if (event.type === 'cord-joined') {
           this.flashMessage('THAT COLOR PAIR IS THREADED.', '#6f9c8b');
@@ -1338,14 +1532,12 @@ export class PaintedCountryScene extends Phaser.Scene {
           this.flashMessage('THE SIGNS ARE DARK — FINISH EVERY COLOR LINK FIRST.', '#c8892f');
         } else if (event.type === 'door-silent') {
           this.flashMessage(`THE DOOR STAYS SHUT — ${event.seen} OF ${event.of} ARCHIVES READ.`, '#c8892f');
-        } else if (event.type === 'door-killed') {
-          this.playDeath(event.sign);
+        } else if (event.type === 'door-refused') {
+          this.flashMessage(`${String(event.sign).toUpperCase()} IS NOT THE WORD IN THE NOTES.`, '#b4453a');
         } else if (event.type === 'door-opened') {
           this.flashMessage('THE MOON. THE DOOR OPENS.', '#6f9c8b');
         } else if (event.type === 'paint-refused' && event.reason === 'varnished') {
           this.flashMessage('THE PAPER IS VARNISHED HERE. PAINT WILL NOT TAKE.', '#c8892f');
-        } else if (event.type === 'paint-refused' && event.reason === 'nothing-to-hold-it') {
-          this.flashMessage('PAINT NEEDS SOMETHING TO HOLD IT.', '#c8892f');
         }
       });
       events = this.car.drainEvents();
@@ -1390,10 +1582,9 @@ export class PaintedCountryScene extends Phaser.Scene {
     this.drawDoorSigns();
     this.processCarEvents();
 
-    this.objective.setText(this.objectiveText());
-    this.bayLabel.setText(`BAY ${this.bayId()}`);
     this.updateNotebook();
     this.updatePictureHints();
+    this.updateTutorials();
 
     this.motes.forEach((mote) => {
       mote.obj.x += mote.vx * dt;
@@ -1425,6 +1616,12 @@ export class PaintedCountryScene extends Phaser.Scene {
       g.strokeRect(panel.x, panel.y, panel.w, panel.h);
       const art = this.panelArt && this.panelArt[panel.sign];
       if (art) art.setAlpha(lit ? 1 : 0.3);
+      const label = this.panelLabels && this.panelLabels[panel.sign];
+      if (label) label.setAlpha(lit ? 1 : 0.38);
+      if (this.hoveredDoorSign === panel.sign) {
+        g.lineStyle(2.6, PAPER.cyan, 0.96);
+        g.strokeRect(panel.x - 4, panel.y - 4, panel.w + 8, panel.h + 8);
+      }
       if (chosen && !right) {
         g.lineStyle(2.4, PAPER.fault, 0.85);
         g.lineBetween(panel.x + 10, panel.y + 10, panel.x + panel.w - 10, panel.y + panel.h - 10);
@@ -1448,6 +1645,8 @@ export class PaintedCountryScene extends Phaser.Scene {
         board: this.viewer?.picture ? this.car.snapshot().boards[this.viewer.picture.id] : null,
       },
       ...this.car.snapshot(),
+      pigmentRingVisible: false,
+      advancingToStudio: this.advancingToStudio,
       player: {
         x: Math.round(this.walker.x),
         y: Math.round(this.walker.y),

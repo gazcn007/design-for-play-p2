@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { createSaveStore } from '../shell/saveSystem.js';
+import { CINEMATICS, playCinematic } from '../shell/gameFlow.js';
 import {
   GAME_W,
   GAME_H,
@@ -19,6 +21,7 @@ import { LEVEL } from '../level.js';
 import { PAL } from '../palette.js';
 import Player from '../Player.js';
 import { sfx } from '../sfx.js';
+import { music } from '../shared/musicDirector.js';
 import { NPC_DIALOGUES, STORY_WORLDS } from '../story.js';
 import TutorialCarArt from '../art/tutorialCarArt.js';
 import TutorialTrainRoomsArt from '../art/tutorialTrainRoomsArt.js';
@@ -43,6 +46,10 @@ import {
 
 // Surfaces that get an explicit moonlit lip; the rest read as flat silhouettes.
 const RIMMED = new Set(['ground', 'platform', 'bridge']);
+const PROLOGUE_SCORE = {
+  undertow: 'assets/music/ch1/1.1_train_undertow.mp3',
+  resonance: 'assets/music/ch1/1.2_train_resonance.mp3',
+};
 
 export default class GameScene extends Phaser.Scene {
   constructor() {
@@ -91,6 +98,7 @@ export default class GameScene extends Phaser.Scene {
     this.finalReminderShown = false;
     this.tutorialExitBlockedNotified = false;
     this.prologueTransitionActive = false;
+    this.prologueScoreReleased = false;
     this.departureScroll = 0;
     this.hitstopRestoreTimer = null;
     this.persistentUnderfloorState = createPersistentUnderfloorState();
@@ -241,6 +249,7 @@ export default class GameScene extends Phaser.Scene {
 
     this.setupInput();
     this.setupTutorialQA();
+    this.refreshPrologueScore();
 
     this.physics.world.createDebugGraphic();
     this.physics.world.drawDebug = false;
@@ -384,6 +393,7 @@ export default class GameScene extends Phaser.Scene {
     this.tutorialTrainRoomsArt?.setVisible(index === 0);
     this.setTutorialPuzzleVisible(index === 0);
     this.setTutorialCameraMode(index);
+    this.refreshPrologueScore();
 
     if (announce) {
       this.game.events.emit('hud:world', world);
@@ -708,7 +718,19 @@ export default class GameScene extends Phaser.Scene {
       this.interactables.push({ def, sprite, fired: false });
     });
 
-
+    this.prompt = this.add
+      .text(0, 0, '[E]', {
+        fontFamily: 'ui-monospace, Menlo, monospace',
+        fontSize: '15px',
+        color: RETRO_TRANSIT_CSS.charcoalDeep,
+        backgroundColor: RETRO_TRANSIT_CSS.ivory,
+        stroke: RETRO_TRANSIT_CSS.orangeShadow,
+        strokeThickness: 1,
+        padding: { x: 7, y: 4 },
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(64)
+      .setVisible(false);
   }
 
   buildTutorialPuzzleProps() {
@@ -944,8 +966,6 @@ export default class GameScene extends Phaser.Scene {
       .setVisible(false);
     this.echoTimelineLabel = this.add
       .text(480, 178, '', labelStyle)
-      .setFontSize('13px')
-      .setColor('#aebbc2')
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(59)
@@ -1262,10 +1282,10 @@ export default class GameScene extends Phaser.Scene {
     this.underfloorHint = this.add
       .text(GAME_W / 2, GAME_H - 100, '[HOLD S]  INSPECT UNDERCARRIAGE  ▼', {
         fontFamily: 'ui-monospace, Menlo, monospace',
-        fontSize: '22px',
+        fontSize: '20px',
         color: RETRO_TRANSIT_CSS.ivory,
         backgroundColor: RETRO_TRANSIT_CSS.charcoalDeep,
-        padding: { x: 15, y: 9 },
+        padding: { x: 12, y: 7 },
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
@@ -1280,10 +1300,10 @@ export default class GameScene extends Phaser.Scene {
     this.hintBar = this.add
       .text(GAME_W / 2, GAME_H - 28, '', {
         fontFamily: '"American Typewriter", "Courier New", monospace',
-        fontSize: '16px',
-        color: '#f0dfb5',
-        backgroundColor: '#05070bf2',
-        padding: { x: 18, y: 8 },
+        fontSize: '12px',
+        color: '#e5cf9b',
+        backgroundColor: '#07090d',
+        padding: { x: 14, y: 5 },
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
@@ -1441,6 +1461,11 @@ export default class GameScene extends Phaser.Scene {
     if (this.prologueTransitionActive) return;
     this.clearHitstop();
     this.prologueTransitionActive = true;
+    // The train has reached the end of Chapter One. Release this cue before
+    // the departure animation so it cannot bleed underneath the 1→2 film.
+    this.prologueScoreReleased = true;
+    this.prologueScoreCue = null;
+    music.stop({ fade: 1.4 });
     this.departureScroll = 0;
     this.player.frozen = true;
     this.player.setVelocity(0, 0);
@@ -1479,10 +1504,17 @@ export default class GameScene extends Phaser.Scene {
       this.departureScroll = 0;
     });
 
-    this.time.delayedCall(7000, () => {
+    this.time.delayedCall(7000, async () => {
+      createSaveStore().markCheckpoint('chapter-2-start');
       this.prologueTransitionActive = false;
       onComplete();
-      this.scene.start('CyberpunkParkour');
+      playCinematic({
+        id: 'chapter-1-to-2',
+        src: CINEMATICS.chapter1To2,
+        label: 'Chapter 1 to Chapter 2 transition',
+        preloadChapterId: 'chapter2',
+        onComplete: () => this.scene.start('CyberpunkParkour'),
+      });
     });
   }
 
@@ -1901,10 +1933,9 @@ export default class GameScene extends Phaser.Scene {
       }
     });
 
-    // A suitcase carries both puzzle weight and story evidence. On its first
-    // encounter, let the player inspect every item before E returns to the
-    // normal carry/service verb. Other optional props still yield to nearby
-    // puzzle machinery.
+    // A suitcase carries both puzzle weight and story evidence. Its one-time
+    // first-look inspection yields E back to the normal carry/service verb as
+    // soon as the inspection panel has opened.
     const narrativeProp = this.narrativeProps?.findInteractable(p.x, p.y, p.lane);
     const narrativePreemptsPuzzle = this.narrativeProps?.shouldPreemptPuzzle(narrativeProp);
     if (narrativeProp && (!best || narrativePreemptsPuzzle)) {
@@ -1949,6 +1980,8 @@ export default class GameScene extends Phaser.Scene {
                   : best.item.def.kind === 'breaker'
                     ? '[E] INVERT'
                 : '[E]';
+      // A null prompt text means the device owns its own in-world prompt (the
+      // Phase II interlock latch/contactor); the shared bubble stays hidden.
       this._updateHintBar(promptText);
     } else {
       this._updateHintBar(null);
@@ -1989,6 +2022,9 @@ export default class GameScene extends Phaser.Scene {
       waitingChoice: false,
     };
     this.player.frozen = true;
+    // Dialogue bypasses Player.update(), so clear the force that may have
+    // been applied on the same frame as the interaction.
+    this.player.setAcceleration(0, 0);
     this.player.setVelocity(0, 0);
     this._updateHintBar(null);
     this.updateTutorialObjectiveMarker();
@@ -2066,6 +2102,8 @@ export default class GameScene extends Phaser.Scene {
 
   updateDialogueInput() {
     const JustDown = Phaser.Input.Keyboard.JustDown;
+    this.player.setAcceleration(0, 0);
+    this.player.setVelocity(0, 0);
     if (JustDown(this.keys.choiceOne)) {
       this.selectDialogueChoice(0);
     } else if (JustDown(this.keys.choiceTwo)) {
@@ -2716,6 +2754,7 @@ export default class GameScene extends Phaser.Scene {
 
     this.playTutorialGateOpen(completedIndex, () => {
       puzzle.stageIndex = Math.min(completedIndex + 1, LEVEL.tutorialPuzzle.stages.length - 1);
+      this.refreshPrologueScore();
       puzzle.phase = 'idle';
       puzzle.frames = [];
       puzzle.playbackCursor = 0;
@@ -2740,6 +2779,21 @@ export default class GameScene extends Phaser.Scene {
           ? 'The next car bends the remembered current.'
           : 'The windows go quiet. Something below begins to move.',
       );
+    });
+  }
+
+  refreshPrologueScore() {
+    if (this.prologueScoreReleased || this.prologueTransitionActive || this.skipPrologue || this.activeWorldIndex !== 0) return;
+    const cue = this.tutorialPuzzle.stageIndex >= 3 ? 'resonance' : 'undertow';
+    if (this.prologueScoreCue === cue) return;
+    this.prologueScoreCue = cue;
+    music.play(`prologue-${cue}`, {
+      src: PROLOGUE_SCORE[cue],
+      volume: cue === 'resonance' ? 0.42 : 0.34,
+      fade: cue === 'resonance' ? 5.5 : 6.5,
+      outFade: 5.5,
+      dialogueDuckDb: -7,
+      loop: true,
     });
   }
 

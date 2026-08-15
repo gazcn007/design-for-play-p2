@@ -6,15 +6,9 @@
 //   LEFT  — paint a cell. It becomes real paper you can stand on.
 //   RIGHT — wash a cell. It removes your own paint, and eats paper blocks.
 //
-// One physical rule keeps free drawing from being a fly cheat, and it is the
-// rule that turns drawing into *building*:
-//
-//   **paint has to go ON something.**
-//
-// A cell can only be painted if it touches paper that is already there — the
-// floor, a wall, a block, or a stroke you painted a moment ago. So a player who
-// wants to be higher up paints a step, climbs onto it, and paints the next one.
-// Staircases are not a special mechanic; they are what the rule makes.
+// Paint appears immediately in any empty, unvarnished cell inside the player's
+// brush reach. Players can still build stairs and bridges, but a valid click is
+// never rejected merely because the new cell is not touching existing paper.
 //
 // Varnished cells refuse paint entirely, which is how the car says "not this
 // way" without taking the brush out of the player's hand.
@@ -91,9 +85,8 @@ export function createPaintedCar() {
     ),
     door: { chosen: null, solved: false, wrongTries: 0 },
     complete: false,
-    // The one place in this car where a mistake costs something. Recorded as a
-    // deliberate supersede of the "every mistake is undoable" rule: the door is
-    // the only beat the player is asked to *commit* to.
+    // Kept in the snapshot for compatibility with older QA. The fused chapter
+    // no longer erases the whole investigation for one wrong archive answer.
     killed: false,
     falls: 0,
     events: [],
@@ -113,23 +106,10 @@ export function createPaintedCar() {
   const isSolid = (cx, cy) =>
     inBounds(cx, cy) && (isTerrain(cx, cy) || isBlock(cx, cy) || isPainted(cx, cy));
 
-  // The rule that makes drawing into building. Diagonals count, so a staircase
-  // can be drawn as a staircase rather than as an L at every step.
-  function touchesSomething(cx, cy) {
-    for (let dx = -1; dx <= 1; dx += 1) {
-      for (let dy = -1; dy <= 1; dy += 1) {
-        if (dx === 0 && dy === 0) continue;
-        if (isSolid(cx + dx, cy + dy)) return true;
-      }
-    }
-    return false;
-  }
-
   function paintRefusal(cx, cy) {
     if (!inBounds(cx, cy)) return 'off-sheet';
     if (isGlaze(cx, cy)) return 'varnished';
     if (isSolid(cx, cy)) return 'already-solid';
-    if (!touchesSomething(cx, cy)) return 'nothing-to-hold-it';
     if (state.painted.size >= MAX_PAINTED) return 'sheet-full';
     return null;
   }
@@ -357,8 +337,7 @@ export function createPaintedCar() {
       return { ok: true, reason: 'correct' };
     }
     state.door.wrongTries += 1;
-    state.killed = true;
-    emit('door-killed', { sign, tries: state.door.wrongTries });
+    emit('door-refused', { sign, tries: state.door.wrongTries });
     return { ok: false, reason: 'wrong-sign' };
   }
 

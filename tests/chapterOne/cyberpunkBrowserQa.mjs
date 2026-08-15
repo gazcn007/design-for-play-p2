@@ -74,6 +74,9 @@ await send('Emulation.setDeviceMetricsOverride', {
 
 const states = [
   ['entrance', 'chapter=cyberpunk'],
+  ['story-npc', 'qa=parkour-story-npc'],
+  ['story-npc-close', 'qa=parkour-story-npc'],
+  ['story-letter', 'qa=parkour-story-letter'],
   ['illegal-drag', 'qa=parkour-drag'],
   ['moving-car', 'qa=parkour-car'],
   ['ladder-wall', 'qa=parkour-ladder-wall'],
@@ -110,7 +113,49 @@ for (const [name, query] of states) {
     }
   }
   if (!snapshot) throw new Error(`Timed out waiting for ${name} parkour state.`);
-  if (name === 'completion') {
+  if (name === 'story-npc' || name === 'story-npc-close' || name === 'story-letter') {
+    await send('Page.bringToFront');
+    await evaluate("document.querySelector('canvas').focus()")
+    await keyEvent('keyDown', 'e', 'KeyE', 69);
+    await delay(80);
+    await keyEvent('keyUp', 'e', 'KeyE', 69);
+    await delay(160);
+    snapshot = JSON.parse(await evaluate('window.render_game_to_text()'));
+    const npcStory = name === 'story-npc' || name === 'story-npc-close';
+    const expectedKind = npcStory ? 'npc' : 'letter';
+    const expectedSpeaker = npcStory ? 'ROOFTOP MECHANIC' : 'MARA';
+    if (snapshot.parkour.narrative.active !== expectedKind
+      || snapshot.parkour.narrative.speaker !== expectedSpeaker
+      || !snapshot.parkour.player.frozen
+      || (npcStory && !snapshot.parkour.narrative.npcTalked)
+      || (name === 'story-letter' && !snapshot.parkour.narrative.letterRead)) {
+      throw new Error(`Parkour story interaction did not open correctly: ${JSON.stringify(snapshot.parkour.narrative)}`);
+    }
+    const expectedText = npcStory
+      ? 'Mara came through three nights ago.'
+      : 'Butch— I made it through this city';
+    if (!snapshot.parkour.narrative.text.includes(expectedText)) {
+      throw new Error(`Parkour story copy did not preserve the approved Mara beat: ${JSON.stringify(snapshot.parkour.narrative)}`);
+    }
+    if (name === 'story-npc-close') {
+      // First E revealed line one above. Advance and reveal the remaining two
+      // lines, then close the panel with ordinary input.
+      for (let press = 0; press < 6; press += 1) {
+        await keyEvent('keyDown', 'e', 'KeyE', 69);
+        await delay(70);
+        await keyEvent('keyUp', 'e', 'KeyE', 69);
+        await delay(70);
+      }
+      await delay(900);
+      snapshot = JSON.parse(await evaluate('window.render_game_to_text()'));
+      if (snapshot.parkour.narrative.active !== null
+        || snapshot.parkour.player.frozen
+        || snapshot.parkour.resetCount !== 0
+        || snapshot.parkour.player.y > 515) {
+        throw new Error(`Closing the mechanic dialogue destabilized the player: ${JSON.stringify(snapshot.parkour.player)}`);
+      }
+    }
+  } else if (name === 'completion') {
     await send('Page.bringToFront');
     await evaluate("document.querySelector('canvas').focus()")
     await keyEvent('keyDown', 'd', 'KeyD', 68);
@@ -145,37 +190,72 @@ for (const [name, query] of states) {
   } else if (name === 'ladder-wall') {
     await send('Page.bringToFront');
     await evaluate("document.querySelector('canvas').focus()")
-    // The building is left of this recovery ladder. A must release climbing
-    // immediately but remain blocked by the wall.
-    await keyEvent('keyDown', 'w', 'KeyW', 87);
-    await keyEvent('keyDown', 'a', 'KeyA', 65);
-    await delay(650);
-    const wallBlocked = JSON.parse(await evaluate('window.render_game_to_text()'));
     await keyEvent('keyUp', 'a', 'KeyA', 65);
+    await keyEvent('keyUp', 'd', 'KeyD', 68);
     await keyEvent('keyUp', 'w', 'KeyW', 87);
-    if (wallBlocked.parkour.player.state === 'climbing'
-      || wallBlocked.parkour.player.x < 1207
-      || !wallBlocked.parkour.player.platformCollisionActive) {
-      throw new Error(`Lateral ladder release clipped into the building wall: ${JSON.stringify(wallBlocked.parkour.player)}`);
+    await delay(80);
+    // Moving from an edge toward the centre must keep the player attached
+    // while any part of their body still overlaps the visible ladder.
+    await keyEvent('keyDown', 'w', 'KeyW', 87);
+    await delay(100);
+    const attached = JSON.parse(await evaluate('window.render_game_to_text()'));
+    if (attached.parkour.player.state !== 'climbing') {
+      throw new Error(`Player did not attach before the lateral ladder check: ${JSON.stringify(attached.parkour.player)}`);
+    }
+    await keyEvent('keyDown', 'd', 'KeyD', 68);
+    await delay(70);
+    await keyEvent('keyUp', 'd', 'KeyD', 68);
+    const partialShift = JSON.parse(await evaluate('window.render_game_to_text()'));
+    const partialPlayer = partialShift.parkour.player;
+    if (partialPlayer.state !== 'climbing'
+      || partialPlayer.x <= 1210
+      || partialPlayer.bodyRight <= partialPlayer.ladderLeft
+      || partialPlayer.bodyLeft >= partialPlayer.ladderRight) {
+      throw new Error(`Player detached before fully leaving the visible ladder: ${JSON.stringify(partialPlayer)}`);
     }
 
-    // Reset to the same mid-ladder height. D points away from the building and
-    // must release the ladder immediately, with ordinary gravity restored.
+    // Continuing in the same direction must release only after the character
+    // body clears the ladder's right edge.
+    await keyEvent('keyDown', 'd', 'KeyD', 68);
+    let lastAttached = partialShift;
+    let fullyClear = null;
+    for (const deadline = Date.now() + 2000; Date.now() < deadline;) {
+      await delay(25);
+      const candidate = JSON.parse(await evaluate('window.render_game_to_text()'));
+      if (candidate.parkour.player.state === 'climbing') lastAttached = candidate;
+      else {
+        fullyClear = candidate;
+        break;
+      }
+    }
+    await keyEvent('keyUp', 'd', 'KeyD', 68);
+    if (!fullyClear
+      || lastAttached.parkour.player.bodyLeft > lastAttached.parkour.player.ladderRight
+      || fullyClear.parkour.player.bodyLeft < lastAttached.parkour.player.ladderRight
+      || !fullyClear.parkour.player.platformCollisionActive) {
+      throw new Error(`Ladder release did not occur at the full-body boundary: ${JSON.stringify({ lastAttached: lastAttached.parkour.player, fullyClear: fullyClear?.parkour.player })}`);
+    }
+    // The building is left of this recovery ladder. Its live wall collider
+    // prevents the player from clearing that side and therefore keeps the
+    // player attached rather than allowing a wall clip.
     await evaluate("window.game.scene.getScene('CyberpunkParkour').player.body.reset(1210, 350)")
     await delay(80);
     await keyEvent('keyDown', 'w', 'KeyW', 87);
     await delay(80);
-    await keyEvent('keyDown', 'd', 'KeyD', 68);
+    await keyEvent('keyDown', 'a', 'KeyA', 65);
     await delay(520);
-    snapshot = JSON.parse(await evaluate('window.render_game_to_text()'));
-    await keyEvent('keyUp', 'd', 'KeyD', 68);
+    const wallBlocked = JSON.parse(await evaluate('window.render_game_to_text()'));
+    await keyEvent('keyUp', 'a', 'KeyA', 65);
     await keyEvent('keyUp', 'w', 'KeyW', 87);
-    if (snapshot.parkour.player.state === 'climbing'
-      || snapshot.parkour.player.x <= 1250
-      || !snapshot.parkour.player.platformCollisionActive) {
-      throw new Error(`Player could not leave a ladder laterally at mid-height: ${JSON.stringify(snapshot.parkour.player)}`);
+    if (wallBlocked.parkour.player.state !== 'climbing'
+      || wallBlocked.parkour.player.bodyRight <= wallBlocked.parkour.player.ladderLeft
+      || wallBlocked.parkour.player.bodyLeft >= wallBlocked.parkour.player.ladderRight
+      || !wallBlocked.parkour.player.platformCollisionActive) {
+      throw new Error(`Ladder movement clipped through its attached building: ${JSON.stringify(wallBlocked.parkour.player)}`);
     }
-    evidence['ladder-wall-blocked'] = wallBlocked;
+    snapshot = wallBlocked;
+    evidence['ladder-partial-shift'] = partialShift;
+    evidence['ladder-full-release'] = fullyClear;
   } else if (name === 'recovery' || name === 'recovery-car-b' || name === 'recovery-car-d') {
     await send('Page.bringToFront');
     await evaluate("document.querySelector('canvas').focus()")
@@ -225,6 +305,38 @@ for (const [name, query] of states) {
         : snapshot.parkour.player.x >= 5900 && snapshot.parkour.player.x <= 6240 && snapshot.parkour.player.y <= 110;
     if (!recovered) {
       throw new Error(`Recovery ladder did not return the player to the prior route: ${JSON.stringify(snapshot.parkour.player)}`);
+    }
+    if (name === 'recovery') {
+      // The first return ladder is deliberately forgiving: Space at its top
+      // takes the player to the authored safe roof, even without A/D input.
+      await evaluate("window.game.scene.getScene('CyberpunkParkour').player.body.reset(1210, 350)");
+      await delay(80);
+      await keyEvent('keyDown', 'w', 'KeyW', 87);
+      for (const deadline = Date.now() + 5000; Date.now() < deadline;) {
+        await delay(25);
+        const candidate = JSON.parse(await evaluate('window.render_game_to_text()'));
+        if (candidate.parkour.player.y <= 150) break;
+      }
+      await keyEvent('keyUp', 'w', 'KeyW', 87);
+      await keyEvent('keyDown', ' ', 'Space', 32);
+      await delay(80);
+      await keyEvent('keyUp', ' ', 'Space', 32);
+      let spaceDismounted = null;
+      for (const deadline = Date.now() + 2000; Date.now() < deadline;) {
+        await delay(25);
+        const candidate = JSON.parse(await evaluate('window.render_game_to_text()'));
+        if (candidate.parkour.player.state !== 'climbing') {
+          spaceDismounted = candidate;
+          break;
+        }
+      }
+      if (!spaceDismounted
+        || spaceDismounted.parkour.player.x < 800
+        || spaceDismounted.parkour.player.x > 1190
+        || spaceDismounted.parkour.player.y > 200) {
+        throw new Error(`Space did not safely dismount the first recovery ladder: ${JSON.stringify(spaceDismounted?.parkour.player)}`);
+      }
+      evidence['recovery-space-dismount'] = spaceDismounted;
     }
   } else if (name === 'spikes') {
     const spikes = snapshot.parkour.hazards.find(({ label }) => label === 'spikes');

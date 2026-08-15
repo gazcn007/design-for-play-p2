@@ -1,11 +1,17 @@
 import Phaser from 'phaser';
+import { magicStoneSnapshot } from './shell/magicStones.js';
+import './shell/titleMenu.css';
 import { GAME_W, GAME_H, GRAVITY } from './constants.js';
 import { DEV_MODE, hasDevRoute } from './devMode.js';
+import { installDevMenuReturnControl } from './devMenuReturn.js';
 import BootScene from './scenes/BootScene.js';
 import DevMenuScene from './scenes/DevMenuScene.js';
 import GameScene from './scenes/GameScene.js';
 import HudScene from './scenes/HudScene.js';
 import CyberpunkParkourScene from './cars/cyberpunkParkour/CyberpunkParkourScene.js';
+import { createTitleMenu } from './shell/titleMenu.js';
+import { applySettings, readSettings, volumeForChannel } from './shell/saveSystem.js';
+import { installPauseMenu } from './shell/pauseMenu.js';
 
 // Phaser starts the first scene in the array. The chapter select is added only
 // for `npm run dev`, and only when the URL does not already name a starting
@@ -42,35 +48,80 @@ const config = {
   scene: scenes,
 };
 
-const game = new Phaser.Game(config);
+  let game = null;
 
-// Let the game reliably claim keyboard focus after a player clicks it. Canvas
-// is not focusable by default in every browser, which can make a perfectly
-// working Phaser input map feel unresponsive when the page first opens.
-game.canvas.setAttribute('tabindex', '0');
-game.canvas.setAttribute('role', 'application');
-game.canvas.setAttribute('aria-label', 'Nightfall game canvas');
-game.canvas.addEventListener('pointerdown', () => game.canvas.focus());
+const startGame = () => {
+  if (game) return game;
+  game = new Phaser.Game(config);
+  const syncSettings = (settings = readSettings()) => {
+    game.sound.volume = volumeForChannel(settings, 'sfx');
+    game.registry.set('nightfallSettings', settings);
+  };
+  syncSettings(applySettings(readSettings()));
+  window.addEventListener('nightfall:settings', (event) => syncSettings(event.detail));
 
-// Backtick drops a dev session back to the chapter select. The menu is chosen
-// at boot from the URL, so getting back to it means reloading without a query
-// string rather than stopping a scene.
-if (DEV_MODE) {
-  window.addEventListener('keydown', (event) => {
-    if (event.key !== '`' || event.metaKey || event.ctrlKey || event.altKey) return;
-    event.preventDefault();
-    window.location.href = window.location.pathname;
+  // Let the game reliably claim keyboard focus after a player clicks it.
+  game.canvas.setAttribute('tabindex', '0');
+  game.canvas.setAttribute('role', 'application');
+  game.canvas.setAttribute('aria-label', 'Nightfall game canvas');
+  game.canvas.addEventListener('pointerdown', () => game.canvas.focus());
+
+  // Production chapters return to the title; development routes return to the
+  // chapter launcher. Standalone chapter pages install the same control.
+  installDevMenuReturnControl();
+
+  // Handy in the devtools console:
+  //   game.scene.getScene('Game').player
+  //   game.scene.getScene('Game').physics.world.drawDebug = true
+  window.game = game;
+  installPauseMenu({
+    checkpointId: () => game.scene.getScene('CyberpunkParkour')?.sys?.isActive()
+      ? 'chapter-2-start'
+      : 'prologue-start',
   });
-}
+  return game;
+};
 
-// Handy in the devtools console:
-//   game.scene.getScene('Game').player
-//   game.scene.getScene('Game').physics.world.drawDebug = true
-window.game = game;
+const creditsRequested = new URLSearchParams(window.location.search).get('credits') === '1';
+const playRequested = new URLSearchParams(window.location.search).get('play') === '1';
+if (creditsRequested) createTitleMenu({ onStart: startGame, openCredits: true });
+else if (DEV_MODE || playRequested) startGame();
+else createTitleMenu({ onStart: startGame });
 
 // Read-only diagnostics for automated smoke tests and content-pipeline QA.
 // This does not advance or mutate gameplay state.
 const renderGameToText = () => {
+  if (document.getElementById('nightfall-title')) {
+    const title = document.getElementById('nightfall-title');
+    const dialog = title.querySelector('#nf-dialog');
+    const creditsPanel = title.querySelector('.nf-credits-panel');
+    return JSON.stringify({
+      scene: title.dataset.state === 'exited' ? 'Exited' : 'TitleMenu',
+      focused: document.activeElement?.textContent?.trim() ?? null,
+      titleVisible: true,
+      dialog: dialog?.open ? dialog.querySelector('h2')?.textContent ?? 'dialog' : null,
+      chapterSelect: title.dataset.chapterSelect === 'open' && Boolean(dialog?.open),
+      chapterEntries: title.dataset.chapterSelect === 'open' && dialog?.open
+        ? [...dialog.querySelectorAll('[data-chapter]')].map((entry) => ({
+            number: Number(entry.dataset.chapter),
+            title: entry.querySelector('strong')?.textContent ?? '',
+            detail: entry.querySelector('small')?.textContent ?? '',
+          }))
+        : [],
+      credits: creditsPanel
+        ? {
+            visible: Boolean(dialog?.open),
+            team: [...creditsPanel.querySelectorAll('.nf-credit-ticket strong')].map((node) => node.textContent),
+            music: creditsPanel.querySelector('.nf-credit-section--music strong')?.textContent ?? null,
+            musicState: title.dataset.creditMusic ?? 'stopped',
+            rollState: title.dataset.creditRoll ?? 'stopped',
+            playbackRate: title.dataset.creditRate ?? '1.00x',
+            rollTimeMs: Math.round(title.__creditsAnimation?.currentTime ?? 0),
+          }
+        : null,
+    });
+  }
+  if (!game) return JSON.stringify({ scene: 'TitleMenu', titleVisible: true });
   const cyberpunkScene = game.scene.getScene('CyberpunkParkour');
   if (cyberpunkScene?.sys?.isActive()) {
     return JSON.stringify({
@@ -87,6 +138,7 @@ const renderGameToText = () => {
   const player = scene?.player;
   const devMenu = game.scene.getScene('DevMenu');
   return JSON.stringify({
+    magicStones: magicStoneSnapshot(),
     coordinateSystem: 'origin top-left; +x right; +y down; world units are pixels',
     devMode: DEV_MODE,
     scene: scene?.sys?.isActive()
@@ -476,6 +528,6 @@ const syncGameStateOutput = () => {
   gameStateOutput.textContent = renderGameToText();
 };
 syncGameStateOutput();
-window.setInterval(syncGameStateOutput, 120);
+window.setInterval(syncGameStateOutput, 500);
 
 export default game;

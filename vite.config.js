@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite';
+import { resolve } from 'node:path';
 
 // `command` and `mode` are the only two inputs that decide whether this build
 // may skip ahead. `npm run dev` serves in development mode and gets the
@@ -22,8 +23,9 @@ export default defineConfig(({ command, mode }) => {
       // interpreted as source edits and turned into a reload storm. The game is
       // playtested in long, stateful sessions, so an unsolicited reload is much
       // more damaging than needing one deliberate browser refresh after a code
-      // change. Keep the dev transform/QA routes, but make preview sessions
-      // stable and manual-refresh only.
+      // change. Keep preview sessions stable and manual-refresh only. Do not
+      // force `no-store`: Chapter 3's 2→3 film fetches its full scene before
+      // navigation, and Echo City must reuse those cached bytes on arrival.
       hmr: false,
       watch: {
         ignored: ['**/*'],
@@ -33,6 +35,21 @@ export default defineConfig(({ command, mode }) => {
       target: 'es2020',
       outDir: 'dist',
       assetsInlineLimit: 0,
+      rollupOptions: {
+        input: {
+          main: resolve(import.meta.dirname, 'index.html'),
+          chapter01Opening: resolve(import.meta.dirname, 'chapter01-opening.html'),
+          chapter03: resolve(import.meta.dirname, 'car03-3d.html'),
+          chapter04: resolve(import.meta.dirname, 'painted-country.html'),
+          chapter05: resolve(import.meta.dirname, 'museum-3d.html'),
+          finalBoss: resolve(import.meta.dirname, 'final-boss.html'),
+          hiddenFinalBoss: resolve(import.meta.dirname, 'hidden-final-boss.html'),
+          trueEnding: resolve(import.meta.dirname, 'true-ending.html'),
+          borrowedGrid: resolve(import.meta.dirname, 'borrowed-grid.html'),
+          labyrinth: resolve(import.meta.dirname, 'labyrinth.html'),
+          chapter05PaintedCountry: resolve(import.meta.dirname, 'chapter05-painted-country.html'),
+        },
+      },
     },
   };
 });

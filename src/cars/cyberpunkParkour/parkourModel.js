@@ -94,7 +94,9 @@ export const FLYING_CAR_DEFS = Object.freeze([
   {
     id: 'car-a',
     minX: 1100,
-    maxX: 1550,
+    // Drive well onto the next roof. The old endpoint only grazed its edge,
+    // which made the first airborne transfer unreliable in the desktop build.
+    maxX: 1700,
     startX: 1100,
     y: 180,
     width: 132,
@@ -105,7 +107,9 @@ export const FLYING_CAR_DEFS = Object.freeze([
   {
     id: 'car-b',
     minX: 3780,
-    maxX: 3940,
+    // The second transfer must carry the rider well onto the POWER roof.
+    // 3940 only touched its x=4000 edge; this leaves a forgiving landing area.
+    maxX: 4120,
     startX: 3780,
     y: 330,
     width: 132,
@@ -176,7 +180,19 @@ export function createParkourState() {
     lastFailure: null,
     checkpointReached: false,
     goalComplete: false,
+    narrative: {
+      npcTalked: false,
+      letterRead: false,
+    },
   };
+}
+
+export function recordNarrativeInteraction(state, interaction) {
+  if (!state?.narrative) return false;
+  if (interaction === 'npc') state.narrative.npcTalked = true;
+  else if (interaction === 'letter') state.narrative.letterRead = true;
+  else return false;
+  return true;
 }
 
 export function movableById(state, id) {
@@ -249,7 +265,8 @@ export function recordCarRide(state, id) {
 
 export function canCompleteGoal(state) {
   return ROUTE_REQUIREMENTS.movables.every((id) => state.movedMovables.includes(id))
-    && ROUTE_REQUIREMENTS.flyingCars.every((id) => state.riddenCars.includes(id));
+    && ROUTE_REQUIREMENTS.flyingCars.every((id) => state.riddenCars.includes(id))
+    && state.narrative?.letterRead === true;
 }
 
 export function canActivateCheckpoint(state) {
@@ -282,6 +299,7 @@ export function completeGoal(state) {
 
 export function resetParkourState(state, failure = 'manual') {
   const resetCount = state.resetCount + 1;
+  const narrative = { ...state.narrative };
   const restoreCheckpoint = failure !== 'manual' && state.checkpointReached;
   const checkpointMovables = restoreCheckpoint
     ? state.movables
@@ -292,6 +310,7 @@ export function resetParkourState(state, failure = 'manual') {
   Object.assign(state, fresh, {
     resetCount,
     lastFailure: failure,
+    narrative,
   });
   if (restoreCheckpoint) {
     checkpointMovables.forEach((saved) => {
@@ -337,5 +356,6 @@ export function parkourSnapshot(state) {
     checkpointReached: state.checkpointReached,
     goalReady: canCompleteGoal(state),
     goalComplete: state.goalComplete,
+    narrative: { ...state.narrative },
   };
 }

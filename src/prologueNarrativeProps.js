@@ -7,6 +7,7 @@ import {
   getNarrativeUnlockState,
   suitcaseHasUnreadEvidence,
 } from './tutorial/prologueNarrativeDialogue.js';
+import { collectMagicStone, magicStoneSnapshot } from './shell/magicStones.js';
 
 // Optional narrative props for Prologue Phases I–VI.
 // Phases I, II, III, VI are standalone props with simple graphics.
@@ -473,6 +474,18 @@ export default class PrologueNarrativeProps {
       };
       this.props.push(prop);
     });
+
+    // Deterministic visual proof for the authored hiding place. Normal play
+    // can only set envelopeReadComplete by reaching the end of the envelope
+    // conversation; this development-only route merely frames that same state.
+    const params = new URLSearchParams(window.location.search);
+    if (import.meta.env.DEV && params.get('qa') === 'phase4' && params.get('state') === 'magic-stone') {
+      const suitcase = this.props.find((prop) => prop.inspectorId === 'phase-iv');
+      suitcase.state.envelopeReadComplete = true;
+      scene.time.delayedCall(500, () => {
+        if (!this.modal) this.openInspectionModal(suitcase);
+      });
+    }
   }
 
   update() {
@@ -554,6 +567,7 @@ export default class PrologueNarrativeProps {
     this.props.forEach((prop) => {
       if (prop.lane !== lane) return;
       if (!unlock[prop.phase]) return;
+      if (prop.kind === 'suitcase-inspector' && prop.state.inspectionComplete) return;
       const dx = Math.abs(prop.x - playerX);
       // The player stands at y≈433 while wall-mounted props sit as high as
       // y=320 (retention slot), so the vertical window must cover ~115.
@@ -568,6 +582,7 @@ export default class PrologueNarrativeProps {
 
   shouldPreemptPuzzle(prop) {
     if (prop?.kind !== 'suitcase-inspector') return false;
+    if (prop.state.inspectionComplete) return false;
     const itemCount = MODAL_ITEMS[prop.inspectorId]?.length ?? 0;
     return suitcaseHasUnreadEvidence(prop.state, itemCount);
   }
@@ -597,14 +612,14 @@ export default class PrologueNarrativeProps {
     const scene = this.scene;
     this.dialogueActive = true;
     this.dialogueState = {
+      scriptId,
       script,
       lines: script.lines,
       lineIndex: 0,
       waitingChoice: false,
       responseChosen: false,
     };
-    scene.player.frozen = true;
-    scene.player.setVelocity(0, 0);
+    this.setPlayerControlLocked(true);
     scene._updateHintBar?.(null);
     this.emitDialogueLine();
   }
@@ -640,7 +655,7 @@ export default class PrologueNarrativeProps {
       return;
     }
 
-    this.closeConversation();
+    this.closeConversation(true);
   }
 
   selectConversationChoice(index) {
@@ -660,6 +675,9 @@ export default class PrologueNarrativeProps {
     const scene = this.scene;
     const JustDown = Phaser.Input.Keyboard.JustDown;
 
+    scene.player.setAcceleration(0, 0);
+    scene.player.setVelocity(0, 0);
+
     if (JustDown(scene.keys.choiceOne)) {
       this.selectConversationChoice(0);
     } else if (JustDown(scene.keys.choiceTwo)) {
@@ -677,12 +695,17 @@ export default class PrologueNarrativeProps {
     }
   }
 
-  closeConversation() {
+  closeConversation(completed = false) {
     if (!this.dialogueActive) return;
+    const completedScriptId = completed ? this.dialogueState?.scriptId : null;
     this.scene.game.events.emit('hud:dialogue:close');
-    this.scene.player.frozen = this.isModalOpen();
+    this.setPlayerControlLocked(this.isModalOpen());
     this.dialogueActive = false;
     this.dialogueState = null;
+    if (completedScriptId === 'phase-iv-envelope' && this.modal?.prop?.inspectorId === 'phase-iv') {
+      this.modal.prop.state.envelopeReadComplete = true;
+      this.refreshModalMagicStone();
+    }
   }
 
   // ---------------------------------------------------------- modal
@@ -691,13 +714,32 @@ export default class PrologueNarrativeProps {
     return this.modal !== null;
   }
 
+  /**
+   * Archive dialogue intentionally short-circuits GameScene.update(), which
+   * means Player.update() never gets its normal chance to zero old movement.
+   * Disable the Arcade body as well as the logical player flag so physics
+   * cannot advance the player between dialogue frames or carry them through a
+   * carriage door while an envelope is open.
+   */
+  setPlayerControlLocked(locked) {
+    const player = this.scene.player;
+    player.frozen = locked;
+    player.setAcceleration(0, 0);
+    player.setVelocity(0, 0);
+    if (player.body) player.body.moves = !locked;
+  }
+
   openInspectionModal(prop) {
     const scene = this.scene;
     if (this.modal) return;
 
+    // The one inspection is a first-look beat only. Mark it before any UI is
+    // created, not in the close callback: whichever close path the player
+    // takes, the next E must route to the physical movable case.
+    prop.state.inspectionComplete = true;
     prop.state.open = true;
     prop.state.read = true;
-    scene.player.frozen = true;
+    this.setPlayerControlLocked(true);
     scene._updateHintBar?.(null);
 
     const overlay = scene.add.rectangle(GAME_W / 2, GAME_H / 2, GAME_W, GAME_H, 0x07090d, 0.92)
@@ -727,6 +769,7 @@ export default class PrologueNarrativeProps {
     // Items
     const items = MODAL_ITEMS[prop.inspectorId] || [];
     const itemGraphics = scene.add.graphics().setScrollFactor(0).setDepth(83);
+    const stoneGraphics = scene.add.graphics().setScrollFactor(0).setDepth(84);
     const readMarks = new Set(prop.state.readItems || []);
 
     const descBg = scene.add.rectangle(cx, cy + 140, panelW - 48, 44, 0x07090d, 0.96)
@@ -764,16 +807,27 @@ export default class PrologueNarrativeProps {
       panel,
       caseG,
       itemGraphics,
+      stoneGraphics,
       descBg,
       descText,
       closeText,
       itemHits,
       selectedId: null,
+      stoneX: cx - 60,
+      stoneY: cy + 48,
     };
+
+    this.refreshModalMagicStone();
 
     // Pointer input for modal items
     this._modalPointerDown = (pointer) => {
       if (!this.modal) return;
+      if (this.modal.stoneAvailable
+        && Math.abs(pointer.x - this.modal.stoneX) <= 20
+        && Math.abs(pointer.y - this.modal.stoneY) <= 25) {
+        this.collectModalMagicStone();
+        return;
+      }
       const { itemHits } = this.modal;
       for (const hit of itemHits) {
         const dx = Math.abs(pointer.x - hit.ix);
@@ -819,6 +873,45 @@ export default class PrologueNarrativeProps {
     }
   }
 
+  refreshModalMagicStone() {
+    if (!this.modal) return;
+    const { prop, stoneGraphics, stoneX: x, stoneY: y } = this.modal;
+    const collected = magicStoneSnapshot().collected.includes('chapter-1');
+    const available = prop.inspectorId === 'phase-iv'
+      && prop.state.envelopeReadComplete
+      && !collected;
+    this.modal.stoneAvailable = available;
+    stoneGraphics.clear();
+    if (!available) return;
+    stoneGraphics.fillStyle(PAL.cyan, 0.12);
+    stoneGraphics.fillCircle(x, y, 28);
+    stoneGraphics.fillStyle(0xc9fbff, 1);
+    stoneGraphics.lineStyle(2, 0x65ddea, 1);
+    stoneGraphics.beginPath();
+    stoneGraphics.moveTo(x, y - 19);
+    stoneGraphics.lineTo(x + 14, y - 4);
+    stoneGraphics.lineTo(x + 9, y + 17);
+    stoneGraphics.lineTo(x, y + 24);
+    stoneGraphics.lineTo(x - 9, y + 17);
+    stoneGraphics.lineTo(x - 14, y - 4);
+    stoneGraphics.closePath();
+    stoneGraphics.fillPath();
+    stoneGraphics.strokePath();
+    stoneGraphics.fillStyle(0xffffff, 0.9);
+    stoneGraphics.fillTriangle(x - 5, y - 11, x + 1, y - 15, x - 1, y + 5);
+  }
+
+  collectModalMagicStone() {
+    if (!this.modal?.stoneAvailable) return false;
+    collectMagicStone('chapter-1');
+    const snapshot = magicStoneSnapshot();
+    this.modal.prop.state.magicStoneCollected = true;
+    this.modal.descText.setText(`A crystal was sewn beneath the unfinished letter.  MAGIC STONE ${snapshot.count} / ${snapshot.total}.`);
+    this.scene.cameras.main.flash(220, 101, 221, 234);
+    this.refreshModalMagicStone();
+    return true;
+  }
+
   closeInspectionModal() {
     const scene = this.scene;
     if (!this.modal) return;
@@ -836,12 +929,13 @@ export default class PrologueNarrativeProps {
     m.panel.destroy();
     m.caseG.destroy();
     m.itemGraphics.destroy();
+    m.stoneGraphics.destroy();
     m.descBg.destroy();
     m.descText.destroy();
     m.closeText.destroy();
     this.modal = null;
 
-    scene.player.frozen = false;
+    this.setPlayerControlLocked(false);
   }
 
   // ---------------------------------------------------------- visibility

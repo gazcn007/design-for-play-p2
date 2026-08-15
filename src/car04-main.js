@@ -4,6 +4,9 @@
 import Phaser from 'phaser';
 import { RetroCyberpunkScene } from './cars/retroCyberpunk/RetroCyberpunkScene.js';
 import { VIEW } from './cars/retroCyberpunk/levelData.js';
+import { installDevMenuReturnControl } from './devMenuReturn.js';
+
+installDevMenuReturnControl();
 
 const config = {
   type: Phaser.AUTO,
